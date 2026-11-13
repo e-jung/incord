@@ -2,13 +2,13 @@ import {contentCopy} from './config/content-copy';
 import {books,documents,fetchEsvText} from './content';
 import {isEsv,stripEsvText,assertEsvLimit,ESV_OFFLINE_MESSAGE} from '../shared/esv';
 export {assertEsvLimit,ESV_OFFLINE_MESSAGE} from '../shared/esv';
-export type Item={origin?:'mcp',id:string,title:string,text:string,collection:string,translation?:string,reference?:string,esvVerseKeys?:string[],step:number,learned:boolean,due:string,updatedAt:number,deleted?:boolean,card?:any,createdAt?:string,learnedAt?:string,order?:number,number?:number,part?:number,sortKey?:(string|number)[]};
-export type Settings={defaultTranslation?:'BSB'|'KJV'|'WEB'|'ESV',keySounds?:boolean,haptics?:boolean,name:string,theme:string,textSize?:string,goal:number,reminderTime:string,timeZone:string,pushEnabled:boolean,days:string[],lastActive:string,returnStart?:string,updatedAt:number,fieldUpdatedAt?:Record<string,number>,newPerDay?:number};
+export type Item={origin?:'mcp'|'group',id:string,title:string,text:string,collection:string,translation?:string,reference?:string,esvVerseKeys?:string[],step:number,learned:boolean,due:string,updatedAt:number,deleted?:boolean,card?:any,createdAt?:string,learnedAt?:string,order?:number,number?:number,part?:number,sortKey?:(string|number)[]};
+export type Settings={groupShareTitles?:boolean,groupReceivePrayer?:boolean,defaultTranslation?:'BSB'|'KJV'|'WEB'|'ESV',keySounds?:boolean,haptics?:boolean,name:string,theme:string,textSize?:string,goal:number,reminderTime:string,timeZone:string,pushEnabled:boolean,days:string[],lastActive:string,returnStart?:string,updatedAt:number,fieldUpdatedAt?:Record<string,number>,newPerDay?:number};
 export type ReviewEvent={id:string,itemId:string,at:string,slips:number,hidden:number,grade:string};
 export type LocalState={items:Item[],events:ReviewEvent[],settings:Settings,queue:string[],account?:Account|null};
 export type Account={id:string,displayName?:string,[key:string]:unknown};
 export const today=()=>new Date().toLocaleDateString('en-CA');
-export const defaults:Settings={defaultTranslation:'BSB',name:'',theme:'system',textSize:'default',goal:4,newPerDay:3,reminderTime:'19:00',timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone,pushEnabled:false,keySounds:false,haptics:false,days:[],lastActive:'',updatedAt:0};
+export const defaults:Settings={groupShareTitles:true,groupReceivePrayer:true,defaultTranslation:'BSB',name:'',theme:'system',textSize:'default',goal:4,newPerDay:3,reminderTime:'19:00',timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone,pushEnabled:false,keySounds:false,haptics:false,days:[],lastActive:'',updatedAt:0};
 let db:IDBDatabase;
 let settingsSnapshot:Settings|undefined;
 export async function openStore():Promise<LocalState>{

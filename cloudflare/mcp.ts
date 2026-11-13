@@ -2,6 +2,7 @@ import { OAuthResourceServer, insufficientScope } from '@cloudflare/workers-oaut
 import { McpServer } from '@modelcontextprotocol/server';
 import { createMcpHandler } from 'agents/mcp/server';
 import type { Env } from './worker';
+import { getGroups } from './groups';
 import { submitFeedback } from './feedback';
 import { oauthCall, type McpIdentity } from './oauth-storage';
 import { runMcpTool, MCP_TOOL_SCHEMAS } from './mcp-tools';
@@ -9,7 +10,7 @@ import { runMcpTool, MCP_TOOL_SCHEMAS } from './mcp-tools';
 async function userCall(env:Env,uid:string,path:string,data:unknown={}) {const r=await env.USERS.get(env.USERS.idFromName(uid)).fetch('https://internal'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});if(!r.ok)throw Error('Account unavailable');return r.json<any>();}
 async function hash(value:string){return [...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value)))].map(x=>x.toString(16).padStart(2,'0')).join('');}
 async function limit(env:Env,key:string,n:number,window=60000) {const r=await env.REGISTRY.get(env.REGISTRY.idFromName('registry')).fetch('https://internal/limit',{method:'POST',body:JSON.stringify({key,limit:n,window})});return r.ok;}
-const toolNames=['lookup_passage','add_passages','list_library','get_due_today','get_progress','list_collections','send_feedback'] as const;
+const toolNames=['lookup_passage','add_passages','list_library','get_due_today','get_progress','list_collections','send_feedback','get_groups'] as const;
 export async function handleMcpRequest(request:Request,env:Env,ctx:ExecutionContext):Promise<Response|null> {
   const url=new URL(request.url),path=url.pathname,origin=env.APP_ORIGIN?new URL(env.APP_ORIGIN).origin:url.origin;
   const isResource=path==='/mcp'||path.startsWith('/.well-known/oauth-protected-resource');
@@ -44,7 +45,7 @@ export async function handleMcpRequest(request:Request,env:Env,ctx:ExecutionCont
           let ok=false;
           try{
             if(scope&&!auth.scope.includes(scope))return {isError:true,content:[{type:'text' as const,text:'Missing scope: '+scope}]};
-            const result=await runMcpTool(name,args,{assets:bindings.ASSETS,feedback:input=>submitFeedback(req,bindings,input,{uid:props.uid,clientName:props.clientName},'mcp'),read:()=>userCall(bindings,props.uid,'/mcp/state',{events:name==='get_due_today'||name==='get_progress'}),add:async items=>{const result=await userCall(bindings,props.uid,'/mcp/add',{items,version:props.version});const schedule=await bindings.REGISTRY.get(bindings.REGISTRY.idFromName('registry')).fetch('https://internal/schedule/set',{method:'POST',body:JSON.stringify({uid:props.uid})});if(!schedule.ok)throw Error('Reminder scheduling unavailable');return result;}});ok=true;
+            const result=await runMcpTool(name,args,{assets:bindings.ASSETS,groups:()=>getGroups(bindings,props.uid),feedback:input=>submitFeedback(req,bindings,input,{uid:props.uid,clientName:props.clientName},'mcp'),read:()=>userCall(bindings,props.uid,'/mcp/state',{events:name==='get_due_today'||name==='get_progress'}),add:async items=>{const result=await userCall(bindings,props.uid,'/mcp/add',{items,version:props.version});const schedule=await bindings.REGISTRY.get(bindings.REGISTRY.idFromName('registry')).fetch('https://internal/schedule/set',{method:'POST',body:JSON.stringify({uid:props.uid})});if(!schedule.ok)throw Error('Reminder scheduling unavailable');return result;}});ok=true;
             return {content:[{type:'text' as const,text:JSON.stringify(result)}]};
           }catch(error){const status=(error as {status?:number})?.status;const message=name==='send_feedback'&&status&&status>=400&&status<500&&error instanceof Error?error.message:'Unable to complete this tool call. Check the arguments and try again.';return {isError:true,content:[{type:'text' as const,text:message}]};}
           finally{

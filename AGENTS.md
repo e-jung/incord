@@ -1,5 +1,5 @@
 # Incord
-An offline-first, open-source Scripture/catechism memory PWA. Svelte 5 + Vite + TypeScript; one Cloudflare Worker, SQLite-backed UserDO per account and RegistryDO. No D1. First-party anonymous daily usage counts only; no third-party trackers. ESV is fetched through a same-origin proxy.
+An offline-first, open-source Scripture/catechism memory PWA. Svelte 5 + Vite + TypeScript; one Cloudflare Worker, SQLite-backed UserDO per account, RegistryDO, and GroupDO per group. No D1. First-party anonymous daily usage counts only; no third-party trackers. ESV is fetched through a same-origin proxy.
 
 ## Product decisions
 - Preserve the soft, tactile visual design and reusable component system. One light/dark token file; self-hosted OFL Figtree/Literata.
@@ -59,6 +59,6 @@ First-party operational logs only: Cloudflare dashboard → Workers → byheart 
 
 
 ## Licensing and contributions
-- Original project code is AGPL-3.0-only; preserve LICENSE and NOTICE. Third-party Scripture/content/fonts retain their separate terms. See content/SOURCES.md and licenses/fonts/.
+- Original project code is AGPL-3.0-only; preserve LICENSE and NOTICE. Third-party Scripture/content/fonts retain their separate terms. See content/SOURCES.md and public/licenses/.
 - Do not commit credentials, private account data or operator-specific machine paths. Use .dev.vars.example for local configuration and README.md for self-hosting.
 - Report vulnerabilities through SECURITY.md. Keep ordinary bug reports free of private text and credentials.

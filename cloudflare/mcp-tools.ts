@@ -1,11 +1,11 @@
 import {z} from 'zod';
 import {topics} from '../shared/topics';
-import books from '../public/content/books.json';
+import books from '../public/content/books.json' with {type:'json'};
 import {assertEsvLimit, esvReferenceKeys, isEsv} from '../shared/esv';
 import {gentleCap} from '../src/engine/today';
 import {RULES} from '../src/config/rules';
 
-export type McpToolDeps = {assets: Fetcher; read: () => Promise<{items:any[];events:any[];settings:any}>; add: (items:any[]) => Promise<any>; feedback?: (input:{kind:'Idea'|'Problem'|'Other';message:string;contact?:string}) => Promise<any>};
+export type McpToolDeps = {groups?: () => Promise<{groups:any[]}>; assets: Fetcher; read: () => Promise<{items:any[];events:any[];settings:any}>; add: (items:any[]) => Promise<any>; feedback?: (input:{kind:'Idea'|'Problem'|'Other';message:string;contact?:string}) => Promise<any>};
 type Item = {id:string;title:string;text:string;collection:string;translation:string;reference?:string;esvVerseKeys?:string[];[key:string]:any};
 const MAX_REFERENCE_VERSES = 500;
 const MAX_ADD_ITEMS = 1000;
@@ -13,6 +13,7 @@ const DEVICE_NOTE = 'ESV text is available only on your device. Open Incord to l
 const translation = z.enum(['BSB','KJV','WEB','ESV']).default('BSB');
 const passageInput = z.object({reference:z.string().trim().min(1).max(200).optional(), translation, as_one_passage:z.boolean().default(false).describe('Join non-ESV verses into one item. ESV always remains one reference-only item regardless of this option.'), title:z.string().trim().min(1).max(500).optional(), text:z.string().trim().min(1).max(100000).optional(), id:z.string().min(1).max(200).optional(), collection:z.string().trim().min(1).max(100).optional()}).strict();
 export const MCP_TOOL_SCHEMAS = {
+ get_groups:{description:'Read your groups, shared goals, and members’ privacy-filtered practice rhythm and optional item titles. Never returns quotations, private review details, email addresses or account IDs. Cannot create, join or change groups.',inputSchema:z.object({}).strict()},
  send_feedback:{description:'Send an idea, problem or other feedback to the Incord team. Message must be 10–4000 characters. Include contact only if the user explicitly wants an email reply; never infer it from account details. Does not include library contents or device metadata. Available with any valid connection, including read-only access.',inputSchema:z.object({kind:z.enum(['Idea','Problem','Other']),message:z.string().trim().min(10).max(4000),contact:z.string().trim().max(254).refine(value=>!value||/^[^\s<>@,;"\\]+@[^\s<>@,;"\\]+\.[^\s<>@,;"\\]+$/.test(value)&&!/[\x00-\x1f\x7f-\x9f\u2028\u2029]/.test(value),'Enter a valid reply email.').optional()}).strict()},
  lookup_passage:{description:'Look up a Bible reference in bundled BSB, KJV or WEB. Each reference is limited to 500 verses. ESV is one reference-only item validated against bundled BSB coordinates; no ESV text is fetched or returned.',inputSchema:z.object({reference:z.string().trim().min(1).max(200),translation}).strict()},
  add_passages:{description:'Add up to 50 Bible references or custom title/text items. Strings are Bible references; objects can specify reference and translation, or a catalog id. Each reference is limited to 500 verses and each call to 1000 expanded items. as_one_passage joins each range; otherwise each verse is one item. ESV always stays one reference-only passage regardless of as_one_passage. Existing items retain all edits and progress.',inputSchema:z.object({items:z.array(z.unknown().describe('A reference string, {reference, translation?}, {title, text}, or {id} from list_collections. Inputs are validated independently.')).min(1).max(50),collection:z.string().trim().min(1).max(100).optional(),as_one_passage:z.boolean().default(false).describe('Join non-ESV verses into one item. ESV always remains one reference-only item regardless of this option.')}).strict()},
@@ -183,6 +184,7 @@ function canonicalCompare(a:any,b:any):number {
 export async function runMcpTool(name:string,args:unknown,deps:McpToolDeps):Promise<any> {
  if(!Object.hasOwn(MCP_TOOL_SCHEMAS,name))throw Error('Unknown MCP tool.');
  const parsed:any=MCP_TOOL_SCHEMAS[name as keyof typeof MCP_TOOL_SCHEMAS].inputSchema.parse(args??{});
+ if(name==='get_groups'){if(!deps.groups)throw Error('Groups are unavailable.');return deps.groups();}
  if(name==='send_feedback'){if(!deps.feedback)throw Error('Feedback is unavailable.');return deps.feedback(parsed);}
  if(name==='lookup_passage') {
   const verses=await lookup(parsed.reference,parsed.translation,deps);

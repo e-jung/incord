@@ -187,7 +187,7 @@ describe('library, daily plan, progress, and collection discovery',()=>{
   const out=await run('list_collections');expect(out.starters.length).toBeGreaterThan(0);expect(out.passages.itemCount).toBe(17);
   expect(out.documents.map((d:any)=>d.id)).toEqual(['wsc','heidelberg','apostles','nicene','wlc','baptist','spurgeon','young-children']);
   expect(out.documents[0].items[0]).toMatchObject({id:'wsc-1',number:1});
-  expect(Object.keys(MCP_TOOL_SCHEMAS)).toHaveLength(7);
+  expect(Object.keys(MCP_TOOL_SCHEMAS)).toHaveLength(8);
   await expect(run('delete_everything')).rejects.toThrow('Unknown');
  });
 });
@@ -206,5 +206,18 @@ describe('MCP feedback',()=>{
  it('keeps feedback rate-limit failures visible to the transport',async()=>{
   const f=fixture();f.deps.feedback=async()=>{throw Object.assign(Error('Too many feedback messages. Try again later.'),{status:429})};
   await expect(run('send_feedback',{kind:'Other',message:'A useful description'},f)).rejects.toMatchObject({status:429});
+ });
+});
+
+
+describe('read-only group tool',()=>{
+ it('returns only the authorized privacy projection and never reads or adds library records',async()=>{
+  const f=fixture(),safe={groups:[{id:'group',name:'Small group',members:[{id:'opaque',name:'Friend',weekDays:['2026-11-09'],learnedCount:2}]}]};
+  f.deps.groups=vi.fn(async()=>safe);const read=vi.spyOn(f.deps,'read'),add=vi.spyOn(f.deps,'add');
+  expect(await run('get_groups',{},f)).toEqual(safe);expect(f.deps.groups).toHaveBeenCalledOnce();expect(read).not.toHaveBeenCalled();expect(add).not.toHaveBeenCalled();
+ });
+ it('rejects arguments before contacting the group store and fails closed if unavailable',async()=>{
+  const f=fixture(),groups=vi.fn(async()=>({groups:[]}));f.deps.groups=groups;
+  await expect(run('get_groups',{uid:'other-account'},f)).rejects.toThrow();expect(groups).not.toHaveBeenCalled();delete f.deps.groups;await expect(run('get_groups',{},f)).rejects.toThrow('Groups are unavailable');
  });
 });

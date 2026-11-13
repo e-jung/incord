@@ -57,12 +57,23 @@ describe('QA2 canonical source order and queue backoff',()=>{
 
 it('upgrading stored settings never timestamps new preference defaults as user edits',async()=>{
  let saved:any={...emptyState(),settings:{...defaults,updatedAt:10}};
- delete saved.settings.keySounds;delete saved.settings.haptics;delete saved.settings.newPerDay;delete saved.settings.defaultTranslation;
+ delete saved.settings.groupShareTitles;delete saved.settings.groupReceivePrayer;delete saved.settings.keySounds;delete saved.settings.haptics;delete saved.settings.newPerDay;delete saved.settings.defaultTranslation;
  const database={transaction:()=>{const tx:any={objectStore:()=>({get:()=>{const request:any={};queueMicrotask(()=>{request.result=structuredClone(saved);request.onsuccess()});return request},put:(value:any)=>{saved=structuredClone(value)}})};queueMicrotask(()=>tx.oncomplete?.());return tx}};
  vi.stubGlobal('indexedDB',{open:()=>{const request:any={result:database};queueMicrotask(()=>request.onsuccess());return request}});
  const state=await openStore();await persist(state);
- expect(state.settings).toMatchObject({defaultTranslation:'BSB',keySounds:false,haptics:false,updatedAt:10,fieldUpdatedAt:{defaultTranslation:0,keySounds:0,haptics:0,newPerDay:0,name:10}});
+ expect(state.settings).toMatchObject({groupShareTitles:true,groupReceivePrayer:true,defaultTranslation:'BSB',keySounds:false,haptics:false,updatedAt:10,fieldUpdatedAt:{groupShareTitles:0,groupReceivePrayer:0,defaultTranslation:0,keySounds:0,haptics:0,newPerDay:0,name:10}});
  const remote={...defaults,keySounds:true,haptics:true,updatedAt:20,fieldUpdatedAt:{keySounds:20,haptics:20}};
  const merged=mergeSettings(state.settings,remote);expect(merged).toMatchObject({keySounds:true,haptics:true});
  expect(stampSettings({...merged,keySounds:false},merged,30).fieldUpdatedAt?.keySounds).toBe(30);
+});
+
+
+it('group privacy choices sync per field and are not overwritten by another device’s defaults',()=>{
+ const before={...defaults,updatedAt:10};
+ const privateDevice=stampSettings({...before,groupShareTitles:false},before,20);
+ const quietDevice=stampSettings({...before,groupReceivePrayer:false},before,30);
+ const merged=mergeSettings(privateDevice,quietDevice);
+ expect(merged).toMatchObject({groupShareTitles:false,groupReceivePrayer:false,fieldUpdatedAt:{groupShareTitles:20,groupReceivePrayer:30}});
+ expect(mergeSettings(quietDevice,privateDevice)).toEqual(merged);
+ expect(mergeSettings(merged,{...defaults,updatedAt:99,fieldUpdatedAt:{groupShareTitles:0,groupReceivePrayer:0}})).toMatchObject({groupShareTitles:false,groupReceivePrayer:false});
 });

@@ -1,3 +1,5 @@
+import { GroupsError, handleGroups, initializeGroupsRegistry, handleGroupsRegistry, cleanupGroups, scheduleGroups, dispatchGroupReminders } from './groups';
+export { GroupDO } from './groups';
 import { supportUrl } from '../shared/support';
 import { handleEsv, assertEsvLimit, stripEsvText } from './esv';
 import { handleStatsRequest } from './stats';
@@ -8,6 +10,7 @@ import { oauthCall } from './oauth-storage';
 
 export interface Env {
   ASSETS: Fetcher;
+  GROUPS?: DurableObjectNamespace;
   OAUTH_STORAGE: DurableObjectNamespace;
   STATS: DurableObjectNamespace;
   STATS_TOKEN?: string;
@@ -193,12 +196,13 @@ async function api(request: Request, env: Env): Promise<Response> {
     if(request.method==='POST'){const input=await body(request,4096);assert(typeof input.handle==='string'&&input.handle.length<=1024,'Invalid consent');return oauthCall(env,'/decision',{origin,url:origin+'/oauth/authorize',method:'POST',headers:[...request.headers],handle:input.handle,decision:input.decision,uid,version:session.version,statsEnabled:input.statsEnabled===true&&request.headers.get('DNT')!=='1'&&request.headers.get('Sec-GPC')!=='1'});}
   }
   if(path==='/api/oauth/privacy'&&request.method==='POST'){const input=await body(request,1024);assert(typeof input.enabled==='boolean','Invalid privacy preference');return json(await user(env,uid,'/mcp/privacy',{enabled:input.enabled}));}
+  if(path==='/api/groups'||path.startsWith('/api/groups/')) return handleGroups(request,env,uid,['POST'].includes(request.method)?await body(request,4096):{});
   if(path==='/api/oauth/apps'&&request.method==='GET')return oauthCall(env,'/apps',{origin,uid});
   if(path==='/api/oauth/revoke'&&request.method==='POST'){const input=await body(request,4096);assert(typeof input.id==='string'&&input.id.length<=200,'Invalid connected app');return oauthCall(env,'/revoke',{origin,uid,id:input.id});}
   if (path === '/api/me' && request.method === 'GET') { const me = await user(env, uid, '/me'), flags = await identityFlags(env, uid); return json({ user: { ...me.user, ...flags } }); }
   if (path === '/api/sync' && request.method === 'POST') { const input = await body(request); const result = await user(env, uid, '/sync', input); await registry(env, '/schedule/set', { uid }); return json(result); }
   if (path === '/api/export' && request.method === 'GET') return json(await user(env, uid, '/export'), 200, { 'Content-Disposition': 'attachment; filename="incord.json"' });
-  if (path === '/api/account' && request.method === 'DELETE') { assert((await oauthCall(env,'/revoke-all',{origin,uid})).ok,'Unable to disconnect apps. Please try again.',503); await user(env, uid, '/delete'); await registry(env, '/delete', { uid }); return json({ ok: true }, 200, { 'Set-Cookie': cookie(cookieName, '', 0, origin) }); }
+  if (path === '/api/account' && request.method === 'DELETE') { assert((await oauthCall(env,'/revoke-all',{origin,uid})).ok,'Unable to disconnect apps. Please try again.',503); await cleanupGroups(env,uid); await user(env, uid, '/delete'); await registry(env, '/delete', { uid }); return json({ ok: true }, 200, { 'Set-Cookie': cookie(cookieName, '', 0, origin) }); }
   if (path === '/api/push/subscribe' && request.method === 'POST') { const input = await body(request); assert(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY, 'Push is not configured', 503); const result = await user(env, uid, '/push/subscribe', { ...input, origin }); await registry(env, '/schedule/set', { uid }); return json(result); }
   if (path === '/api/push/status' && request.method === 'GET') {
     const endpointHash = url.searchParams.get('endpointHash');
@@ -246,7 +250,7 @@ export default {
       }
       return await finish(response);
     } catch (error) {
-      if (error instanceof ApiError || error instanceof FeedbackError) return finish(json({ error: error.message }, error.status));
+      if (error instanceof ApiError || error instanceof FeedbackError || error instanceof GroupsError) return finish(json({ error: error.message }, error.status));
       return finish(json({ error: 'Something went wrong. Please try again.' }, 500), true,
         error instanceof Error && ['Error', 'TypeError', 'RangeError', 'SyntaxError', 'ReferenceError'].includes(error.name) ? error.name : 'Error');
     }
@@ -255,7 +259,7 @@ export default {
     ctx.waitUntil((async () => {
       try {
         const { users } = await registry(env, '/schedule/due');
-        const results = await Promise.allSettled(users.map((uid: string) => user(env, uid, '/push/remind')));
+        const results = await Promise.allSettled([scheduleGroups(env), dispatchGroupReminders(env, users)]);
         if (results.some(r => r.status === 'rejected')) throw new Error('One or more reminder checks failed');
       } catch {
         const requestId = crypto.randomUUID();
@@ -268,9 +272,10 @@ export default {
 
 export class RegistryDO {
   private sql: SqlStorage;
-  constructor(private ctx: DurableObjectState) {
+  constructor(private ctx: DurableObjectState, private env: Env = {} as Env) {
     this.sql = ctx.storage.sql;
     initializeFeedbackStorage(this.sql);
+    initializeGroupsRegistry(this.sql);
     this.sql.exec('CREATE TABLE IF NOT EXISTS mapping(kind TEXT NOT NULL,id TEXT NOT NULL,uid TEXT NOT NULL,PRIMARY KEY(kind,id))');
     this.sql.exec('CREATE INDEX IF NOT EXISTS mapping_user ON mapping(uid)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS challenges(id TEXT PRIMARY KEY,value TEXT NOT NULL,expires INTEGER NOT NULL)');
@@ -282,6 +287,8 @@ export class RegistryDO {
   private rows(query: string, ...args: (string | number)[]) { return [...this.sql.exec<Row>(query, ...args)]; }
   async fetch(request: Request) { return this.ctx.blockConcurrencyWhile(async () => { try {
     const data = await request.json<any>(), path = new URL(request.url).pathname, now = Date.now();
+    const groups = await handleGroupsRegistry(this.sql,this.env,path,data);
+    if(groups) return groups;
     const feedback = handleFeedbackRegistry(this.sql, this.ctx.storage, path, data, now);
     if (feedback) return feedback;
     this.sql.exec('DELETE FROM challenges WHERE expires < ?', now); this.sql.exec('DELETE FROM limits WHERE expires < ?', now);
@@ -323,7 +330,7 @@ export class RegistryDO {
     if (path === '/schedule/due') { const users = this.rows('SELECT uid FROM schedule WHERE next_at<=? ORDER BY next_at LIMIT 200', now).map(row => row.uid); for (const uid of users) this.sql.exec('UPDATE schedule SET next_at=? WHERE uid=?', now + 15 * 60_000, uid); return json({ users }); }
     if (path === '/delete') { this.sql.exec('DELETE FROM mapping WHERE uid=?', data.uid); this.sql.exec("DELETE FROM challenges WHERE json_extract(value,'$.uid')=?", data.uid); this.sql.exec('DELETE FROM email_codes WHERE uid=?', data.uid); this.sql.exec('DELETE FROM schedule WHERE uid=?', data.uid); return json({ ok: true }); }
     return json({ error: 'Not found' }, 404);
-  } catch (e) { if (e instanceof ApiError) return json({ error: e.message }, e.status); throw e; } }); }
+  } catch (e) { if (e instanceof ApiError || e instanceof GroupsError) return json({ error: e.message }, e.status); throw e; } }); }
 }
 
 type SyncRecord = ObjectData & { id: string; updatedAt: number | string; deleted?: boolean };
@@ -336,6 +343,7 @@ export function mergeServerSettings(old:any,incoming:any){const result={...old,f
 export function settingsRecord(input: unknown): ObjectData { assert(input && typeof input === 'object' && !Array.isArray(input), 'Invalid settings'); const s = { ...(input as ObjectData) }; timestamp(s.updatedAt);
   if (s.name !== undefined) s.displayName = s.name; if (s.theme !== undefined) s.appearance = s.theme; if (s.goal !== undefined) s.weeklyGoal = s.goal; if (s.timeZone !== undefined) s.timezone = s.timeZone; if (s.pushEnabled !== undefined) s.remindersEnabled = s.pushEnabled;
   for (const key of ['keySounds', 'haptics']) if (s[key] !== undefined) assert(typeof s[key] === 'boolean', 'Invalid keyboard feedback setting');
+  for(const key of ['groupShareTitles','groupReceivePrayer']) if(s[key]!==undefined) assert(typeof s[key]==='boolean','Invalid group preference');
   if (s.remindersEnabled !== undefined) assert(typeof s.remindersEnabled === 'boolean', 'Invalid reminder setting');
   if (s.displayName !== undefined) { assert(typeof s.displayName === 'string' && s.displayName.length <= 80, 'Invalid display name'); s.name = s.displayName = s.displayName.trim(); }
   if (s.weeklyGoal !== undefined) assert([3, 4, 5, 7].includes(Number(s.weeklyGoal)), 'Invalid weekly goal');
@@ -363,7 +371,7 @@ export class UserDO {
   private get(key: string): any { const row = this.rows('SELECT value FROM meta WHERE key=?', key)[0]; return row ? JSON.parse(String(row.value)) : null; }
   private set(key: string, value: unknown) { this.sql.exec('INSERT INTO meta VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', key, JSON.stringify(value)); }
   private list(table: string) { assert(['items', 'events', 'subscriptions'].includes(table)); return this.rows(`SELECT value FROM ${table} ORDER BY ${table === 'subscriptions' ? 'endpoint' : 'id'}`).map(row => JSON.parse(String(row.value))); }
-  private settings() { return this.get('settings') || { appearance: 'system', weeklyGoal: 4, reminderTime: '09:00', timezone: 'UTC', remindersEnabled: false, keySounds: false, haptics: false, updatedAt: 0 }; }
+  private settings() { return { groupShareTitles:true, groupReceivePrayer:true, ...(this.get('settings') || { appearance: 'system', weeklyGoal: 4, reminderTime: '09:00', timezone: 'UTC', remindersEnabled: false, keySounds: false, haptics: false, updatedAt: 0 }) }; }
   async fetch(request: Request) { return this.ctx.blockConcurrencyWhile(async () => { try {
     const data = await request.json<any>(), path = new URL(request.url).pathname;
     if (path === '/delete') { await this.ctx.storage.deleteAll(); this.sql.exec('CREATE TABLE meta(key TEXT PRIMARY KEY,value TEXT NOT NULL)'); this.set('deleted', true); return json({ ok: true }); }
@@ -376,7 +384,7 @@ export class UserDO {
     if (path === '/me') { const profile = this.get('profile'); return json({ user: { ...profile, displayName: this.settings().displayName === undefined ? profile.displayName : (this.settings().displayName || 'Friend'), settings: this.settings() }, version: this.get('version'),mcpCountsEnabled:this.get('mcpCountsEnabled')!==false }); }
     if (path === '/revoke') { this.set('version', this.get('version') + 1); return json({ ok: true }); }
     if(path==='/mcp/privacy'){assert(typeof data.enabled==='boolean');this.set('mcpCountsEnabled',data.enabled);return json({ok:true});}
-    if(path==='/mcp/add') {
+    if(path==='/mcp/add'||path==='/groups/add') {
       assert(data.version===undefined||data.version===this.get('version'),'Session expired',401);
       assert(Array.isArray(data.items)&&data.items.length<=10000,'Too many verses in one call');
       const results:any[]=[],admitted:any[]=[],existing=new Map(this.list('items').map(i=>[i.id,i]));
@@ -386,7 +394,7 @@ export class UserDO {
         assert(source&&typeof source.id==='string','Invalid item');const old=existing.get(source.id);
         if(old&&!old.deleted){results.push({id:source.id,status:'already in library'});continue;}
         // A low initial revision lets an unsynced device's existing practice win.
-        const now=Date.now(),item=stripEsvText({...source,origin:'mcp',step:1,learned:false,deleted:false,due:new Date(now).toISOString(),createdAt:new Date(now).toISOString(),updatedAt:old?timestamp(old.updatedAt)+1:1});
+        const now=Date.now(),item=stripEsvText({...source,origin:path==='/groups/add'?'group':'mcp',step:1,learned:false,deleted:false,due:new Date(now).toISOString(),createdAt:new Date(now).toISOString(),updatedAt:old?timestamp(old.updatedAt)+1:1});
         try{
           record(item);assert(existing.has(item.id)||existing.size<10000,'Account item limit reached');
           if(item.translation==='ESV'||item.id.startsWith('esv-'))try{assertEsvLimit([...existing.values()].filter(i=>i.id!==item.id).concat(item));}catch(error){throw new ApiError(400,error instanceof Error?error.message:'ESV limit reached');}
@@ -402,6 +410,21 @@ export class UserDO {
       const settings = data.settings ? settingsRecord(data.settings) : null;
       this.mergeData(items,events,settings);
       return json({ items: this.list('items'), events: this.list('events'), settings: this.settings(), serverTime: Date.now() });
+    }
+    if(path==='/groups/state')return json({name:this.get('profile').displayName,settings:this.settings(),items:this.list('items').map(({id,title,reference,translation,learned,deleted}:any)=>({id,title,reference,translation,learned,deleted})),events:this.list('events').map(({at,timestamp,createdAt}:any)=>({at:at??timestamp??createdAt}))});
+    if(path==='/groups/push'||path==='/groups/prayer') {
+      if(path==='/groups/prayer') {
+        assert(typeof data.senderHash==='string'&&/^[a-f0-9]{64}$/.test(data.senderHash)&&data.kind==='prayer','Invalid prayer');
+        // Recipient DO + stable sender hash is an ordered, cross-group pair.
+        // Reserve before preferences/delivery, without awaits or delivery receipts.
+        const key='group-prayer:'+data.senderHash,day=new Date(Date.now()).toISOString().slice(0,10);
+        if(this.get(key)===day)return json({ok:true,alreadySent:true});
+        this.set(key,day);
+      }
+      const settings=this.settings();
+      if(!(settings.remindersEnabled??settings.pushEnabled)||!this.env.VAPID_PRIVATE_KEY||!this.env.VAPID_PUBLIC_KEY||(data.kind==='prayer'&&settings.groupReceivePrayer===false))return json({ok:true});
+      for(const sub of this.list('subscriptions')) {try{const response=await sendWebPush(sub,{title:'Incord',body:String(data.body).slice(0,400),url:'/',tag:data.tag},this.env);if(response.status===404||response.status===410)this.sql.exec('DELETE FROM subscriptions WHERE endpoint=?',sub.endpoint);}catch{/* Delivery failures never reveal subscription data. */}}
+      return json({ok:true});
     }
     if(path==='/mcp/state')return json({items:this.list('items'),settings:this.settings(),events:data.events?this.list('events').map(({itemId,at,mode})=>({itemId,at,mode})):[]});
     if (path === '/export') return json({ format: 'by-heart', version: 1, exportedAt: new Date().toISOString(), user: { ...this.get('profile'), displayName: this.settings().displayName === undefined ? this.get('profile').displayName : (this.settings().displayName || 'Friend') }, items: this.list('items'), events: this.list('events'), settings: this.settings() });
@@ -419,7 +442,7 @@ export class UserDO {
     if (path === '/push/test') return json(await this.sendPush(true));
     if (path === '/push/remind') return json(await this.sendPush(false));
     return json({ error: 'Not found' }, 404);
-  } catch (e) { if (e instanceof ApiError) return json({ error: e.message }, e.status); throw e; } }); }
+  } catch (e) { if (e instanceof ApiError || e instanceof GroupsError) return json({ error: e.message }, e.status); throw e; } }); }
   private mergeData(items:any[],events:any[],settings:any) {
       this.ctx.storage.transactionSync(() => {
         assert(Number(this.rows('SELECT COUNT(*) AS n FROM items')[0].n) + items.filter((i: SyncRecord) => !this.rows('SELECT id FROM items WHERE id=?', i.id).length).length <= 10_000, 'Account item limit reached');

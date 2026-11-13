@@ -14,6 +14,7 @@ Incord is an offline-first app for memorizing Scripture, historic catechisms and
 - BSB, KJV and WEB Bible packs; historic catechisms and creeds; custom text, whole passages and ten topical collections.
 - Offline practice, light/dark themes, adjustable text size, and optional key sounds/haptics.
 - Optional Google or email-code sign-in, cross-device sync, and Web Push reminders.
+- Small invite-only groups with shared goals, privacy-filtered practice rhythm and optional prayer encouragements.
 - Optional device-only ESV quotations through the Crossway API.
 - A remote MCP connection for compatible AI apps, with explicit authorization and revocation.
 
@@ -21,7 +22,7 @@ Incord is an offline-first app for memorizing Scripture, historic catechisms and
 
 The frontend is Svelte 5 + TypeScript + Vite. IndexedDB is authoritative during offline practice; a service worker caches the app shell and Bible books opened on the device. The DOM-free engine in `src/engine` handles tokenization, masking, grading, learning transitions and FSRS scheduling.
 
-One Cloudflare Worker serves assets, account APIs, ESV requests and MCP. SQLite-backed Durable Objects hold account state (`UserDO`), registry/rate-limit/feedback state (`RegistryDO`), aggregate usage counts (`StatsDO`) and OAuth provider state (`OAuthStorageDO`). There is no D1 database or separate MCP Worker. Sync uses last-write-wins items, per-field preference clocks and append-only, idempotent review events; device-only items require an explicit ownership choice before account sync.
+One Cloudflare Worker serves assets, account APIs, ESV requests and MCP. SQLite-backed Durable Objects hold account state (`UserDO`), registry/rate-limit/feedback state (`RegistryDO`), aggregate usage counts (`StatsDO`), OAuth provider state (`OAuthStorageDO`) and group state (`GroupDO`). There is no D1 database or separate MCP Worker. Sync uses last-write-wins items, per-field preference clocks and append-only, idempotent review events; device-only items require an explicit ownership choice before account sync.
 
 ## Development
 
@@ -90,7 +91,7 @@ Wrangler rebuilds assets before upload. A production smoke test is not part of n
 
 See [Connect an app](https://incord.jesklabs.com/connect.html). The maintained endpoint is `https://incord.jesklabs.com/mcp`; self-hosted instances use their own origin plus `/mcp`. It uses Streamable HTTP and OAuth, with dynamic client registration. Claude connectors/Claude Code and other remote-MCP/OAuth-compatible clients can connect; support depends on client, plan and workspace policy.
 
-Users approve read and optional add-only library access. Connected apps cannot edit or delete existing items. Revoke a connection in Settings → Connected apps. Calls accept at most 50 inputs, 500 verses per reference and 1,000 expanded items, with per-input results. ESV text is never exposed through MCP; ESV references remain whole passages. `send_feedback` accepts explicit feedback even with a read-only token. OAuth state lives in the existing `OAUTH_STORAGE` Durable Object, not a separate KV service.
+Users approve read and optional add-only library access. Connected apps cannot edit or delete existing items. Revoke a connection in Settings → Connected apps. Calls accept at most 50 inputs, 500 verses per reference and 1,000 expanded items, with per-input results. ESV text is never exposed through MCP; ESV references remain whole passages. `get_groups` offers read-only, privacy-filtered group views; it cannot manage groups. `send_feedback` accepts explicit feedback even with a read-only token. OAuth state lives in the existing `OAUTH_STORAGE` Durable Object, not a separate KV service.
 
 ## Privacy
 

@@ -7,8 +7,8 @@
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "workers_dev": false,
   "assets": { "directory": "./dist", "binding": "ASSETS", "not_found_handling": "none", "run_worker_first": true },
-  "durable_objects": { "bindings": [ { "name": "USERS", "class_name": "UserDO" }, { "name": "REGISTRY", "class_name": "RegistryDO" }, { "name": "STATS", "class_name": "StatsDO" }, { "name": "OAUTH_STORAGE", "class_name": "OAuthStorageDO" } ] },
-  "migrations": [ { "tag": "v1", "new_sqlite_classes": ["UserDO", "RegistryDO"] }, { "tag": "v2-stats", "new_sqlite_classes": ["StatsDO"] }, { "tag": "v3-oauth", "new_sqlite_classes": ["OAuthStorageDO"] } ],
+  "durable_objects": { "bindings": [ { "name": "GROUPS", "class_name": "GroupDO" }, { "name": "USERS", "class_name": "UserDO" }, { "name": "REGISTRY", "class_name": "RegistryDO" }, { "name": "STATS", "class_name": "StatsDO" }, { "name": "OAUTH_STORAGE", "class_name": "OAuthStorageDO" } ] },
+  "migrations": [ { "tag": "v1", "new_sqlite_classes": ["UserDO", "RegistryDO"] }, { "tag": "v2-stats", "new_sqlite_classes": ["StatsDO"] }, { "tag": "v3-oauth", "new_sqlite_classes": ["OAuthStorageDO"] }, { "tag": "v4-groups", "new_sqlite_classes": ["GroupDO"] } ],
   "triggers": { "crons": ["*/15 * * * *"] },
   "observability": { "enabled": true },
   // Required secret: SESSION_SECRET (at least 32 random characters).

@@ -6,7 +6,7 @@ import {
 
 // Real local Worker + the official 2.4 SDK: no mocked MCP, OAuth, or sync endpoints.
 const callback = 'http://localhost:19876/callback';
-const toolNames = ['add_passages', 'get_due_today', 'get_progress', 'list_collections', 'list_library', 'lookup_passage', 'send_feedback'];
+const toolNames = ['add_passages', 'get_due_today', 'get_groups', 'get_progress', 'list_collections', 'list_library', 'lookup_passage', 'send_feedback'];
 
 async function flow(baseURL: string, scope?: string) {
   const origin = new URL(baseURL).origin;
@@ -154,7 +154,7 @@ test('DCR → signed-out email → consent → SDK tools → offline reconciliat
   await expect(page.getByRole('heading', { name: 'Sign in to connect an app', exact: true })).toBeVisible();
   await signIn(page);
   await expect(page.getByRole('heading', { name: f.clientName, exact: true })).toBeVisible();
-  await expect(page.getByText('See your library and progress', { exact: true })).toBeVisible();
+  await expect(page.getByText('See your library, progress and groups', { exact: true })).toBeVisible();
   await expect(page.getByText('Add passages to your library', { exact: true })).toBeVisible();
   const returned=await decide(page,f,'Approve connection');
   const tokens=await exchange(f,returned);
@@ -166,6 +166,7 @@ test('DCR → signed-out email → consent → SDK tools → offline reconciliat
     expect((await call(client, 'list_collections')).passages.itemCount).toBe(17);
     expect(await call(client, 'get_progress')).toMatchObject({ total: 0 });
     expect(await call(client, 'get_due_today')).toMatchObject({ count: 0 });
+    expect(await call(client,'get_groups')).toEqual({groups:[],pending:[]});
     await call(client, 'add_passages', { items: [{ reference: 'John 3:16', translation: 'BSB' }] });
     expect((await call(client, 'list_library')).items).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: 'bsb-jhn-3-16', origin: 'mcp' }),
@@ -238,6 +239,9 @@ test('read-only approval allows SDK reads but rejects writes with HTTP 403', asy
   const client = await connect(f.resource, tokens.access_token);
   try {
     expect(await call(client, 'list_library')).toMatchObject({ total: 0 });
+    const created=await page.request.post('/api/groups',{data:{name:'MCP read group'},headers:{Origin:new URL(baseURL!).origin}});expect(created.ok(),await created.text()).toBe(true);const group=(await created.json()).group;
+    const groups=await call(client,'get_groups');expect(groups.groups).toEqual(expect.arrayContaining([expect.objectContaining({id:group.id,name:'MCP read group'})]));expect(JSON.stringify(groups)).not.toContain('@example.com');
+    await page.request.delete('/api/groups/'+group.id,{headers:{Origin:new URL(baseURL!).origin}});expect((await call(client,'get_groups')).groups).toHaveLength(0);
     // Feedback is available even to read-only clients and cannot read the library.
     const message='Please add a dark-mode schedule '+crypto.randomUUID();
     expect(await call(client,'send_feedback',{kind:'Idea',message,contact:'reply@example.com'})).toMatchObject({ok:true,message:'Thanks — Eric reads every one.'});
@@ -308,7 +312,7 @@ for (const action of ['logout-everywhere', 'delete-account'] as const) {
     const tokens = await approveSignedIn(page, f);
     const client = await connect(f.resource, tokens.access_token);
     try {
-      expect((await client.listTools()).tools).toHaveLength(7);
+      expect((await client.listTools()).tools).toHaveLength(8);
       const response = action === 'logout-everywhere'
         ? await page.request.post('/api/auth/logout-everywhere', { headers: { Origin: f.origin }, data: {} })
         : await page.request.delete('/api/account', { headers: { Origin: f.origin } });
@@ -328,5 +332,5 @@ test('MCP request limits apply per bearer and across a user’s connections',asy
   // A second token is not exhausted yet, but shares the account's 60/min budget.
   const second=await flow(baseURL!),secondTokens=await approveSignedIn(page,second);
   const next=await create(second.resource,secondTokens.access_token);
-  try{expect((await next.listTools()).tools).toHaveLength(7);for(let n=0;n<35;n++){try{await next.listTools()}catch{break}}expect(status).toBe(429);}finally{await next.close()}
+  try{expect((await next.listTools()).tools).toHaveLength(8);for(let n=0;n<35;n++){try{await next.listTools()}catch{break}}expect(status).toBe(429);}finally{await next.close()}
 });
