@@ -1,7 +1,7 @@
 <script lang="ts">
-import {ui} from '../config/ui';
+import {ui} from '../config/copy';
 import type {Snippet} from 'svelte';
-let {title,subtitle=ui.c019,onclick,children}:{title:string,subtitle?:string,onclick?:()=>void,children?:Snippet}=$props();
+let {title,subtitle=ui.empty,onclick,children}:{title:string,subtitle?:string,onclick?:()=>void,children?:Snippet}=$props();
 </script>
 {#snippet body()}
  <span class="row-copy"><b>{title}</b>{#if subtitle}<small>{subtitle}</small>{/if}</span>

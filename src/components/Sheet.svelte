@@ -1,5 +1,5 @@
 <script lang="ts">
-import {ui} from '../config/ui';
+import {ui} from '../config/copy';
 import {onMount,type Snippet} from 'svelte';
 let {title,children,close}:{title:string,children:Snippet,close?:()=>void}=$props();
 let node:HTMLDivElement;
@@ -11,4 +11,4 @@ function keyboard(event:KeyboardEvent){
 }
 </script>
 <svelte:window onkeydown={keyboard}/>
-<div class="scrim"><div bind:this={node} class="sheet" role="dialog" tabindex="-1" aria-modal="true" aria-label={title}><header><h2>{title}</h2>{#if close}<button class="icon" onclick={close} aria-label={ui.c205}>×</button>{/if}</header>{@render children()}</div></div>
+<div class="scrim"><div bind:this={node} class="sheet" role="dialog" tabindex="-1" aria-modal="true" aria-label={title}><header><h2>{title}</h2>{#if close}<button class="icon" onclick={close} aria-label={ui.closeDialog}>×</button>{/if}</header>{@render children()}</div></div>

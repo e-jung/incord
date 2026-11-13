@@ -1,6 +1,25 @@
 <script lang="ts">
-import {ui} from '../config/ui';
+import {tick} from 'svelte';
+import {copy} from '../config/copy';
+import {displayTokens} from '../engine/tokenize';
 
-let {words,mask,index,slipped=[],text=ui.c019}:{words:string[],mask:boolean[],index:number,slipped?:number[],text?:string}=$props();
-const rendered=$derived.by(()=>{if(!text)return words;let cursor=0;return words.map((word,i)=>{const start=text.indexOf(word,cursor);if(start<0)return word;const next=i+1<words.length?text.indexOf(words[i+1],start+word.length):text.length;const prefix=i===0?text.slice(0,start):ui.c019;cursor=start+word.length;return prefix+text.slice(start,next<0?cursor:next).trimEnd()})});
-</script><div class="verse" aria-label={ui.c211}>{#each words as word,i}<span class:hidden={mask[i]&&i>=index} class:current={i===index} class:done={i<index} class:slip={slipped.includes(i)} data-word={i} data-hidden={mask[i]&&i>=index}>{rendered[i]}</span>{ui.c212}{/each}</div>
+let {words,mask,index,slipped=[],text=''}:{words:string[],mask:boolean[],index:number,slipped?:number[],text?:string}=$props();
+let viewport: HTMLDivElement;
+const rendered=$derived(text?displayTokens(text):words.map(word=>({text:word,separator:' '})));
+$effect(()=>{
+  const current=index;
+  // Also reset scroll when a new passage/step starts at the same word index.
+  words; mask;
+  let cancelled=false;
+  void tick().then(()=>{
+    if(cancelled||!viewport)return;
+    const word=viewport.querySelector<HTMLElement>(`[data-word="${current}"]`);
+    if(!word)return;
+    const view=viewport.getBoundingClientRect(),rect=word.getBoundingClientRect();
+    const top=viewport.scrollTop+rect.top-view.top-viewport.clientHeight/3;
+    viewport.scrollTo({top:Math.max(0,top),behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
+  });
+  return()=>{cancelled=true};
+});
+</script>
+<div bind:this={viewport} class="verse" aria-label={copy.memoryText}>{#each words as word,i}<span class:hidden={mask[i]&&i>=index} class:current={i===index} class:done={i<index} class:slip={slipped.includes(i)} data-word={i} data-hidden={mask[i]&&i>=index}>{rendered[i]?.text??word}</span>{rendered[i]?.separator??' '}{/each}</div>

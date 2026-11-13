@@ -2,3 +2,27 @@
 .progress-pie{flex:none;width:24px;height:24px;border-radius:50%;border:2px solid var(--acc);padding:3px;background:conic-gradient(var(--acc) calc(var(--n)*1%),transparent 0) content-box}
 
 main.practicing{height:100dvh;min-height:0;overflow:hidden}.practice>header,.practice .prompt,.practice .progress{flex-shrink:0}.keyboard{padding-bottom:calc(12px + env(safe-area-inset-bottom))}.person{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8}.icon{flex-shrink:0;display:grid;place-items:center}.segments{display:flex;padding:4px;border-radius:14px;background:var(--fill);gap:3px}.segments .segment{flex:1;min-width:0;white-space:nowrap;padding:10px 4px;border-radius:10px;background:none;color:var(--ink2);font-size:14px;box-shadow:none}.segments .segment.active{background:var(--bar);color:var(--ink);box-shadow:0 1px 3px var(--line)}.settings-group{border:1px solid var(--line);border-radius:20px;background:var(--bez);overflow:hidden;padding:18px;display:flex;flex-direction:column;gap:14px}.settings-group>label{padding-bottom:16px;border-bottom:1px solid var(--line)}.settings-group>label:last-child{border:0;padding-bottom:0}.settings-group p{font-size:14px}.settings-group input,.settings-group select{background:var(--bg)}.learned{padding-top:36px;padding-bottom:calc(32px + env(safe-area-inset-bottom))}
+
+/* Readable secondary text and finger-sized controls in both themes. */
+.icon{width:44px;height:44px;min-width:44px;min-height:44px}
+.text-button{min-height:44px;padding:10px 0}
+.segments .segment{min-height:44px}
+.tabbar button{min-height:48px;color:var(--ink2)}
+.tabbar svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.week-dots li{color:var(--ink2)}
+.hero small,.cover small,.keepsake small{color:#fff}
+.hero small{font-weight:500}
+.cover b,.cover small{isolation:isolate}
+.verse{overscroll-behavior:contain;overflow-anchor:none;scroll-padding-top:20px}
+.verse span{color:var(--ink2)}
+.verse .hidden{color:transparent}
+.verse .done{color:var(--ink)}
+.verse .slip{color:var(--slip);animation:nudge .3s}
+.number-key,.peek{height:44px;min-width:0;flex:1;padding:5px 0}
+.peek{flex:1.8;margin-right:0}
+.keyboard .keyrow:last-child{gap:3px}
+@media(max-height:700px){.practice .prompt{padding-top:14px}.keyboard{gap:5px;padding-top:8px}.key{height:44px}}
+
+.keyboard .numberrow{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:5px}.numberrow .peek{grid-row:span 2;height:auto}.numberrow .number-key{width:100%;min-height:44px}
+.cover::after{content:"";position:absolute;inset:0;background:#0002;pointer-events:none}
+.toggle{flex-direction:row;align-items:center;font-weight:500}.toggle input{width:22px;height:22px;flex:none}.bulk-actions{display:flex;flex-wrap:wrap;gap:8px}.bulk-actions button{font-size:13px;padding:10px 14px!important}.list details{padding:16px 0;border-bottom:1px solid var(--line)}.list summary{cursor:pointer;min-height:44px;line-height:1.5;font-weight:600}.list details p{padding:12px 0}.item-menu{align-self:flex-end;min-width:44px;font-size:24px}.undo-toast{position:fixed;bottom:110px;left:50%;transform:translateX(-50%);z-index:7;border:1px solid var(--line);background:var(--bar);border-radius:16px;box-shadow:var(--sh);padding:8px 18px;white-space:nowrap;display:flex;gap:18px;align-items:center}
