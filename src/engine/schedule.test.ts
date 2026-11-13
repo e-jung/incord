@@ -9,7 +9,7 @@ describe('FSRS scheduler', () => {
   it.each(['Easy', 'Good', 'Hard', 'Again'] as const)('delegates %s to pinned FSRS without fuzz', grade => {
     const card = createEmptyCard(now);
     const before = structuredClone(card);
-    const expected = fsrs({ request_retention: RULES.scheduler.retention, maximum_interval: RULES.scheduler.maximumInterval, enable_fuzz: false }).next(card, now, Rating[grade]);
+    const expected = fsrs({ request_retention: RULES.scheduler.retention, maximum_interval: RULES.scheduler.maximumInterval, enable_short_term: false, enable_fuzz: false }).next(card, now, Rating[grade]);
     const result = schedule(card, grade, now);
     expect(result).toEqual(expected);
     expect(result.log.rating).toBe(Rating[grade]);
@@ -17,6 +17,16 @@ describe('FSRS scheduler', () => {
     expect(result.card.due.getTime()).toBeGreaterThan(now.getTime());
     expect(card).toEqual(before);
     expect(schedule(card, grade, now)).toEqual(result);
+  });
+  it('schedules the completed ladder in days, not short-term learning minutes', () => {
+    const day = 86_400_000;
+    for (const grade of ['Again', 'Hard', 'Good', 'Easy'] as const) {
+      expect(schedule(null, grade, now).card.due.getTime() - now.getTime()).toBeGreaterThanOrEqual(day);
+    }
+    const good = schedule(null, 'Good', now).card;
+    expect(good.scheduled_days).toBeGreaterThanOrEqual(2);
+    expect(good.scheduled_days).toBeLessThanOrEqual(3);
+    expect(schedule(null, 'Easy', now).card.scheduled_days).toBeGreaterThan(good.scheduled_days);
   });
   it('initializes a new card with an explicit clock', () => {
     expect(schedule(null, 'Good', now)).toEqual(schedule(createEmptyCard(now), 'Good', now));

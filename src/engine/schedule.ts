@@ -8,6 +8,7 @@ const ratings = { Easy: Rating.Easy, Good: Rating.Good, Hard: Rating.Hard, Again
 const scheduler = fsrs({
   request_retention: RULES.scheduler.retention,
   maximum_interval: RULES.scheduler.maximumInterval,
+  enable_short_term: false,
   enable_fuzz: RULES.scheduler.fuzz,
 });
 
