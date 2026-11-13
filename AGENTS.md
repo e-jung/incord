@@ -29,7 +29,7 @@ npm run e2e — starts disposable localhost Worker when needed.
 See README.md for local secrets. Never commit .dev.vars or production credentials.
 
 ## Security
-Parameterized SQL; never render user HTML. Same-origin checks on all writes, signed HttpOnly cookies, auth throttling, WebAuthn verification, one-use hashed recovery codes. Use Secure cookies on HTTPS; localhost HTTP omits Secure for development only. Push endpoints allowlisted and redirects refused.
+Parameterized SQL; never render user HTML. Same-origin checks on all writes, signed HttpOnly cookies, auth throttling, WebAuthn verification, one-use hashed recovery codes. Use Secure cookies on HTTPS; localhost HTTP omits Secure for development only. Push endpoints allowlisted and redirects refused with `redirect: 'manual'` (3xx is failure; Workers reject the `error` redirect mode).
 Preserve migration history; additive migrations only. Never log text, recovery codes or secrets.
 No deployment or GitHub push is authorized in the initial build. Architect reviews first. Do not add a remote or publish.
 
@@ -46,3 +46,6 @@ No deployment or GitHub push is authorized in the initial build. Architect revie
 - Device passkey registration attaches to the current public account identity. Reject stale enrollment sessions/challenges; never silently create a replacement account. Recovery code, device ownership and optional passkey invitation are sequenced sheets. Deferred ownership still blocks sync.
 - Pending signed-in sync queues retry at 5s/15s/60s/5min without needing browser connectivity events. Remote revocation clears device data, preference baselines and account sheets, with a one-time notice.
 - Worker-first assets: static misses stay 404; only extensionless HTML app routes receive shell fallback. HTML carries no-transform to suppress Cloudflare automatic RUM injection; all responses carry one-year HSTS without subdomain/preload directives. Keep enforcing CSP and Latin/Latin-ext WOFF2-only fonts.
+
+## Logging
+First-party operational logs only: Cloudflare dashboard → Workers → byheart → Logs, or `npx wrangler tail` from this project. Push attempts record kind, endpoint hostname (not full endpoint), HTTP status, first 200 characters of a sanitized provider reason and elapsed milliseconds. The account's UserDO retains its last ten results for Account → Delivery log. Worker 5xx/unexpected failures include a request id (cf-ray, or local fallback), also returned in error JSON. Client reports go only to same-origin `/api/log`, IP-rate-limited and capped at 2 KB: generic error class, asset-only stack locations, coarse route, build SHA and UA family. No analytics, third-party telemetry, user text, verse content, keys, recovery codes, endpoint URLs or account ids are logged. Never send raw exception messages from the client; they may contain private text.

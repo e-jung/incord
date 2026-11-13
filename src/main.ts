@@ -1,3 +1,5 @@
+import {installErrorReporting} from './telemetry';
+installErrorReporting();
 import {mount} from 'svelte';
 import './fonts.css';
 import './tokens.css';

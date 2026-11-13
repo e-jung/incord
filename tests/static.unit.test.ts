@@ -11,6 +11,13 @@ import { contentCopy } from '../src/config/copy';
 const assetEnv = (fetch: (request: Request) => Promise<Response>) => ({ ASSETS: { fetch } }) as unknown as Env;
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
+describe('Cloudflare runtime compatibility', () => {
+  it('never configures Worker fetches with the unsupported error redirect mode', () => {
+    const source = readFileSync('cloudflare/worker.ts', 'utf8');
+    expect(source).not.toMatch(/(?:\bredirect|['"]redirect['"])\s*:\s*(['"])error\1/);
+  });
+});
+
 describe('N5/N6 response headers and N18 static routing', () => {
   it.each(['/', '/gallery', '/index.html'])('protects HTML at %s without relaxing the enforcing CSP', async path => {
     const response = await worker.fetch(new Request('https://example.test' + path), assetEnv(async () => new Response('<html></html>', { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=0' } })));

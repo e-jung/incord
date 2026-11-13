@@ -39,12 +39,12 @@ export async function readSession(value: string | undefined, secret: string): Pr
 }
 function cookies(request: Request): Record<string, string> { return Object.fromEntries((request.headers.get('Cookie') || '').split(';').map(x => x.trim().split('=')).filter(x => x.length === 2)); }
 function cookie(name: string, value: string, age: number, origin: string) { return `${name}=${value}; HttpOnly; ${origin.startsWith('https:') ? 'Secure; ' : ''}SameSite=Lax; Path=/; Max-Age=${age}`; }
-async function body(request: Request): Promise<ObjectData> {
-  assert(!request.headers.get('Content-Length') || Number(request.headers.get('Content-Length')) <= 2_000_000, 'Request too large', 413);
+async function body(request: Request, maxBytes = 2_000_000): Promise<ObjectData> {
+  assert(!request.headers.get('Content-Length') || Number(request.headers.get('Content-Length')) <= maxBytes, 'Request too large', 413);
   assert(request.headers.get('Content-Type')?.includes('application/json'), 'Expected application/json', 415);
   // Stream cap also covers chunked requests without Content-Length.
   const reader = request.body?.getReader(); assert(reader, 'Missing body'); const parts: Uint8Array[] = []; let size = 0;
-  while (true) { const part = await reader.read(); if (part.done) break; size += part.value.length; if (size > 2_000_000) { await reader.cancel(); throw new ApiError(413, 'Request too large'); } parts.push(part.value); }
+  while (true) { const part = await reader.read(); if (part.done) break; size += part.value.length; if (size > maxBytes) { await reader.cancel(); throw new ApiError(413, 'Request too large'); } parts.push(part.value); }
   const bytes = new Uint8Array(size); let at = 0; for (const part of parts) { bytes.set(part, at); at += part.length; }
   let result: unknown; try { result = JSON.parse(new TextDecoder().decode(bytes)); } catch { throw new ApiError(400, 'Invalid JSON'); }
   assert(result && typeof result === 'object' && !Array.isArray(result)); return result as ObjectData;
@@ -77,11 +77,33 @@ function originFor(request: Request, env: Env) { const origin = new URL(request.
 async function authChallenge(env: Env, request: Request, kind: string) { const id = cookies(request).bh_flow; assert(id, 'Start sign-in again'); const flow = await registry(env, '/challenge/take', { id }); assert(flow && flow.kind === kind, 'Sign-in expired; start again'); return flow as Challenge; }
 async function recoveryCode(env: Env, uid: string) { const code = random(24); await registry(env, '/recovery/set', { uid, hash: await digest(code) }); return code; }
 
+/** Telemetry is deliberately lossy: never forward arbitrary exception text or URLs. */
+export function clientErrorRecord(input: ObjectData, origin: string) {
+  const message = typeof input.message === 'string' ? input.message : '';
+  const errorName = /^(?:(?:Unhandled |Uncaught (?:\(in promise\) )?))?(TypeError|ReferenceError|RangeError|SyntaxError|URIError|EvalError|Error|AbortError|NetworkError|QuotaExceededError|InvalidStateError|SecurityError)(?=:|$)/.exec(message)?.[1];
+  const stack = typeof input.stack === 'string' ? input.stack.split('\n').flatMap(line => {
+    const localFrame = line.match(/^\/(?:assets\/[a-zA-Z0-9_.-]+\.(?:js|mjs)|sw\.js):\d+:\d+$/); if (localFrame) return [localFrame[0]];
+    const match = line.match(/https?:\/\/[^\s)]+/); if (!match) return [];
+    try { const frame = new URL(match[0]); if (frame.origin !== origin || frame.search || frame.hash || !/^\/(?:assets\/[a-zA-Z0-9_.-]+\.(?:js|mjs)|sw\.js):\d+:\d+$/.test(frame.pathname)) return []; return [frame.pathname]; } catch { return []; }
+  }).slice(0, 5).join('\n') : '';
+  // By Heart is a single-path app. Do not retain arbitrary paths, query strings, or fragments.
+  const route = typeof input.route === 'string' && /^\/(?:account|today|library|practice|learned|gallery)?(?:[?#].*)?$/.test(input.route) ? input.route.split(/[?#]/)[0] : '/';
+  const version = typeof input.version === 'string' && /^(?:[a-f0-9]{7,40}|dev|development|unknown)$/.test(input.version) ? input.version : 'unknown';
+  const uaFamily = ['Safari', 'Chrome', 'Chromium', 'Firefox', 'Edge', 'Other'].includes(String(input.uaFamily ?? input.ua)) ? String(input.uaFamily ?? input.ua) : 'Other';
+  return { message: errorName || 'Client error (message omitted)', stack, route, version, uaFamily };
+}
+
 async function api(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url), path = url.pathname, origin = originFor(request, env);
   if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method)) assert(request.headers.get('Origin') === origin, 'Cross-origin write denied', 403);
   if (path === '/api/config' && request.method === 'GET') return json({ passkeys: true, google: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET), googleEnabled: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET), push: !!(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY), vapidPublicKey: env.VAPID_PUBLIC_KEY || null });
   assert(env.SESSION_SECRET?.length >= 32, 'Service secrets are not configured', 503);
+  if (path === '/api/log' && request.method === 'POST') {
+    await registry(env, '/limit', { key: 'log:' + await digest(env.SESSION_SECRET + ':' + (request.headers.get('CF-Connecting-IP') || 'local')), limit: 10, window: 60_000 });
+    const input = await body(request, 2048);
+    console.log(JSON.stringify({ evt: 'client_error', ...clientErrorRecord(input, origin) }));
+    return json({ ok: true });
+  }
   if (path.startsWith('/api/auth/')) {
     await registry(env, '/limit', { key: await digest(env.SESSION_SECRET + ':' + (request.headers.get('CF-Connecting-IP') || 'local')), limit: 60, window: 900_000 });
     const rpID = url.hostname;
@@ -148,27 +170,58 @@ async function api(request: Request, env: Env): Promise<Response> {
   if (path === '/api/export' && request.method === 'GET') return json(await user(env, uid, '/export'), 200, { 'Content-Disposition': 'attachment; filename="by-heart-export.json"' });
   if (path === '/api/account' && request.method === 'DELETE') { await user(env, uid, '/delete'); await registry(env, '/delete', { uid }); return json({ ok: true }, 200, { 'Set-Cookie': cookie(cookieName, '', 0, origin) }); }
   if (path === '/api/push/subscribe' && request.method === 'POST') { const input = await body(request); assert(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY, 'Push is not configured', 503); const result = await user(env, uid, '/push/subscribe', input); await registry(env, '/schedule/set', { uid }); return json(result); }
+  if (path === '/api/push/status' && request.method === 'GET') {
+    const endpointHash = url.searchParams.get('endpointHash');
+    assert(endpointHash === null || /^[a-f0-9]{64}$/.test(endpointHash), 'Invalid endpoint hash');
+    return json(await user(env, uid, '/push/status', { endpointHash }));
+  }
   if (path === '/api/push/test' && request.method === 'POST') { await registry(env, '/limit', { key: 'push:' + uid, limit: 3, window: 60_000 }); return json(await user(env, uid, '/push/test')); }
   throw new ApiError(404, 'Route not found');
 }
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    const requestId = request.headers.get('cf-ray')?.replace(/[^a-zA-Z0-9-]/g, '').slice(0, 100) || crypto.randomUUID();
+    const finish = async (response: Response, unexpected = false, errorName?: string) => {
+      if (response.status >= 500) {
+        console.log(JSON.stringify({ evt: 'server_error', requestId, status: response.status, unexpected, ...(errorName ? { errorName } : {}) }));
+      }
+      if (response.status >= 400 && (new URL(request.url).pathname.startsWith('/api/') || response.headers.get('Content-Type')?.includes('application/json'))) {
+        let error = 'Something went wrong. Please try again.';
+        try { const data = await response.json<{ error?: string }>(); if (data.error) error = data.error; } catch { /* Do not log response content. */ }
+        response = json({ error, requestId }, response.status);
+      }
+      const result = secure(response); result.headers.set('X-Request-ID', requestId); return result;
+    };
     try {
       const path = new URL(request.url).pathname;
-      if (path.startsWith('/api/')) return secure(await api(request, env));
+      if (path.startsWith('/api/')) return await finish(await api(request, env));
       let response = await env.ASSETS.fetch(request);
-      // ASSETS has no automatic SPA fallback: missing books/scripts must stay 404,
-      // even on direct navigation. Only extensionless app routes get the shell.
+      // Static misses stay 404; only extensionless HTML app routes get the shell.
       if (response.status === 404 && ['GET', 'HEAD'].includes(request.method)
         && !/^\/(content|assets)(?:\/|$)/.test(path) && !path.split('/').some(part => part.includes('.'))
         && request.headers.get('Accept')?.includes('text/html')) {
         response = await env.ASSETS.fetch(new Request(new URL('/', request.url), request));
       }
-      return secure(response);
+      return await finish(response);
+    } catch (error) {
+      if (error instanceof ApiError) return finish(json({ error: error.message }, error.status));
+      return finish(json({ error: 'Something went wrong. Please try again.' }, 500), true,
+        error instanceof Error && ['Error', 'TypeError', 'RangeError', 'SyntaxError', 'ReferenceError'].includes(error.name) ? error.name : 'Error');
     }
-    catch (error) { if (error instanceof ApiError) return secure(json({ error: error.message }, error.status)); console.error('By Heart API error', error instanceof Error ? error.name : 'unknown'); return secure(json({ error: 'Something went wrong. Please try again.' }, 500)); }
   },
-  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext) { ctx.waitUntil((async () => { const { users } = await registry(env, '/schedule/due'); const results = await Promise.allSettled(users.map((uid: string) => user(env, uid, '/push/remind'))); if (results.some(r => r.status === 'rejected')) throw new Error('One or more reminder checks failed'); })()); },
+  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil((async () => {
+      try {
+        const { users } = await registry(env, '/schedule/due');
+        const results = await Promise.allSettled(users.map((uid: string) => user(env, uid, '/push/remind')));
+        if (results.some(r => r.status === 'rejected')) throw new Error('One or more reminder checks failed');
+      } catch {
+        const requestId = crypto.randomUUID();
+        console.log(JSON.stringify({ evt: 'server_error', requestId, status: 500, unexpected: true, source: 'scheduled' }));
+        throw new Error('Reminder checks failed; request ' + requestId);
+      }
+    })());
+  },
 } satisfies ExportedHandler<Env>;
 
 export class RegistryDO {
@@ -212,6 +265,7 @@ export function settingsRecord(input: unknown): ObjectData { assert(input && typ
   if (s.remindersEnabled !== undefined) assert(typeof s.remindersEnabled === 'boolean', 'Invalid reminder setting');
   if (s.displayName !== undefined) { assert(typeof s.displayName === 'string' && s.displayName.length <= 80, 'Invalid display name'); s.name = s.displayName = s.displayName.trim(); }
   if (s.weeklyGoal !== undefined) assert([3, 4, 5, 7].includes(Number(s.weeklyGoal)), 'Invalid weekly goal');
+  if (s.textSize !== undefined) assert(['small', 'default', 'large', 'extra-large'].includes(String(s.textSize)), 'Invalid text size');
   if (s.appearance !== undefined) assert(['system', 'light', 'dark'].includes(String(s.appearance)), 'Invalid appearance');
   if (s.reminderTime !== undefined) assert(typeof s.reminderTime === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(s.reminderTime), 'Invalid reminder time');
   if (s.newPerDay !== undefined) assert([1,2,3,5].includes(Number(s.newPerDay)), 'Invalid daily limit');
@@ -274,27 +328,59 @@ export class UserDO {
       const sub = (data.subscription || data) as PushSubscriptionData; validateSubscription(sub); assert(this.list('subscriptions').length < 5 || this.rows('SELECT endpoint FROM subscriptions WHERE endpoint=?', sub.endpoint).length, 'Device limit reached');
       this.sql.exec('INSERT INTO subscriptions VALUES(?,?) ON CONFLICT(endpoint) DO UPDATE SET value=excluded.value', sub.endpoint, JSON.stringify(sub)); return json({ ok: true });
     }
+    if (path === '/push/status') {
+      const endpointHashes = await Promise.all(this.list('subscriptions').map(sub => endpointHash(sub.endpoint)));
+      return json({ subscribed: !!data.endpointHash && endpointHashes.includes(data.endpointHash), endpointHashes, results: this.get('pushResults') || [] });
+    }
     if (path === '/push/test') return json(await this.sendPush(true));
     if (path === '/push/remind') return json(await this.sendPush(false));
     return json({ error: 'Not found' }, 404);
   } catch (e) { if (e instanceof ApiError) return json({ error: e.message }, e.status); throw e; } }); }
   private async sendPush(test: boolean) {
     assert(this.env.VAPID_PRIVATE_KEY && this.env.VAPID_PUBLIC_KEY, 'Push is not configured', 503); const settings = this.settings(), now = new Date(), today = localDay(now, settings.timezone || 'UTC');
+    let dueCount = 0;
     if (!test) {
-      if (!settings.remindersEnabled || this.get('remindedDay') === today) return { sent: 0 };
+      if (!settings.remindersEnabled || this.get('remindedDay') === today) return { sent: 0, failed: 0, results: [] };
       const clock = new Intl.DateTimeFormat('en-GB', { timeZone: settings.timezone || 'UTC', hourCycle: 'h23', hour: '2-digit', minute: '2-digit' }).format(now);
       // Cron is quarter-hourly: permit the 15-minute window following the chosen time.
-      const minutes = (s: string) => Number(s.slice(0, 2)) * 60 + Number(s.slice(3, 5)); const delta = (minutes(clock) - minutes(settings.reminderTime || '09:00') + 1440) % 1440; if (delta >= 15) return { sent: 0 };
-      if (this.list('events').some(e => localDay(new Date(e.timestamp ?? e.createdAt ?? e.at), settings.timezone || 'UTC') === today)) return { sent: 0 };
-      const due = this.list('items').some(i => !i.deleted && (!i.learned || !i.due && !i.dueAt && !i.card?.due || new Date(i.dueAt ?? i.due ?? i.card?.due).getTime() <= now.getTime())); if (!due) return { sent: 0 };
+      const minutes = (s: string) => Number(s.slice(0, 2)) * 60 + Number(s.slice(3, 5)); const delta = (minutes(clock) - minutes(settings.reminderTime || '09:00') + 1440) % 1440; if (delta >= 15) return { sent: 0, failed: 0, results: [] };
+      if (this.list('events').some(e => localDay(new Date(e.timestamp ?? e.createdAt ?? e.at), settings.timezone || 'UTC') === today)) return { sent: 0, failed: 0, results: [] };
+      dueCount = this.list('items').filter(i => !i.deleted && (!i.learned || !i.due && !i.dueAt && !i.card?.due || new Date(i.dueAt ?? i.due ?? i.card?.due).getTime() <= now.getTime())).length; if (!dueCount) return { sent: 0, failed: 0, results: [] };
       this.set('remindedDay', today); // Reserve before network I/O, so retries cannot duplicate a daily reminder.
     }
     let sent = 0, failed = 0;
-    for (const sub of this.list('subscriptions')) { try { const response = await sendWebPush(sub, { title: 'By Heart', body: test ? 'Your gentle reminders are ready.' : 'A quiet moment to keep a little truth by heart.', url: '/', tag: test ? 'by-heart-test' : 'by-heart-daily' }, this.env); if (response.status === 404 || response.status === 410) this.sql.exec('DELETE FROM subscriptions WHERE endpoint=?', sub.endpoint); else if (response.ok) sent++; else failed++; } catch { failed++; } }
-    return { sent, failed };
+    const results: PushResult[] = [];
+    for (const sub of this.list('subscriptions')) {
+      const started = Date.now(), host = new URL(sub.endpoint).hostname;
+      let status = 0, reason = '';
+      try {
+        const response = await sendWebPush(sub, { title: 'By Heart', body: test ? 'Test notification. Reminders are working.' : `You have ${dueCount} ${dueCount === 1 ? 'item' : 'items'} to practice today.`, url: '/', tag: test ? 'by-heart-test' : 'by-heart-daily', renotify: test }, this.env);
+        status = response.status;
+        reason = await pushReason(response, sub, this.env);
+        if (response.ok) sent++; else failed++;
+        if (status === 404 || status === 410) this.sql.exec('DELETE FROM subscriptions WHERE endpoint=?', sub.endpoint);
+      } catch (error) {
+        failed++; reason = error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name) ? 'Push request timed out' : 'Push delivery failed';
+      }
+      const result = { time: Date.now(), host, status, reason };
+      results.push(result);
+      this.set('pushResults', [result, ...(this.get('pushResults') || [])].slice(0, 10));
+      console.log(JSON.stringify({ evt: 'push', kind: test ? 'test' : 'remind', host, status, reason, ms: Date.now() - started }));
+    }
+    return { sent, failed, results };
   }
 }
 
+type PushResult = { time: number; host: string; status: number; reason: string };
+export async function endpointHash(endpoint: string) { return [...new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(endpoint)))].map(byte => byte.toString(16).padStart(2, '0')).join(''); }
+async function pushReason(response: Response, sub: PushSubscriptionData, env: Env) {
+  // Bound the read even if a provider returns an unexpectedly large response.
+  const reader = response.body?.getReader(); if (!reader) return '';
+  let value = '';
+  try { const decoder = new TextDecoder(); while (value.length < 4096) { const part = await reader.read(); if (part.done) break; value += decoder.decode(part.value.subarray(0, 4096), { stream: true }); } } finally { await reader.cancel(); }
+  for (const secret of [sub.endpoint, sub.keys.auth, sub.keys.p256dh, env.VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY]) if (secret) value = value.split(secret).join('[redacted]');
+  return value.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/https?:\/\/[^\s"<>]+/g, '[url]').slice(0, 200);
+}
 type PushSubscriptionData = { endpoint: string; keys: { p256dh: string; auth: string } };
 export function validateSubscription(sub: PushSubscriptionData) {
   assert(sub && typeof sub.endpoint === 'string' && sub.endpoint.length < 2048 && sub.keys, 'Invalid push subscription');
@@ -316,7 +402,10 @@ export async function sendWebPush(subscription: PushSubscriptionData, payload: u
   const header = new Uint8Array(21); header.set(salt); new DataView(header.buffer).setUint32(16, 4096); header[20] = asPublic.length;
   const vapid = unb64(env.VAPID_PUBLIC_KEY!); assert(vapid.length === 65, 'Invalid VAPID public key', 503);
   const signingKey = await crypto.subtle.importKey('jwk', { kty: 'EC', crv: 'P-256', x: b64(vapid.slice(1, 33)), y: b64(vapid.slice(33)), d: env.VAPID_PRIVATE_KEY!, ext: true }, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
-  const unsigned = b64(encoder.encode(JSON.stringify({ typ: 'JWT', alg: 'ES256' }))) + '.' + b64(encoder.encode(JSON.stringify({ aud: new URL(subscription.endpoint).origin, exp: Math.floor(Date.now() / 1000) + 3600, sub: env.VAPID_SUBJECT || 'mailto:hello@jesklabs.com' })));
+  const subject = env.VAPID_SUBJECT || 'mailto:hello@jesklabs.com';
+  assert(/^(?:mailto:[^\s@]+@[^\s@]+|https:\/\/[^\s]+)$/.test(subject), 'Invalid VAPID subject', 503);
+  const unsigned = b64(encoder.encode(JSON.stringify({ typ: 'JWT', alg: 'ES256' }))) + '.' + b64(encoder.encode(JSON.stringify({ aud: new URL(subscription.endpoint).origin, exp: Math.floor(Date.now() / 1000) + 1800, sub: subject })));
   const signature = b64(new Uint8Array(await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, signingKey, encoder.encode(unsigned))));
-  return fetch(subscription.endpoint, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(8000), headers: { TTL: '3600', Urgency: 'normal', 'Content-Encoding': 'aes128gcm', 'Content-Type': 'application/octet-stream', Authorization: `vapid t=${unsigned}.${signature}, k=${env.VAPID_PUBLIC_KEY}` }, body: concat(header, asPublic, cipher) });
+  // Workers do not support redirect: error. Manual refuses forwarding VAPID credentials; 3xx is a delivery failure.
+  return fetch(subscription.endpoint, { method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(8000), headers: { TTL: '3600', Urgency: 'normal', 'Content-Encoding': 'aes128gcm', 'Content-Type': 'application/octet-stream', Authorization: `vapid t=${unsigned}.${signature}, k=${env.VAPID_PUBLIC_KEY}` }, body: concat(header, asPublic, cipher) });
 }

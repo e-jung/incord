@@ -115,8 +115,8 @@ test('empty Today, every tab, settings persistence, local export, and own-text v
   await account(page);
   await expect(page.getByRole('button', { name: 'Continue with Google' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Use recovery code' })).toBeDisabled();
-  await page.getByRole('button', { name: 'Enable reminders', exact: true }).click();
-  await expect(page.getByRole('alert')).toHaveText('Sign in to enable reminders.');
+  const reminders=page.getByRole('button', { name: 'Enable reminders', exact: true });
+  if(await reminders.isEnabled()){await reminders.click();await expect(page.getByRole('alert')).toHaveText('Sign in to enable reminders.')}else{await expect(page.getByRole('region',{name:'Reminders',exact:true})).toContainText(/Permission denied|Add to Home Screen/)}
   await screen(page, info, 'account-signed-out');
   await page.getByLabel('Display name').fill('Ada');
   await page.getByLabel('Display name').press('Tab');
@@ -366,16 +366,19 @@ test('push permission, mock subscription, test notification and disable', async 
   });
   await page.route('**/api/push/test', async route => {
     notificationTests++;
-    await route.fulfill({ json: { sent: true } });
+    await route.fulfill({ json: { sent: 1,failed:0,results:[{host:'web.push.apple.com',status:201,reason:''}] } });
   });
+  await page.route('**/api/push/status*', route=>route.fulfill({json:{subscribed:true,results:[]}}));
   await page.addInitScript(() => {
     const subscription = {
       endpoint: 'https://push.example.invalid/byheart-test',
       keys: { p256dh: 'mock-p256dh', auth: 'mock-auth' },
     };
-    Object.defineProperty(Notification, 'requestPermission', { configurable: true, value: async () => 'granted' });
-    Object.defineProperty(PushManager.prototype, 'subscribe', { configurable: true, value: async () => ({ toJSON: () => subscription }) });
-    Object.defineProperty(PushManager.prototype, 'getSubscription', { configurable: true, value: async () => ({ unsubscribe: async () => true }) });
+    let subscribed=false;
+    Object.defineProperty(Notification,'permission',{configurable:true,get:()=>subscribed?'granted':'default'});
+    Object.defineProperty(Notification, 'requestPermission', { configurable: true, value: async () => {subscribed=true;return 'granted'} });
+    Object.defineProperty(PushManager.prototype, 'subscribe', { configurable: true, value: async () => ({ endpoint:subscription.endpoint,toJSON: () => subscription }) });
+    Object.defineProperty(PushManager.prototype, 'getSubscription', { configurable: true, value: async () => subscribed?({ endpoint:subscription.endpoint,toJSON:()=>subscription,unsubscribe: async () => {subscribed=false;return true} }):null });
   });
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Today', exact: true })).toBeVisible();
@@ -386,11 +389,11 @@ test('push permission, mock subscription, test notification and disable', async 
   expect(subscriptions).toEqual([{ subscription: { endpoint: 'https://push.example.invalid/byheart-test', keys: { p256dh: 'mock-p256dh', auth: 'mock-auth' } } }]);
   await screen(page, info, 'account-push-enabled');
   await page.getByRole('button', { name: 'Send test notification', exact: true }).click();
-  await expect(page.getByRole('status')).toHaveText('Test notification sent.');
+  await expect(page.getByRole('status')).toHaveText("Sent to Apple. If it didn't appear, check Settings → Notifications → By Heart.");
   expect(notificationTests).toBe(1);
   await page.getByRole('button', { name: 'Disable reminders', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Enable reminders', exact: true })).toBeVisible();
-  expect(subscriptions.at(-1)).toEqual({ subscription: null });
+  expect(subscriptions.at(-1)).toEqual({ subscription: null,endpoint:'https://push.example.invalid/byheart-test' });
   await page.getByRole('button', { name: 'Delete account', exact: true }).click();
   await page.getByRole('button', { name: 'Yes, delete account', exact: true }).click();
   await cdp.detach();

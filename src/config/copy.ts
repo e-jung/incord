@@ -20,6 +20,16 @@ export function collectionColor(item: SourceItem): string {
 }
 
 export const copy = {
+ practiceRegionLabel:'Practice',aboutLabel:'About',textSize:'Text size',textSizes:[['small','Small'],['default','Default'],['large','Large'],['extra-large','Extra large']],
+ reminderOn:'Reminders on this device: on',reminderMissing:'Permission granted but not subscribed. Turn on again.',
+ reminderOff:'Reminders on this device: off',reminderDenied:'Permission denied. Enable notifications in iOS Settings → Notifications → By Heart, then return here.',
+ turnOnAgain:'Turn on again',deliveryLog:'Delivery log',deliveryEmpty:'No delivery attempts yet.',
+ deliveryUnavailable:'Delivery status unavailable. Reconnect to check this device.',
+ noPushDevices:'No subscribed devices. Turn on reminders on this device first.',
+ pushProvider:(host:string)=>host.endsWith('push.apple.com')?'Apple':host==='fcm.googleapis.com'?'Google':host==='updates.push.services.mozilla.com'?'Mozilla':'the notification service',
+ pushOutcome:(host:string,status:number,reason:string)=>{try{const data=JSON.parse(reason);if(typeof data.reason==='string')reason=data.reason}catch{}const provider=host.endsWith('push.apple.com')?'Apple':host==='fcm.googleapis.com'?'Google':'the notification service';return status>=200&&status<300?`Sent to ${provider}. If it didn't appear, check Settings → Notifications → By Heart.`:status===0?`Could not reach ${provider}. Try again when connected.`:`${provider} rejected it (${status}${reason?' '+reason:''}).`},
+ aboutVersion:(version:string)=>`About · Version ${version}`,
+
  contentType:'Content type', preferences:'Preferences', dataLabel:'Data', galleryVerseCount:'10 verses', galleryStep:'Step 2',
  learningStep:(step:number)=>`Learning · step ${step}`,
  reviewDate:(date:string)=>'Review '+new Date(date).toLocaleDateString(undefined,{month:'short',day:'numeric'}),

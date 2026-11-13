@@ -1,12 +1,12 @@
 import {contentCopy} from './config/content-copy';
 import {books,documents} from './content';
 export type Item={id:string,title:string,text:string,collection:string,translation?:string,step:number,learned:boolean,due:string,updatedAt:number,deleted?:boolean,card?:any,createdAt?:string,learnedAt?:string,order?:number,number?:number,part?:number,sortKey?:(string|number)[]};
-export type Settings={name:string,theme:string,goal:number,reminderTime:string,timeZone:string,pushEnabled:boolean,days:string[],lastActive:string,returnStart?:string,updatedAt:number,fieldUpdatedAt?:Record<string,number>,newPerDay?:number};
+export type Settings={name:string,theme:string,textSize?:string,goal:number,reminderTime:string,timeZone:string,pushEnabled:boolean,days:string[],lastActive:string,returnStart?:string,updatedAt:number,fieldUpdatedAt?:Record<string,number>,newPerDay?:number};
 export type ReviewEvent={id:string,itemId:string,at:string,slips:number,hidden:number,grade:string};
 export type LocalState={items:Item[],events:ReviewEvent[],settings:Settings,queue:string[],account?:Account|null};
 export type Account={id:string,displayName?:string,[key:string]:unknown};
 export const today=()=>new Date().toLocaleDateString('en-CA');
-export const defaults:Settings={name:'',theme:'system',goal:4,newPerDay:3,reminderTime:'19:00',timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone,pushEnabled:false,days:[],lastActive:'',updatedAt:0};
+export const defaults:Settings={name:'',theme:'system',textSize:'default',goal:4,newPerDay:3,reminderTime:'19:00',timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone,pushEnabled:false,days:[],lastActive:'',updatedAt:0};
 let db:IDBDatabase;
 let settingsSnapshot:Settings|undefined;
 export async function openStore():Promise<LocalState>{
@@ -14,7 +14,7 @@ export async function openStore():Promise<LocalState>{
  return await new Promise((resolve,reject)=>{const r=db.transaction('state').objectStore('state').get('current');r.onsuccess=()=>{const state=r.result||emptyState();state.items=mergeItems([],state.items).map(item=>{const migrated={...item,createdAt:item.createdAt||new Date(item.updatedAt||0).toISOString()};return {...migrated,sortKey:canonical(migrated)}});settingsSnapshot=JSON.parse(JSON.stringify(state.settings));resolve(state)};r.onerror=()=>reject(r.error)});
 }
 export async function persist(state:LocalState){state.settings=stampSettings(state.settings,settingsSnapshot);settingsSnapshot=JSON.parse(JSON.stringify(state.settings));return new Promise<Settings>((resolve,reject)=>{const tx=db.transaction('state','readwrite');const snapshot=JSON.parse(JSON.stringify(state));snapshot.items=snapshot.items.map((item:Item)=>({...item,sortKey:canonical(item)}));tx.objectStore('state').put(snapshot,'current');tx.oncomplete=()=>resolve(state.settings);tx.onerror=()=>reject(tx.error)})}
-export async function api(path:string,body?:unknown,method?:string){const r=await fetch('/api'+path,{method:method||(body?'POST':'GET'),headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});const result=await r.json();if(!r.ok)throw new Error(result.error||contentCopy.retry);return result}
+export async function api(path:string,body?:unknown,method?:string){const r=await fetch('/api'+path,{method:method||(body?'POST':'GET'),headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});const result=await r.json();if(!r.ok)throw new Error((result.error||contentCopy.retry)+(result.requestId?' (Request '+result.requestId+')':''));return result}
 /** Unique by id, including tombstones; old corrupt duplicate arrays are repaired on load. */
 export function mergeItems(local:Item[],remote:Item[]):Item[]{const map=new Map<string,Item>();for(const item of [...local,...remote]){const existing=map.get(item.id);if(!existing||Number(item.updatedAt)>Number(existing.updatedAt)||(Number(item.updatedAt)===Number(existing.updatedAt)&&JSON.stringify(item)>JSON.stringify(existing)))map.set(item.id,item)}return sortItems([...map.values()])}
 export function findLiveItem(items:Item[],id:string){return items.find(item=>item.id===id&&!item.deleted)}
