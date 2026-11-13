@@ -1,3 +1,4 @@
+import {contentCopy} from './config/content-copy';
 /** Public-domain content. Bible books load only on demand; documents/starters are available offline in the shell. */
 import documentData from '../public/content/documents.json';
 import starterData from '../public/content/starters.json';
@@ -52,7 +53,7 @@ async function loadBook(id: string, translation: Translation): Promise<BookPack>
   let promise = cache.get(key);
   if (!promise) {
     promise = fetch(`${import.meta.env.BASE_URL}content/${key}.json`).then(async response => {
-      if (!response.ok) throw Error('This Bible book is not available offline yet. Connect once to download it.');
+      if (!response.ok) throw Error(contentCopy.offline);
       return response.json() as Promise<BookPack>;
     }).catch(error => { cache.delete(key); throw error; });
     cache.set(key, promise);
@@ -63,25 +64,25 @@ async function loadBook(id: string, translation: Translation): Promise<BookPack>
 /** Accept a verse, range, chapter, chapter range, or cross-chapter range. Never silently truncate invalid requests. */
 export async function lookupReference(reference: string, translation: string = 'BSB'): Promise<ContentItem[]> {
   const tr = translation.toUpperCase();
-  if (!translations.includes(tr as Translation)) throw Error('Choose BSB, KJV, or WEB.');
+  if (!translations.includes(tr as Translation)) throw Error(contentCopy.translation);
   const input = reference.trim().replace(/[–—]/g, '-').replace(/^(III|II|I)\s+/i, (_, roman: string) => `${roman.length} `);
   const match = /^(.+?)\s*(\d+)(?::(\d+))?(?:\s*-\s*(\d+)(?::(\d+))?)?$/.exec(input);
-  if (!match) throw Error('Enter a reference such as Romans 8:28-30 or Psalm 23.');
+  if (!match) throw Error(contentCopy.reference);
   const [, bookName, first, verse, end, endVerse] = match;
   const id = aliases.get(normalize(bookName));
-  if (!id) throw Error('That Bible book was not recognized.');
+  if (!id) throw Error(contentCopy.book);
   const pack = await loadBook(id, tr as Translation);
   const firstChapter = Number(first);
   const lastChapter = endVerse ? Number(end) : (verse ? firstChapter : Number(end ?? first));
   const firstVerse = verse ? Number(verse) : 1;
   const lastVerse = endVerse ? Number(endVerse) : (verse ? Number(end ?? verse) : Infinity);
-  if (firstChapter < 1 || firstVerse < 1 || lastChapter < firstChapter || lastVerse < 1 || (firstChapter === lastChapter && lastVerse < firstVerse)) throw Error('The end of the passage must follow its beginning.');
-  if (!pack.chapters[firstChapter] || !pack.chapters[lastChapter]) throw Error('That chapter does not exist in this book.');
-  if (verse && (!pack.chapters[firstChapter][firstVerse] || !pack.chapters[lastChapter][lastVerse])) throw Error(`That verse is not present in ${tr}. Check the reference or translation.`);
+  if (firstChapter < 1 || firstVerse < 1 || lastChapter < firstChapter || lastVerse < 1 || (firstChapter === lastChapter && lastVerse < firstVerse)) throw Error(contentCopy.range);
+  if (!pack.chapters[firstChapter] || !pack.chapters[lastChapter]) throw Error(contentCopy.chapter);
+  if (verse && (!pack.chapters[firstChapter][firstVerse] || !pack.chapters[lastChapter][lastVerse])) throw Error(contentCopy.verse(tr));
   const result: ContentItem[] = [];
   for (let c = firstChapter; c <= lastChapter; c++) {
     const chapter = pack.chapters[c];
-    if (!chapter) throw Error('That chapter does not exist in this book.');
+    if (!chapter) throw Error(contentCopy.chapter);
     for (const [v, text] of Object.entries(chapter)) {
       const n = Number(v);
       if ((c === firstChapter && n < firstVerse) || (c === lastChapter && n > lastVerse)) continue;
@@ -89,6 +90,6 @@ export async function lookupReference(reference: string, translation: string = '
       result.push({ id: `${tr.toLowerCase()}-${id}-${c}-${v}`, title: `${pack.book} ${c}:${v}`, text, collection: 'bible', translation: tr });
     }
   }
-  if (!result.length) throw Error('No verses found for that reference.');
+  if (!result.length) throw Error(contentCopy.empty);
   return result;
 }

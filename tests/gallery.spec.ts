@@ -1,0 +1,22 @@
+import {test,expect} from '@playwright/test';
+import {mkdir} from 'node:fs/promises';
+test('hidden component gallery is usable and self-hosted',async({page},info)=>{
+ const external:string[]=[],errors:string[]=[];
+ page.on('request',r=>{if(new URL(r.url()).origin!==new URL(info.project.use.baseURL||'http://localhost:8793').origin)external.push(r.url())});
+ page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('/gallery');
+ await expect(page.getByRole('heading',{name:'Components',exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'Primary button',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Primary button',exact:true}).click();
+ await page.getByRole('button',{name:'Secondary button',exact:true}).click();
+ await page.getByRole('button',{name:'Q',exact:true}).click();
+ await page.getByRole('button',{name:'Peek',exact:true}).click();
+ await page.evaluate(()=>document.fonts.ready);
+ await mkdir('test-results/screens',{recursive:true});
+ await page.screenshot({path:'test-results/screens/'+info.project.name+'-gallery.png',fullPage:true});
+ expect(errors).toEqual([]);expect(external).toEqual([]);
+ const response=await page.request.get('/');
+ expect(response.headers()['content-security-policy']).toContain("default-src 'self'");
+ await page.getByRole('navigation').getByRole('button',{name:'Today',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Today',exact:true})).toBeVisible();
+});

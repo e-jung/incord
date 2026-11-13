@@ -10,6 +10,7 @@ let source = await fs.readFile(path.join(root, 'src/content.ts'), 'utf8');
 for (const [variable, file] of [['documentData','documents.json'],['starterData','starters.json'],['bookData','books.json']]) {
   source = source.replace(new RegExp(`import ${variable} from '[^']+';`), `const ${variable} = ${JSON.stringify(await read(file))};`);
 }
+source = source.replace("import {contentCopy} from './config/content-copy';", (await fs.readFile(path.join(root,'src/config/content-copy.ts'),'utf8')).replace('export const','const'));
 source = source.replaceAll('import.meta.env.BASE_URL', "'/'");
 const { outputText } = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } });
 let fetchCount = 0;
