@@ -14,5 +14,6 @@
   // Optional: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET; VAPID_PUBLIC_KEY,
   // VAPID_PRIVATE_KEY (base64url raw P-256 scalar), VAPID_SUBJECT.
   // Set APP_ORIGIN to the deployed https origin after review.
-  "vars": {}
+  "routes": [ { "pattern": "byheart.jesklabs.com", "custom_domain": true } ],
+  "vars": { "APP_ORIGIN": "https://byheart.jesklabs.com" }
 }
