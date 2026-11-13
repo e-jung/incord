@@ -28,3 +28,40 @@ export function firstLetters(word: string): string[] {
 export function matchesFirstLetter(word: string, key: string): boolean {
   return firstLetters(word).includes(key.toLocaleLowerCase('en-US'));
 }
+
+export interface DisplayToken { word: string; text: string; separator: string }
+
+/** Keep punctuation beside its word and preserve the original spacing exactly.
+ * Opening quotes/brackets belong to the following word, dashes never add a word.
+ */
+export function displayTokens(text: string): DisplayToken[] {
+  const words = tokenize(text);
+  const starts: number[] = [];
+  let cursor = 0;
+  for (const word of words) {
+    starts.push(text.indexOf(word, cursor));
+    cursor = starts.at(-1)! + word.length;
+  }
+  const boundaries = starts.map((start, i) => {
+    if (!i) return 0;
+    const end = starts[i - 1]! + words[i - 1]!.length;
+    const gap = text.slice(end, start);
+    // Curly opening quotes and brackets are unambiguous. Straight quotes open
+    // after whitespace or a dash (apostrophes within words never reach here).
+    const opening = /[“‘([{]|(?:^|[\s—–-])["']/u.exec(gap);
+    if (!opening) return start;
+    const offset = opening[0].length - 1;
+    return end + opening.index + offset;
+  });
+  return words.map((word, i) => {
+    const segment = text.slice(boundaries[i], boundaries[i + 1] ?? text.length);
+    const separator = i + 1 < words.length ? (segment.match(/\s*$/u)?.[0] ?? '') : '';
+    return { word, text: separator ? segment.slice(0, -separator.length) : segment, separator };
+  });
+}
+
+/** Visible mistakes get feedback but only hidden words affect memory scoring. */
+export function attemptFeedback(word: string, key: string, hidden: boolean, peek = false): { slipped: boolean; scoredSlip: boolean } {
+  const slipped = peek || !matchesFirstLetter(word, key);
+  return { slipped, scoredSlip: hidden && slipped };
+}

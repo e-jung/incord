@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { firstLetters, matchesFirstLetter, tokenize } from './index';
+import { attemptFeedback, displayTokens, firstLetters, matchesFirstLetter, tokenize } from './index';
 
 describe('tokenize', () => {
   it.each([
@@ -33,5 +33,37 @@ describe('firstLetters', () => {
     expect(matchesFirstLetter('12', '2')).toBe(false);
     expect(matchesFirstLetter('God', 'God')).toBe(false);
     expect(matchesFirstLetter('God', 'x')).toBe(false);
+  });
+});
+
+describe('punctuation presentation (P1-14)', () => {
+  it.each([
+    ['He said, “Let there be light.”', ['He', 'said,', '“Let', 'there', 'be', 'light.”']],
+    ['Jesus answered, “I am the way, the truth, and the life.”', ['Jesus', 'answered,', '“I', 'am', 'the', 'way,', 'the', 'truth,', 'and', 'the', 'life.”']],
+    ['my prayer—it comes from lips free of deceit.', ['my', 'prayer—', 'it', 'comes', 'from', 'lips', 'free', 'of', 'deceit.']],
+    ['he said—“it’s well-known”', ['he', 'said—', '“it’s', 'well-known”']],
+    ['hope—(rock-solid) — "Quoted"', ['hope—', '(rock-solid) —', '"Quoted"']],
+    ["men… ‘Man’s’", ['men…', '‘Man’s’']],
+  ])('attaches opening/closing punctuation in %s', (text, expected) => {
+    const tokens = displayTokens(text as string);
+    expect(tokens.map(t => t.text)).toEqual(expected);
+    expect(tokens.map(t => t.text + t.separator).join('')).toBe(text);
+    expect(tokens.map(t => t.word)).toEqual(tokenize(text as string));
+  });
+  it('preserves whitespace and never creates a dash word', () => {
+    const text = '  “Peace”—hope.\n\n[Love]  end.  ';
+    const tokens = displayTokens(text);
+    expect(tokens.map(t => t.text + t.separator).join('')).toBe(text);
+    expect(tokens).toHaveLength(4);
+    expect(displayTokens('— “ ”')).toEqual([]);
+  });
+});
+
+describe('visible slip feedback (P1-7)', () => {
+  it('marks a visible mistake without charging the hidden-word allowance', () => {
+    expect(attemptFeedback('God', 'x', false)).toEqual({ slipped: true, scoredSlip: false });
+    expect(attemptFeedback('God', 'x', true)).toEqual({ slipped: true, scoredSlip: true });
+    expect(attemptFeedback('God', 'G', false)).toEqual({ slipped: false, scoredSlip: false });
+    expect(attemptFeedback('God', '', true, true)).toEqual({ slipped: true, scoredSlip: true });
   });
 });
