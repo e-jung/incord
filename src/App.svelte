@@ -50,7 +50,7 @@ const hapticsSupported=supportsHaptics();
   const ua=navigator.userAgent;
   const platform=/iPhone|iPad|iPod/i.test(ua)||(/Macintosh/i.test(ua)&&navigator.maxTouchPoints>1)?'iOS':/Android/i.test(ua)?'Android':/Macintosh|Mac OS X/i.test(ua)?'macOS':/Windows/i.test(ua)?'Windows':/Linux/i.test(ua)?'Linux':'Other';
   const uaFamily=/Edg(?:e|A|iOS)?\//i.test(ua)?'Edge':/Firefox|FxiOS/i.test(ua)?'Firefox':/Chromium/i.test(ua)?'Chromium':/Chrome|CriOS/i.test(ua)?'Chrome':/Safari/i.test(ua)?'Safari':'Other';
-  return {version:appVersion,platform,uaFamily,viewport:{width:window.innerWidth,height:window.innerHeight},signedIn:!!account};
+  return {version:appVersion,platform,uaFamily,viewport:{width:Math.min(16384,Math.max(1,window.innerWidth)),height:Math.min(16384,Math.max(1,window.innerHeight))},signedIn:!!account};
  }
  async function showFeedbackResult(){
   await tick();const result=feedbackResult;if(!result)return;
@@ -66,7 +66,7 @@ const hapticsSupported=supportsHaptics();
   feedbackError='';feedbackStatus='';
   const message=feedbackMessage.trim(),contact=feedbackContact.trim();
   if(message.length<10||message.length>4000){feedbackError=ui.feedbackLengthError;await showFeedbackResult();return}
-  if(contact&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact)){feedbackError=ui.feedbackContactError;await showFeedbackResult();return}
+  if(contact&&(!/^[^\s<>@,;"\\]+@[^\s<>@,;"\\]+\.[^\s<>@,;"\\]+$/.test(contact)||/[\x00-\x1f\x7f-\x9f\u2028\u2029]/.test(contact))){feedbackError=ui.feedbackContactError;await showFeedbackResult();return}
   feedbackBusy=true;
   try{await api('/feedback',{kind:feedbackKind,message,...(contact?{contact}:{}),...(feedbackIncludeMeta?{meta:feedbackMeta()}: {})});feedbackStatus=ui.feedbackThanks;feedbackMessage='';feedbackContact=''}
   catch(e){feedbackError=e instanceof TypeError||e instanceof SyntaxError?ui.feedbackSendError:e instanceof Error?e.message:ui.feedbackSendError}
@@ -236,7 +236,7 @@ const hapticsSupported=supportsHaptics();
  <label>{ui.feedbackMessage}<textarea bind:value={feedbackMessage} minlength={10} maxlength={4000} required disabled={feedbackBusy} aria-describedby="feedback-message-help"></textarea></label><small id="feedback-message-help">{ui.feedbackMessageHelp}</small>
  <label>{ui.feedbackContact}<input name="feedback-reply" type="email" bind:value={feedbackContact} maxlength={254} disabled={feedbackBusy} autocomplete="off" aria-describedby="feedback-contact-help"/></label><small id="feedback-contact-help">{ui.feedbackContactHelp}</small>
  <label class="toggle"><input type="checkbox" bind:checked={feedbackIncludeMeta} disabled={feedbackBusy} aria-describedby="feedback-meta-help"/>{ui.feedbackIncludeMeta}</label><small id="feedback-meta-help">{ui.feedbackMetaHelp}</small>
- <button type="submit" disabled={feedbackBusy} aria-busy={feedbackBusy} aria-pressed={feedbackBusy} class:feedback-sending={feedbackBusy}>{feedbackBusy?ui.feedbackSending:ui.feedbackSend}</button>
+ <button type="submit" disabled={feedbackBusy} aria-busy={feedbackBusy} class:feedback-sending={feedbackBusy}>{feedbackBusy?ui.feedbackSending:ui.feedbackSend}</button>
  {#if feedbackError||feedbackStatus}<p class="feedback-result" class:feedback-failed={!!feedbackError} bind:this={feedbackResult} role={feedbackError?'alert':'status'} tabindex="-1">{feedbackError||feedbackStatus}</p>{/if}
  </form></section><section class="settings-group" aria-label={ui.aboutLabel}><h3>{ui.aboutVersion(appVersion)}</h3><small>{ui.aboutApp}</small><EsvAttribution translation={incord.esv} full/><p>{incord.privacyAbout}</p><a href="/privacy">{incord.privacyPolicy}</a></section></div>
  {:else if tab===ui.gallery}<div class="gallery"><Button>{ui.primaryButton}</Button><Button secondary>{ui.secondaryButton}</Button><StepDots step={3}/><WeekDots days={data.settings.days}/><Cover title={ui.gospelTitle} subtitle={ui.galleryVerseCount} color={0} large/><Row title={ui.johnReference} subtitle={ui.galleryStep} translation={ui.bsb}><StepDots step={2}/></Row><VerseText words={[ui.sampleFor,ui.sampleGod,ui.sampleSo,ui.sampleLoved,ui.sampleThe,ui.sampleWorld]} mask={[false,true,false,true,true,false]} index={2}/><Keyboard onkey={()=>{}} onpeek={()=>{}}/></div>{/if}

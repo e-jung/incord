@@ -75,6 +75,7 @@ test('10–4000 character validation is inline, prevents invalid requests, and a
  await f.getByRole('button',{name:'Send feedback',exact:true}).click();await expect(f.getByRole('alert')).toHaveText('Please write between 10 and 4000 characters.');expect(requests).toBe(0);
  await f.getByRole('checkbox').uncheck();await f.getByLabel('Kind',{exact:true}).selectOption('Other');
  expect(await submit(page,'1234567890')).toEqual({kind:'Other',message:'1234567890'});
+ await f.getByLabel('Message',{exact:true}).fill('Another valid feedback message');await f.getByLabel('Email me back (optional)',{exact:true}).fill('bad@example.com,other');await f.getByRole('button',{name:'Send feedback',exact:true}).click();await expect(f.getByRole('alert')).toHaveText('Please enter a valid email address, or leave it blank.');expect(requests).toBe(1);await f.getByLabel('Email me back (optional)',{exact:true}).fill('');
  const max='x'.repeat(4000);expect(await submit(page,max)).toEqual({kind:'Other',message:max});expect(requests).toBe(2);
 });
 
@@ -83,7 +84,7 @@ test('server failure is immediately below the pressed busy button, visible above
  await page.route('**/api/feedback',async route=>{await gate;await route.fulfill({status:503,json:{error:'Feedback is unavailable right now. Please try again.'}})});
  const f=form(page),draft='Please keep this feedback draft.';await f.getByLabel('Message',{exact:true}).fill(draft);
  await f.getByRole('button',{name:'Send feedback',exact:true}).click();const busy=f.getByRole('button',{name:'Sending…',exact:true});
- await expect(busy).toBeDisabled();await expect(busy).toHaveAttribute('aria-busy','true');await expect(busy).toHaveAttribute('aria-pressed','true');release();
+ await expect(busy).toBeDisabled();await expect(busy).toHaveAttribute('aria-busy','true');await expect(busy).not.toHaveAttribute('aria-pressed');release();
  const alert=f.getByRole('alert');await expect(alert).toHaveText('Feedback is unavailable right now. Please try again.');await expect(alert).toBeInViewport({ratio:1});
  expect(await alert.evaluate(el=>el.previousElementSibling?.textContent)).toBe('Send feedback');await expect(alert).toBeFocused();
  const bounds=await alert.boundingBox(),bar=await page.locator('.tabbar').boundingBox();expect(bounds!.y+bounds!.height).toBeLessThan(bar!.y);
