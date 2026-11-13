@@ -28,7 +28,7 @@ globalThis.fetch = async url => {
   const relative = String(url).replace('/content/', '');
   return { ok: true, json: () => read(relative) };
 };
-const { lookupReference, starters, documents } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
+const { lookupReference, fetchEsvText, starters, documents } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
 assert.equal(documents[0].items.length, 107);
 assert.equal(documents[1].items.length, 132);
 assert.equal(new Set(documents[1].items.map(q => q.lordsDay)).size, 52);
@@ -54,7 +54,8 @@ for (const reference of ['Notabook 1:1','Romans 8:30-28','John 99','Romans 8:999
 await assert.rejects(() => lookupReference('John 3:16','UNKNOWN'));
 const esv = await lookupReference('John 3:16', 'ESV');
 assert.equal(esv[0].translation, 'ESV');
-assert.equal(esv[0].text, 'Mock ESV passage.');
+assert.equal(esv[0].text, '', 'reference lookup never downloads ESV quotations');
+assert.equal(await fetchEsvText(esv[0].reference), 'Mock ESV passage.');
 assert.deepEqual(esv[0].esvVerseKeys, ['jhn-3-16']);
 // P1-13 / P2-24: common reference notation, all five one-chapter books.
 for (const [short, explicit] of [['Jude 3','Jude 1:3'], ['Jude 24–25','Jude 1:24-25'], ['Philemon 4','Philemon 1:4'], ['Obadiah 3','Obadiah 1:3'], ['2 John 4','2 John 1:4'], ['3 John 4','3 John 1:4'], ['John 3.16','John 3:16'], ['jn 3 16','John 3:16'], ['jn 3.16-18','John 3:16-18']]) {

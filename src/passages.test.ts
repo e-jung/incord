@@ -23,11 +23,11 @@ describe('curated single-item passages', () => {
     expect(passages).toHaveLength(17);
     expect(new Set(passages.map(p => p.id)).size).toBe(17);
     expect(passages.every(p => p.title.trim() && p.reference.trim())).toBe(true);
-    expect(passageTranslations).toEqual(['BSB', 'KJV', 'WEB']);
+    expect(passageTranslations).toEqual(['BSB', 'KJV', 'WEB', 'ESV']);
     expect(passages[11].reference).toBe('1 Corinthians 13:4–8'); // Includes the full verse 8.
   });
 
-  for (const translation of passageTranslations) {
+  for (const translation of ['BSB', 'KJV', 'WEB'] as const) {
     it(`loads all 17 complete selections as one item each from real ${translation} packs`, async () => {
       const items = await loadPassages(translation);
       expect(items).toHaveLength(17);
@@ -49,11 +49,23 @@ describe('curated single-item passages', () => {
     });
   }
 
-  it('defaults to BSB and rejects unknown ids and non-bundled translations', async () => {
+  it('loads all ESV selections as reference-only metadata without requesting publisher text', async () => {
+    const items = await loadPassages('ESV');
+    expect(items).toHaveLength(17);
+    for (const [index, item] of items.entries()) {
+      expect(item.translation).toBe('ESV');
+      expect(item.text).toBe('');
+      expect(item.esvVerseKeys).toHaveLength(passages[index].verseCount);
+      expect(item.id).toMatch(/^esv-/);
+    }
+    expect(vi.mocked(fetch).mock.calls.every(([url]) => String(url).startsWith('/content/bsb/'))).toBe(true);
+  });
+
+  it('defaults to BSB and rejects unknown ids and unsupported translations', async () => {
     expect((await loadPassage('psalm-23')).translation).toBe('BSB');
     await expect(loadPassage('missing')).rejects.toThrow('Unknown passage');
-    for (const translation of ['ESV', 'NIV']) {
-      await expect(loadPassage('psalm-23', translation as PassageTranslation)).rejects.toThrow('bundled translation');
+    for (const translation of ['NIV']) {
+      await expect(loadPassage('psalm-23', translation as PassageTranslation)).rejects.toThrow('Choose BSB, KJV, WEB, or ESV');
     }
   });
 });

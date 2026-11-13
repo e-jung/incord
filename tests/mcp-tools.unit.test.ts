@@ -77,6 +77,14 @@ describe('MCP additions',()=>{
   await run('add_passages',{items:[{id:'wsc-1'},{id:'nonexistent'}]},f);
   expect(f.add.mock.calls[1][0][0]).toMatchObject({id:'wsc-1',collection:'wsc',number:1,origin:'mcp'});
  });
+ it('offers ESV curated passages as reference-only items without fetching publisher text',async()=>{
+  const f=fixture();const catalog=await run('list_collections',{},f);
+  expect(catalog.passages.translations).toContain('ESV');
+  const out=await run('add_passages',{items:[{id:'psalm-23',translation:'ESV'}]},f);
+  expect(out.results[0].status).toBe('added');
+  expect(f.add.mock.calls[0][0][0]).toMatchObject({id:'esv-psa-23-1--esv-psa-23-6',reference:'Psalm 23:1–6',translation:'ESV',text:''});
+  expect(f.paths.every(p=>p==='/content/starters.json'||p==='/content/documents.json'||p==='/content/bsb/psa.json')).toBe(true);
+ });
  it('preserves DO statuses without returning arbitrary DO fields',async()=>{
   const f=fixture([{id:'bsb-jhn-3-16'}]);
   const out=await run('add_passages',{items:[{reference:'John 3:16'}]},f);

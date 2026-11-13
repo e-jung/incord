@@ -8,7 +8,7 @@ afterEach(()=>{vi.unstubAllGlobals();vi.restoreAllMocks()});
 describe('ESV device-only content',()=>{
  it('resolves a canonical reference and preserves exact publisher whitespace/typography',async()=>{
   const fetch=vi.fn(async(url:string)=>url.includes('content/')?new Response(JSON.stringify({book:'John',chapters:{3:{16:'BSB text',17:'BSB text'}}})):new Response(exact));vi.stubGlobal('fetch',fetch);
-  const found=await lookupReference('Jn 3:16-17','ESV');expect(found).toHaveLength(1);expect(found[0]).toMatchObject({reference:'John 3:16–17',esvVerseKeys:['jhn-3-16','jhn-3-17'],text:exact});expect(String(fetch.mock.calls.at(-1)?.[0])).toBe('/api/esv?q=John%203%3A16%E2%80%9317');
+  const found=await lookupReference('Jn 3:16-17','ESV');expect(found).toHaveLength(1);expect(found[0]).toMatchObject({reference:'John 3:16–17',esvVerseKeys:['jhn-3-16','jhn-3-17'],text:''});expect(fetch).toHaveBeenCalledTimes(1);await ensureItemText(found[0] as Item);expect(found[0].text).toBe(exact);expect(String(fetch.mock.calls.at(-1)?.[0])).toBe('/api/esv?q=John%203%3A16%E2%80%9317');
  });
  it('strips quotations and optional headings on sync, never mutating the local item',async()=>{
   const item={...esv(),heading:'not metadata'};const payload={items:[item],events:[],settings:{theme:'dark'}};

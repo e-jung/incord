@@ -326,6 +326,7 @@ export function settingsRecord(input: unknown): ObjectData { assert(input && typ
   if (s.remindersEnabled !== undefined) assert(typeof s.remindersEnabled === 'boolean', 'Invalid reminder setting');
   if (s.displayName !== undefined) { assert(typeof s.displayName === 'string' && s.displayName.length <= 80, 'Invalid display name'); s.name = s.displayName = s.displayName.trim(); }
   if (s.weeklyGoal !== undefined) assert([3, 4, 5, 7].includes(Number(s.weeklyGoal)), 'Invalid weekly goal');
+  if (s.defaultTranslation !== undefined) assert(['BSB', 'KJV', 'WEB', 'ESV'].includes(String(s.defaultTranslation)), 'Invalid default translation');
   if (s.textSize !== undefined) assert(['small', 'default', 'large', 'extra-large'].includes(String(s.textSize)), 'Invalid text size');
   if (s.appearance !== undefined) assert(['system', 'light', 'dark'].includes(String(s.appearance)), 'Invalid appearance');
   if (s.reminderTime !== undefined) assert(typeof s.reminderTime === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(s.reminderTime), 'Invalid reminder time');

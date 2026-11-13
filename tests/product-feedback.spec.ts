@@ -32,8 +32,8 @@ test('curated whole passage is one item and active word remains in viewport midd
 test('feedback defaults off, toggles persist, enabled gestures invoke audio/vibration and off takes effect',async({page})=>{
  await page.addInitScript(()=>{
   const calls={audio:0,tick:0,vibrate:0};(window as any).__feedbackCalls=calls;
-  Object.defineProperty(navigator,'vibrate',{configurable:true,value:()=>{calls.vibrate++;return true}});
-  (window as any).AudioContext=class {state='running';currentTime=0;destination={};constructor(){calls.audio++}resume(){return Promise.resolve()}close(){return Promise.resolve()}createOscillator(){return {frequency:{value:0},connect(){},disconnect(){},start(){calls.tick++},stop(){}}}createGain(){return {gain:{setValueAtTime(){},exponentialRampToValueAtTime(){}},connect(){},disconnect(){}}}};
+  Object.defineProperty(navigator,'vibrate',{configurable:true,value:()=>{calls.vibrate++;return true}});Object.defineProperty(navigator,'audioSession',{configurable:true,value:{type:'auto'}});
+  (window as any).AudioContext=class {state='suspended';currentTime=0;sampleRate=48000;destination={};constructor(){calls.audio++}resume(){this.state='running';return Promise.resolve()}close(){return Promise.resolve()}createBuffer(_channels:number,length:number){return {getChannelData:()=>new Float32Array(length)}}createBufferSource(){return {buffer:null,connect(){},disconnect(){},start(){},stop(){}}}createOscillator(){return {frequency:{value:0},connect(){},disconnect(){},start(){calls.tick++},stop(){}}}createGain(){return {gain:{setValueAtTime(){},linearRampToValueAtTime(){},exponentialRampToValueAtTime(){}},connect(){},disconnect(){}}}};
  });
  await account(page);await expect(page.getByLabel('Key sounds',{exact:true})).not.toBeChecked();await expect(page.getByLabel('Haptics',{exact:true})).not.toBeChecked();
  await longPassage(page);await typeWords(page,2);expect(await page.evaluate(()=>(window as any).__feedbackCalls)).toEqual({audio:0,tick:0,vibrate:0});
@@ -46,19 +46,35 @@ test('feedback defaults off, toggles persist, enabled gestures invoke audio/vibr
  await longPassage(page);await typeWords(page,2);expect(await page.evaluate(()=>(window as any).__feedbackCalls)).toEqual({audio:0,tick:0,vibrate:0});
 });
 test('iOS switch fallback is aria-hidden and retains physical keyboard focus',async({page})=>{
- await page.addInitScript(()=>{Object.defineProperty(navigator,'vibrate',{value:undefined,configurable:true});Object.defineProperty(navigator,'userAgent',{value:'iPhone OS 18',configurable:true})});
+ await page.addInitScript(()=>{
+  Object.defineProperty(navigator,'vibrate',{value:undefined,configurable:true});Object.defineProperty(navigator,'userAgent',{value:'iPhone OS 18',configurable:true});Object.defineProperty(HTMLInputElement.prototype,'switch',{configurable:true,value:false});
+  (window as any).__switchClicks=[];
+  const click=HTMLLabelElement.prototype.click;
+  HTMLLabelElement.prototype.click=function(){
+   if(this.querySelector('input[switch]'))(window as any).__switchClicks.push({head:this.parentElement===document.head,display:this.style.display,hidden:this.getAttribute('aria-hidden'),nested:!!this.querySelector('input[switch]')});
+   click.call(this);
+  };
+ });
  await account(page);await page.getByLabel('Haptics',{exact:true}).check();await longPassage(page);await typeWords(page,3);
- await expect(page.locator('input[switch]')).toHaveCount(1);await expect(page.locator('input[switch]').locator('..')).toHaveAttribute('aria-hidden','true');await expect(page.getByLabel('Practice',{exact:true})).toBeFocused();await expect(page.locator('[data-word="3"]')).toHaveClass(/current/);
+ expect(await page.evaluate(()=>(window as any).__switchClicks)).toEqual(Array.from({length:3},()=>({head:true,display:'none',hidden:'true',nested:true})));await expect(page.locator('input[switch]')).toHaveCount(0);await expect(page.getByLabel('Practice',{exact:true})).toBeFocused();await expect(page.locator('[data-word="3"]')).toHaveClass(/current/);
 });
-test('keyboard feedback preferences sync to a second signed-in device',async({page,browser,baseURL})=>{
+test('keyboard feedback edited AFTER signing in syncs field clocks and survives both devices reloading',async({page,browser,baseURL})=>{
  const enableVibrate=()=>{Object.defineProperty(navigator,'vibrate',{value:()=>true,configurable:true})};
  await page.addInitScript(enableVibrate);await account(page);
- await page.getByLabel('Key sounds',{exact:true}).check();await page.getByLabel('Haptics',{exact:true}).check();
  const email=`feedback-sync-${crypto.randomUUID()}@example.com`;
+ // Email and Google authenticate the same account/session/sync path; no live provider is needed.
  async function signin(p:Page){await p.getByLabel('Email address',{exact:true}).fill(email);await p.getByRole('button',{name:'Email me a code',exact:true}).click();await expect(p.getByLabel('Six-digit code')).toBeVisible();const {code}=await(await p.request.get('/api/test/last-code?email='+encodeURIComponent(email))).json();await p.getByLabel('Six-digit code').fill(code);await expect(p.getByText('Signed in.',{exact:true})).toBeVisible()}
- await signin(page);await expect.poll(async()=>(await(await page.request.get('/api/export')).json()).settings).toMatchObject({keySounds:true,haptics:true});
+ await signin(page);
+ await page.getByLabel('Key sounds',{exact:true}).check();await page.getByLabel('Haptics',{exact:true}).check();
+ await expect.poll(async()=>(await(await page.request.get('/api/export')).json()).settings).toMatchObject({keySounds:true,haptics:true,fieldUpdatedAt:{keySounds:expect.any(Number),haptics:expect.any(Number)}});
+ const settings=(await(await page.request.get('/api/export')).json()).settings;
+ expect(settings.fieldUpdatedAt.keySounds).toBeGreaterThan(0);expect(settings.fieldUpdatedAt.haptics).toBeGreaterThan(0);
+ await page.reload();await account(page);await expect(page.getByLabel('Key sounds',{exact:true})).toBeChecked();await expect(page.getByLabel('Haptics',{exact:true})).toBeChecked();
  const context=await browser.newContext({baseURL,viewport:{width:393,height:852},extraHTTPHeaders:{'CF-Connecting-IP':'feedback-secondary-'+crypto.randomUUID()}});
- try{await context.addInitScript(enableVibrate);const second=await context.newPage();await account(second);await signin(second);await expect(second.getByLabel('Key sounds',{exact:true})).toBeChecked();await expect(second.getByLabel('Haptics',{exact:true})).toBeChecked()}finally{await context.close()}
+ try{await context.addInitScript(enableVibrate);const second=await context.newPage();await account(second);await signin(second);
+  for(const reload of [false,true]){if(reload){await second.reload();await account(second)}await expect(second.getByLabel('Key sounds',{exact:true})).toBeChecked();await expect(second.getByLabel('Haptics',{exact:true})).toBeChecked()}
+  await expect.poll(async()=>(await(await second.request.get('/api/export')).json()).settings.fieldUpdatedAt).toMatchObject({keySounds:settings.fieldUpdatedAt.keySounds,haptics:settings.fieldUpdatedAt.haptics});
+ }finally{await context.close()}
 });
 test('passage added from a collection stays in that collection',async({page})=>{
  await page.goto('/');await page.getByRole('navigation').getByRole('button',{name:'Library',exact:true}).click();

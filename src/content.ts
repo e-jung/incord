@@ -25,6 +25,8 @@ export interface ContentCollection {
   title: string;
   subtitle: string;
   color: string;
+  questionCount?: number;
+  description?: string;
   items: ContentItem[];
 }
 export const starters: ContentCollection[] = starterData;
@@ -105,14 +107,13 @@ export async function lookupReference(reference: string, translation: string = '
   return result;
 }
 
-/** Publisher text is fetched as one exact passage, never split/rejoined using guessed verse boundaries. */
+/** Resolve ESV metadata without publisher text; preview/practice loads one exact passage on this device. */
 export async function lookupEsvReference(reference: string): Promise<ContentItem[]> {
   const coordinates = await lookupReference(reference, 'BSB');
   const first = coordinates[0], last = coordinates[coordinates.length - 1];
   const canonicalReference = first.title === last.title ? first.title : first.title + '–' + (first.title.split(':')[0] === last.title.split(':')[0] ? last.title.split(':')[1] : last.title.split(' ').at(-1));
   const item: ContentItem = {id: 'esv-' + first.id.slice(4) + (coordinates.length > 1 ? '--esv-' + last.id.slice(4) : ''), title: canonicalReference, reference: canonicalReference, text: '', collection: 'bible', translation: 'ESV', esvVerseKeys: esvReferenceKeys(canonicalReference)};
   assertEsvLimit([item]);
-  item.text = await fetchEsvText(canonicalReference);
   return [item];
 }
 export async function fetchEsvText(reference: string): Promise<string> {

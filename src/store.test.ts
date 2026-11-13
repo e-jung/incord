@@ -55,13 +55,13 @@ describe('QA2 canonical source order and queue backoff',()=>{
  });
 });
 
-it('upgrading stored settings never timestamps new feedback defaults as user edits',async()=>{
+it('upgrading stored settings never timestamps new preference defaults as user edits',async()=>{
  let saved:any={...emptyState(),settings:{...defaults,updatedAt:10}};
- delete saved.settings.keySounds;delete saved.settings.haptics;delete saved.settings.newPerDay;
+ delete saved.settings.keySounds;delete saved.settings.haptics;delete saved.settings.newPerDay;delete saved.settings.defaultTranslation;
  const database={transaction:()=>{const tx:any={objectStore:()=>({get:()=>{const request:any={};queueMicrotask(()=>{request.result=structuredClone(saved);request.onsuccess()});return request},put:(value:any)=>{saved=structuredClone(value)}})};queueMicrotask(()=>tx.oncomplete?.());return tx}};
  vi.stubGlobal('indexedDB',{open:()=>{const request:any={result:database};queueMicrotask(()=>request.onsuccess());return request}});
  const state=await openStore();await persist(state);
- expect(state.settings).toMatchObject({keySounds:false,haptics:false,updatedAt:10,fieldUpdatedAt:{keySounds:0,haptics:0,newPerDay:0,name:10}});
+ expect(state.settings).toMatchObject({defaultTranslation:'BSB',keySounds:false,haptics:false,updatedAt:10,fieldUpdatedAt:{defaultTranslation:0,keySounds:0,haptics:0,newPerDay:0,name:10}});
  const remote={...defaults,keySounds:true,haptics:true,updatedAt:20,fieldUpdatedAt:{keySounds:20,haptics:20}};
  const merged=mergeSettings(state.settings,remote);expect(merged).toMatchObject({keySounds:true,haptics:true});
  expect(stampSettings({...merged,keySounds:false},merged,30).fieldUpdatedAt?.keySounds).toBe(30);

@@ -62,6 +62,13 @@ describe('Backend security and interoperable Web Push', () => {
 
 import {settingsRecord,mergeServerSettings} from '../cloudflare/worker';
 describe('QA account settings regressions',()=>{
+ it('validates the synced default translation and preserves independent preference edits',()=>{
+  for(const defaultTranslation of ['BSB','KJV','WEB','ESV'])expect(settingsRecord({defaultTranslation,updatedAt:1}).defaultTranslation).toBe(defaultTranslation);
+  expect(()=>settingsRecord({defaultTranslation:'NIV',updatedAt:1})).toThrow('Invalid default translation');
+  const a=settingsRecord({defaultTranslation:'ESV',keySounds:false,updatedAt:30,fieldUpdatedAt:{defaultTranslation:30,keySounds:10}});
+  const b=settingsRecord({defaultTranslation:'BSB',keySounds:true,updatedAt:40,fieldUpdatedAt:{defaultTranslation:10,keySounds:40}});
+  expect(mergeServerSettings(a,b)).toMatchObject({defaultTranslation:'ESV',keySounds:true});
+ });
  it('P2-16 rejects invalid server time zones',()=>{expect(()=>settingsRecord({timeZone:'Mars/Phobos',updatedAt:1})).toThrow('Invalid timezone');expect(settingsRecord({timeZone:'America/Los_Angeles',updatedAt:1}).timezone).toBe('America/Los_Angeles')});
  it('P2-17 normalizes display names and aliases consistently',()=>{expect(settingsRecord({name:' Grace ',updatedAt:1})).toMatchObject({name:'Grace',displayName:'Grace'});expect(settingsRecord({name:'   ',updatedAt:1})).toMatchObject({name:'',displayName:''})});
  it('P1-18 normalizes field clocks and merges independent edits',()=>{const old=settingsRecord({name:'Grace',theme:'light',updatedAt:20,fieldUpdatedAt:{name:20,theme:10}}),incoming=settingsRecord({name:'',theme:'dark',updatedAt:30,fieldUpdatedAt:{name:10,theme:30}});expect(mergeServerSettings(old,incoming)).toMatchObject({name:'Grace',displayName:'Grace',theme:'dark',appearance:'dark'});expect(mergeServerSettings(incoming,old)).toEqual(mergeServerSettings(old,incoming));expect(()=>settingsRecord({updatedAt:1,fieldUpdatedAt:{name:Date.now()+86400000}})).toThrow()});

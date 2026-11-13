@@ -1,7 +1,7 @@
-import {lookupReference, type ContentItem} from './content';
+import {lookupReference, lookupEsvReference, type ContentItem} from './content';
 
-/** Bundled public-domain translations only; ESV remains an on-demand API lookup. */
-export const passageTranslations = ['BSB', 'KJV', 'WEB'] as const;
+/** ESV selections are reference-only until device preview or practice. */
+export const passageTranslations = ['BSB', 'KJV', 'WEB', 'ESV'] as const;
 export type PassageTranslation = typeof passageTranslations[number];
 export interface PassageMetadata {
   /** Translation-independent catalog key, not the saved Scripture item's id. */
@@ -40,7 +40,8 @@ export const passages: readonly PassageMetadata[] = [
 export async function loadPassage(id: string, translation: PassageTranslation = 'BSB'): Promise<ContentItem> {
   const passage = passages.find(p => p.id === id);
   if (!passage) throw Error('Unknown passage.');
-  if (!passageTranslations.includes(translation)) throw Error('Passages require a bundled translation (BSB, KJV, or WEB).');
+  if (!passageTranslations.includes(translation)) throw Error('Choose BSB, KJV, WEB, or ESV.');
+  if (translation === 'ESV') return (await lookupEsvReference(passage.reference))[0];
   const verses = await lookupReference(passage.reference, translation);
   if (verses.length !== passage.verseCount || verses.some(v => !v.text.trim())) throw Error('The complete passage is unavailable.');
   const first = verses[0], last = verses[verses.length - 1];

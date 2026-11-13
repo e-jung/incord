@@ -123,7 +123,7 @@ function publicItem(item:any):any {
 }
 async function collections(deps:McpToolDeps) {
  const [starters,documents]=await Promise.all([asset<any[]>(deps,'starters.json'),asset<any[]>(deps,'documents.json')]);
- return {starters:starters.map(({items,...meta})=>({...meta,itemCount:items.length,items:items.map(publicItem)})),passages:{id:'passages',title:'Passages',itemCount:passages.length,translations:['BSB','KJV','WEB'],items:passages},documents:documents.map(({items,...meta})=>({...meta,itemCount:items.length,items:items.map(publicItem)})),translations:['BSB','KJV','WEB','ESV'],esvNote:DEVICE_NOTE};
+ return {starters:starters.map(({items,...meta})=>({...meta,itemCount:items.length,items:items.map(publicItem)})),passages:{id:'passages',title:'Passages',itemCount:passages.length,translations:['BSB','KJV','WEB','ESV'],items:passages},documents:documents.map(({items,...meta})=>({...meta,itemCount:items.length,items:items.map(publicItem)})),translations:['BSB','KJV','WEB','ESV'],esvNote:DEVICE_NOTE};
 }
 async function normalized(source:unknown,deps:McpToolDeps):Promise<Item[]> {
  const input=passageInput.parse(source);
@@ -135,7 +135,7 @@ async function normalized(source:unknown,deps:McpToolDeps):Promise<Item[]> {
   if(input.as_one_passage&&input.translation!=='ESV')items=[joinVerses(items)];
  }else if(input.id) {
   const passage=passages.find(p=>p.id===input.id);
-  if(passage){if(input.translation==='ESV')throw Error('Curated Passages require BSB, KJV or WEB.');items=[joinVerses(await lookup(passage.reference,input.translation,deps))]}
+  if(passage){items=[joinVerses(await lookup(passage.reference,input.translation,deps))]}
   else {
    const catalog=await collections(deps);
    const found=[...catalog.starters,...catalog.documents].flatMap(c=>c.items).find(i=>i.id===input.id);

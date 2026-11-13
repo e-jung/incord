@@ -5,7 +5,7 @@ import type {Snippet} from 'svelte';
 let {title,subtitle=ui.empty,onclick,children,trailing,translation}:{title:string,subtitle?:string,onclick?:()=>void,children?:Snippet,trailing?:Snippet,translation?:string}=$props();
 </script>
 {#snippet body()}
- <span class="row-copy"><b>{title}</b>{#if subtitle}<small>{subtitle}</small>{/if}</span>
+ <span class="row-copy"><b>{title}</b>{#if translation}<small class="translation-badge">{translation}</small>{/if}{#if subtitle}<small>{subtitle}</small>{/if}</span>
  {#if children}{@render children()}{/if}
  {#if onclick}<span aria-hidden="true">›</span>{/if}
 {/snippet}

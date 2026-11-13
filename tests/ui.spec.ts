@@ -191,7 +191,8 @@ test('add BSB verse by reference and complete all four ladder steps', async ({ p
   await tab(page, 'Today');
   await expect(page.getByText('1 to practice', { exact: true })).toBeVisible();
   await expect(page.getByText('About 2 min', { exact: true })).toBeVisible();
-  await expect(page.locator('.row small')).toHaveText('New · BSB');
+  await expect(page.locator('.row .translation-badge')).toHaveText('BSB');
+  await expect(page.locator('.row small:not(.translation-badge)')).toHaveText('New');
   await screen(page, info, 'today-due');
   await page.getByRole('button', { name: 'Begin', exact: true }).click();
   for (let n = 1; n <= 4; n++) {
@@ -456,7 +457,7 @@ test('all starter covers and document choices, collection sessions and Next item
   await expect(page.getByRole('alert')).toBeVisible();
   await screen(page, info, 'verse-search-invalid');
   for (const translation of ['KJV', 'WEB']) {
-    await page.getByRole('combobox', { name: 'Translation', exact: true }).selectOption(translation);
+    await page.getByRole('combobox', { name: 'Default translation', exact: true }).selectOption(translation);
     await page.getByLabel('Bible reference').fill('Romans 8:28-30');
     await page.getByLabel('Bible reference').press('Enter');
     await expect(page.getByRole('button', { name: 'Add to library', exact: true })).toBeVisible();
