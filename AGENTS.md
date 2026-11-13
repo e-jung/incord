@@ -1,11 +1,11 @@
-# By Heart
-A private, offline-first Scripture/catechism memory PWA. Svelte 5 + Vite + TypeScript; one Cloudflare Worker, SQLite-backed UserDO per account and RegistryDO. No D1. No analytics or third-party requests.
+# Incord
+A private, offline-first Scripture/catechism memory PWA. Svelte 5 + Vite + TypeScript; one Cloudflare Worker, SQLite-backed UserDO per account and RegistryDO. No D1. First-party anonymous daily usage counts only; no third-party trackers. ESV is fetched through a same-origin proxy.
 
 ## Product decisions
 - Match design C in /home/ubuntu/.openclaw/workspace/reports/bible-memory-20261113/designs/c-soft-tactile.html. One light/dark token file; self-hosted OFL Figtree/Literata.
 - Automatic four-step first-letter ladder. Score only hidden words; wrong letter or peek advances the word and records a slip.
 - Pure engine in src/engine, rules/copy in src/config. FSRS review. IndexedDB is authoritative while offline; sync uses LWW items, append-only idempotent review events.
-- Bundled BSB/KJV/WEB and historic public-domain catechisms/creeds. Never introduce copyrighted translations without publisher authorization. See content/SOURCES.md.
+- Bundled BSB/KJV/WEB and historic public-domain catechisms/creeds. ESV is fetched through the Crossway API under its published conditions; never bundle it or persist its text server-side. Never introduce other copyrighted translations without publisher authorization. See content/SOURCES.md.
 - All local functionality works signed out. Passkeys, recovery, Google OAuth conditional on credentials. No passwords.
 - Gentle-return backlog is capped, not presented as overdue debt.
 - Screens compose reusable components; keep visual styling in app.css/tokens.css.
@@ -48,4 +48,12 @@ No deployment or GitHub push is authorized in the initial build. Architect revie
 - Worker-first assets: static misses stay 404; only extensionless HTML app routes receive shell fallback. HTML carries no-transform to suppress Cloudflare automatic RUM injection; all responses carry one-year HSTS without subdomain/preload directives. Keep enforcing CSP and Latin/Latin-ext WOFF2-only fonts.
 
 ## Logging
-First-party operational logs only: Cloudflare dashboard → Workers → byheart → Logs, or `npx wrangler tail` from this project. Push attempts record kind, endpoint hostname (not full endpoint), HTTP status, first 200 characters of a sanitized provider reason and elapsed milliseconds. The account's UserDO retains its last ten results for Account → Delivery log. Worker 5xx/unexpected failures include a request id (cf-ray, or local fallback), also returned in error JSON. Client reports go only to same-origin `/api/log`, IP-rate-limited and capped at 2 KB: generic error class, asset-only stack locations, coarse route, build SHA and UA family. No analytics, third-party telemetry, user text, verse content, keys, recovery codes, endpoint URLs or account ids are logged. Never send raw exception messages from the client; they may contain private text.
+First-party operational logs only: Cloudflare dashboard → Workers → byheart → Logs, or `npx wrangler tail` from this project. Push attempts record kind, endpoint hostname (not full endpoint), HTTP status, first 200 characters of a sanitized provider reason and elapsed milliseconds. The account's UserDO retains its last ten results for Account → Delivery log. Worker 5xx/unexpected failures include a request id (cf-ray, or local fallback), also returned in error JSON. Client reports go only to same-origin `/api/log`, IP-rate-limited and capped at 2 KB: generic error class, asset-only stack locations, coarse route, build SHA and UA family. No third-party telemetry, user text, verse content, keys, recovery codes, endpoint URLs or account ids are logged. Never send raw exception messages from the client; they may contain private text.
+
+## Incord identity and host migration
+- Product name is Incord; canonical origin is https://incord.jesklabs.com. Keep both custom-domain routes until the legacy migration is explicitly retired.
+- **Keep Worker script name `byheart`, existing UserDO/RegistryDO classes and bindings, migration history and internal browser/storage keys unchanged.** These are persistent identities, not product copy; renaming them can strand accounts/data. New DOs require additive bindings/migrations.
+- `scripts/deploy.sh` passes production APP_ORIGIN; local dev remains origin-agnostic. Old pages redirect 301 with path/query preserved; old APIs return 410. Serve legacy SW unregister code and related-origin WebAuthn metadata before redirecting.
+- Crossway attribution verified 2026-11-13: https://api.esv.org/#copyright and https://api.esv.org/docs/passage-text/. Use exact full notice plus download limit from `copy.esvCopyright` / `copy.esvDownloadNotice` in About and a visible linked ESV label with each quotation. Device-only cache, 500-verse and half-book limits, no ESV text in sync/server storage/logs or SW caches. Never alter quoted words.
+- Anonymous first-party counts are opt-out, honor GPC/DNT, and contain categorical events only. Daily rotating tokens are deleted after rollup. Weekly totals sum daily counts and are not deduplicated people.
+- Live ESV smoke is opt-in (`ESV_LIVE_SMOKE=1 npm run smoke:esv`), one request with no retries. Normal tests mock ESV; do not spend real API requests in CI.

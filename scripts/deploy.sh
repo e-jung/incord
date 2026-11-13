@@ -4,4 +4,4 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 npm run build
-WRANGLER_SEND_METRICS=false npx wrangler deploy --var APP_ORIGIN:https://byheart.jesklabs.com "$@"
+WRANGLER_SEND_METRICS=false npx wrangler deploy --var APP_ORIGIN:https://incord.jesklabs.com "$@"

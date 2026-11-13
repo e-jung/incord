@@ -15,10 +15,14 @@ const lookupCopy = copySource.match(/export const contentCopy=[\s\S]*?} as const
 assert.ok(lookupCopy, 'canonical lookup copy exists');
 source = source.replace("import {contentCopy} from './config/copy';", lookupCopy.replace('export const', 'const'));
 source = source.replaceAll('import.meta.env.BASE_URL', "'/'");
+const sharedSource = await fs.readFile(path.join(root, 'shared/esv.ts'), 'utf8');
+const sharedJS = ts.transpileModule(sharedSource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
+source = source.replace("'../shared/esv'", `"data:text/javascript;base64,${Buffer.from(sharedJS).toString('base64')}"`);
 const { outputText } = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } });
 let fetchCount = 0;
 globalThis.fetch = async url => {
   fetchCount++;
+  if (String(url).startsWith('/api/esv?')) return {ok:true, text:async()=> 'Mock ESV passage.'};
   const relative = String(url).replace('/content/', '');
   return { ok: true, json: () => read(relative) };
 };
@@ -45,7 +49,11 @@ assert.equal((await lookupReference('Genesis 1-2','WEB')).length, 56);
 for (const reference of ['Notabook 1:1','Romans 8:30-28','John 99','Romans 8:999','Romans 0:1','John 3:16-2:1','John 3:0','']) {
   await assert.rejects(() => lookupReference(reference), undefined, reference);
 }
-await assert.rejects(() => lookupReference('John 3:16','ESV'));
+await assert.rejects(() => lookupReference('John 3:16','UNKNOWN'));
+const esv = await lookupReference('John 3:16', 'ESV');
+assert.equal(esv[0].translation, 'ESV');
+assert.equal(esv[0].text, 'Mock ESV passage.');
+assert.deepEqual(esv[0].esvVerseKeys, ['jhn-3-16']);
 // P1-13 / P2-24: common reference notation, all five one-chapter books.
 for (const [short, explicit] of [['Jude 3','Jude 1:3'], ['Jude 24–25','Jude 1:24-25'], ['Philemon 4','Philemon 1:4'], ['Obadiah 3','Obadiah 1:3'], ['2 John 4','2 John 1:4'], ['3 John 4','3 John 1:4'], ['John 3.16','John 3:16'], ['jn 3 16','John 3:16'], ['jn 3.16-18','John 3:16-18']]) {
   assert.deepEqual(await lookupReference(short), await lookupReference(explicit), short);

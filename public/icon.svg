@@ -1,1 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" rx="44" fill="#4D62D3"/><path d="M96 142 48 98C12 62 67 20 96 61c29-41 84 1 48 37Z" fill="none" stroke="white" stroke-width="10" stroke-linejoin="round"/><path d="M96 62v78" stroke="white" stroke-width="7" opacity=".4"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Incord: a heart-shaped cord">
+  <rect width="512" height="512" rx="112" fill="#4D62D3"/>
+  <rect x="12" y="12" width="488" height="488" rx="102" fill="none" stroke="#fff" stroke-opacity=".12" stroke-width="2"/>
+  <path d="M256 359c-25-24-111-86-111-146 0-59 73-82 111-29 38-53 111-30 111 29 0 47-53 93-91 126-24 21-49 42-49 66" fill="none" stroke="#fff" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

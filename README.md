@@ -1,4 +1,4 @@
-# By Heart
+# Incord
 A little practice. A lasting word.
 
 An offline-first mobile PWA for Scripture, catechisms, and creeds. Light/dark tactile UI, automatic first-letter learning ladder, FSRS review, local practice without an account, optional passkey sync and gentle Web Push.
@@ -22,6 +22,7 @@ Open http://localhost:8793. Nothing is deployed. Local SQLite state stays in .wr
 npm run check
 npm test
 npm run e2e
+npm run content:verify
 ```
 
 Screenshots are written to test-results/screens/. Tests use disposable localhost accounts and CDP virtual authenticators, never production data. Push subscription browser permissions are mocked; the backend tests exercise Web Push encryption.
@@ -30,7 +31,7 @@ Screenshots are written to test-results/screens/. Tests use disposable localhost
 Normal builds use committed generated public-domain JSON. Bible books download into the offline cache only when first opened; starter paths and full documents are in the offline shell. See content/SOURCES.md and scripts/build-content.py --help for the reproducible source pipeline.
 
 ## Production (after review)
-Build assets, configure SESSION_SECRET (32+ random bytes), APP_ORIGIN, optional VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY/VAPID_SUBJECT, optional GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET. Configure Google's callback to /api/auth/google/callback. VAPID private key is the base64url P-256 scalar. Use the same stable session secret and VAPID key across releases. Wrangler config includes the 15-minute reminder cron and SQLite Durable Object migrations. No deploy/push has been performed.
+Build assets, configure SESSION_SECRET (32+ random bytes), APP_ORIGIN, optional VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY/VAPID_SUBJECT, optional GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET. Configure Google's callback to /api/auth/google/callback. VAPID private key is the base64url P-256 scalar. Use the same stable session secret and VAPID key across releases. Wrangler config includes the 15-minute reminder cron and SQLite Durable Object migrations. Use `scripts/deploy.sh` only after review; it builds and supplies `APP_ORIGIN=https://incord.jesklabs.com`. This change has not been deployed or pushed.
 
 
 ## Live-stack smoke
@@ -41,6 +42,46 @@ With a local build and `npm run serve` running, use:
 SMOKE_URL=http://localhost:8793 node scripts/prod-smoke.mjs
 ```
 
-Without `SMOKE_URL`, the script targets https://byheart.jesklabs.com. It uses Chromium at the iPhone 15 viewport, learns John 3:16 through all four steps, registers a virtual passkey, confirms explicit ownership/sync and recovery on a second device, checks CSP/console, push configuration and service workers, then deletes its temporary account even if a check fails. It never saves recovery codes or browser profiles. Push keys must be configured; provider delivery is not exercised.
+Without `SMOKE_URL`, the script targets https://incord.jesklabs.com. It uses Chromium at the iPhone 15 viewport, learns John 3:16 through all four steps, registers a virtual passkey, confirms explicit ownership/sync and recovery on a second device, checks CSP/console, push configuration and service workers, then deletes its temporary account even if a check fails. It never saves recovery codes or browser profiles. Push keys must be configured; provider delivery is not exercised.
 
 Local Wrangler commands disable route-based origin inference so WebAuthn sees `localhost`, not the production custom domain.
+
+## Incord host migration
+
+The canonical origin is **https://incord.jesklabs.com**. Keep both custom-domain routes in `wrangler.jsonc`. The Worker script remains **byheart**, with the existing UserDO/RegistryDO bindings, migration history and internal storage keys intact: renaming them would strand production accounts. The repository directory need not change.
+
+The old origin redirects pages to the same path/query on Incord (301). Old `/api/*` calls return a 410 JSON update message; old `/sw.js` unregisters and moves open windows to Incord. `/.well-known/webauthn` on the old origin advertises Incord as a related origin. Existing passkeys remain bound to their old RP ID: supporting browsers can use the related-origin flow, otherwise use a recovery code and add a new Incord passkey. Browser IndexedDB and push subscriptions cannot transfer across origins. Re-enable reminders on the new origin; account sync recovers saved public-domain items and practice history. Unsynced device-only material remains on the old origin and is not automatically migrated.
+
+### Reviewed production deployment
+
+Keep the existing `SESSION_SECRET` and VAPID credentials. Set a separate strong random `STATS_TOKEN` using `npx wrangler secret put STATS_TOKEN`; the existing Worker `ESV_API_KEY` remains in place. Configure Google OAuth to allow `https://incord.jesklabs.com/api/auth/google/callback` if enabled. Confirm both Cloudflare custom domains can attach to the existing `byheart` Worker, then deploy:
+
+```sh
+scripts/deploy.sh
+node scripts/prod-smoke.mjs
+```
+
+The production smoke checks the old-origin redirect (including path/query), old API 410 response, related-origin metadata and legacy service worker. It skips legacy-host checks for a local `SMOKE_URL`, unless `SMOKE_LEGACY_URL` is explicitly set. Deploying and running the live smoke are architect-owned steps; the smoke creates and deletes a disposable production account.
+
+## ESV attribution and device cache
+
+ESV is not part of the bundled public-domain corpus. The same-origin `/api/esv` proxy uses `ESV_API_KEY` on the server, without a server text cache. ESV text stays on the device only, is excluded from sync/export to the server, and is loaded again on another device. The library is limited to 500 ESV verses; Crossway additionally limits local storage to one half of any book, whichever is less. ESV text must not be altered; practice masking affects display only. Every screen displaying ESV quotations links its ESV attribution to https://www.esv.org.
+
+Checked 2026-11-13 against the [API overview](https://api.esv.org/docs/), [API conditions and copyright](https://api.esv.org/#copyright) and [passage-text parameters](https://api.esv.org/docs/passage-text/). The short form is “ESV” with each quotation; `include-short-copyright` otherwise adds `(ESV)` by default. The app disables that inline suffix and provides its own visible ESV link. Full notice (also in About):
+
+> Scripture quotations marked “ESV” are from the ESV® Bible (The Holy Bible, English Standard Version®), © 2001 by Crossway, a publishing ministry of Good News Publishers. Used by permission. All rights reserved. The ESV text may not be quoted in any publication made available to the public by a Creative Commons license. The ESV may not be translated into any other language.
+>
+> Users may not copy or download more than 500 verses of the ESV Bible or more than one half of any book of the ESV Bible.
+
+The real upstream smoke is **opt-in**, separate from unit/E2E fixtures and normal production smoke:
+
+```sh
+ESV_LIVE_SMOKE=1 SMOKE_URL=http://localhost:8793 npm run smoke:esv
+# Or omit SMOKE_URL after deployment to check the canonical production Worker.
+```
+
+It calls `/api/esv` exactly once, makes no retries and prints no verse text or credentials. The target Worker must have a valid ESV key. No live ESV requests run during normal builds or tests.
+
+## Privacy and private statistics
+
+Incord counts anonymous totals (like how many people practiced today) to improve the app. No ads, no third-party trackers. Account → Privacy can turn counts off; Global Privacy Control and Do Not Track also turn them off. Categorical events carry no account ID, IP, user agent, verse text, own text or references. Random device tokens rotate each local day. StatsDO deletes daily token sets after rolling them into counts. Weekly activity is the sum of daily active-device counts, **not deduplicated weekly people**. `/stats` uses `STATS_TOKEN` and a signed HttpOnly cookie; never put that token in a URL. Operational failure logs remain separate from anonymous usage counts.

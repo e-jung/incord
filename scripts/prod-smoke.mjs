@@ -4,13 +4,13 @@
 import { chromium, devices, expect as baseExpect } from '@playwright/test';
 
 if (process.argv.includes('--help')) {
-  console.log('Usage: SMOKE_URL=http://localhost:8793 node scripts/prod-smoke.mjs\nDefault: https://byheart.jesklabs.com\nCreates a temporary account and deletes it in finally. Requires configured push keys.');
+  console.log('Usage: SMOKE_URL=http://localhost:8793 node scripts/prod-smoke.mjs\nDefault: https://incord.jesklabs.com\nCreates a temporary account and deletes it in finally. Requires configured push keys. Legacy host checks run on production; override with SMOKE_LEGACY_URL.');
   process.exit(0);
 }
 
 // Match playwright.config.ts: do not send local or private smoke traffic via a proxy.
 for (const name of ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy', 'https_proxy', 'all_proxy']) delete process.env[name];
-const target = new URL(process.env.SMOKE_URL || 'https://byheart.jesklabs.com');
+const target = new URL(process.env.SMOKE_URL || 'https://incord.jesklabs.com');
 if (!['http:', 'https:'].includes(target.protocol) || target.username || target.password || target.search || target.hash) {
   throw new Error('SMOKE_URL must be an HTTP(S) URL without credentials, query, or fragment');
 }
@@ -117,10 +117,33 @@ function syncResponse(page) {
   return page.waitForResponse(response => new URL(response.url()).pathname === '/api/sync' && response.request().method() === 'POST');
 }
 
-console.log(`By Heart smoke: ${origin} (Chromium, iPhone 15 393×852)`);
+console.log(`Incord smoke: ${origin} (Chromium, iPhone 15 393×852)`);
 try {
   browser = await chromium.launch({ headless: true });
   let first, second, recoveryCode;
+  const legacyOrigin = process.env.SMOKE_LEGACY_URL || (origin === 'https://incord.jesklabs.com' ? 'https://byheart.jesklabs.com' : '');
+  if (legacyOrigin) await check('Legacy origin redirects paths, retires APIs and preserves passkey metadata', async () => {
+    const legacy = new URL(legacyOrigin);
+    expect(['http:', 'https:'].includes(legacy.protocol) && !legacy.username && !legacy.password && !legacy.search && !legacy.hash, 'Valid legacy origin').toBe(true);
+    const context = await browser.newContext();
+    contexts.push(context);
+    const redirect = await context.request.get(legacy.origin + '/account?migration=smoke', { maxRedirects: 0 });
+    expect(redirect.status()).toBe(301);
+    expect(redirect.headers().location).toBe(origin + '/account?migration=smoke');
+    const retired = await context.request.get(legacy.origin + '/api/config', { maxRedirects: 0 });
+    expect(retired.status()).toBe(410);
+    expect(retired.headers()['content-type']).toContain('application/json');
+    expect(JSON.stringify(await retired.json())).toMatch(/update|incord/i);
+    const metadata = await context.request.get(legacy.origin + '/.well-known/webauthn', { maxRedirects: 0 });
+    expect(metadata.status()).toBe(200);
+    expect(await metadata.json()).toEqual({ origins: [origin] });
+    const sw = await context.request.get(legacy.origin + '/sw.js', { maxRedirects: 0 });
+    expect(sw.status()).toBe(200);
+    expect(sw.headers()['content-type']).toMatch(/javascript/);
+    expect(await sw.text()).toContain('unregister');
+    await context.close();
+    contexts.splice(contexts.indexOf(context), 1);
+  });
   await check('App loads signed out with enforcing CSP', async () => {
     first = await device('first device');
     expect(await api(first.context, '/me')).toEqual({ user: null });

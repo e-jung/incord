@@ -1,5 +1,5 @@
 {
-  "name": "byheart",
+  "name": "incord",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -11,7 +11,8 @@
     "e2e": "playwright test",
     "serve": "WRANGLER_SEND_METRICS=false wrangler dev --local --infer-origin-from-routes=false --port 8793",
     "content:build": "python3 scripts/build-content.py",
-    "content:verify": "node scripts/verify-content.mjs"
+    "content:verify": "node scripts/verify-content.mjs",
+    "smoke:esv": "node scripts/esv-live-smoke.mjs"
   },
   "dependencies": {
     "@fontsource/figtree": "5.2.8",

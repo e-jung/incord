@@ -1,0 +1,12 @@
+# Copy to .dev.vars (ignored), or run node scripts/local-secrets.mjs.
+# Never use these placeholders in production.
+SESSION_SECRET="replace-with-at-least-32-random-characters"
+STATS_TOKEN="replace-with-a-separate-random-stats-access-token"
+# Optional features; leave unset to disable.
+# ESV_API_KEY="your-crossway-api-key"
+# GOOGLE_CLIENT_ID=""
+# GOOGLE_CLIENT_SECRET=""
+# VAPID_PUBLIC_KEY=""
+# VAPID_PRIVATE_KEY=""
+# VAPID_SUBJECT="mailto:you@example.com"
+# APP_ORIGIN is intentionally unset locally; scripts/deploy.sh supplies production.
