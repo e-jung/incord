@@ -76,8 +76,8 @@ for (const kind of ['own 120 words', 'Heidelberg Q1']) {
       await expect(page.locator('[data-word]')).toHaveCount(120);
     } else {
       await tab(page, 'Discover');
-      await page.getByRole('button', { name: 'Catechisms', exact: true }).click();
-      await page.getByRole('combobox', { name: 'Browse', exact: true }).selectOption({ label: 'Heidelberg Catechism' });
+      await page.getByRole('button', { name: 'Catechisms & creeds', exact: true }).click();
+      await page.locator('.document-cards').getByRole('button').filter({has:page.locator('b',{hasText:'Heidelberg Catechism' })}).click();
       await page.getByRole('button', { name: 'Add Q1', exact: true }).click();
       await tab(page, 'Today');
       await page.getByRole('button', { name: 'Begin', exact: true }).click();

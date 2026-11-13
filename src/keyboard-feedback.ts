@@ -113,26 +113,12 @@ export function createKeyboardFeedback() {
     if (destroyed || typeof navigator === 'undefined') return;
     try {
       if (typeof navigator.vibrate === 'function') { navigator.vibrate(8); return; }
-      if (!supportsSwitchHaptics()) return;
-      // Must run synchronously in the gesture. Leave no hidden controls behind.
-      const focused = document.activeElement;
-      const label = document.createElement('label');
-      label.setAttribute('aria-hidden', 'true');
-      label.style.display = 'none';
-      const input = document.createElement('input');
-      input.type = 'checkbox'; input.setAttribute('switch', ''); input.tabIndex = -1;
-      label.append(input);
-      try {
-        document.head.append(label);
-        label.click();
-      } finally {
-        label.remove();
-        if (focused instanceof HTMLElement && document.activeElement !== focused) focused.focus({ preventScroll: true });
-      }
-    } catch { /* Switch haptics are best effort, not an input dependency. */ }
+      // On iOS only the user's direct tap on haptic-overlay.ts can tick.
+      // Physical keys and scripted clicks deliberately have no iOS fallback.
+    } catch { /* Vibration is best effort, not an input dependency. */ }
   }
 
-  /** Deliberately synchronous: iOS haptics must precede any asynchronous audio resume. */
+  /** Android vibration stays synchronous; iOS haptics are native tap overlays. */
   function play(settings: FeedbackSettings, slip = false) {
     setSettings(settings);
     if (settings.haptics) haptic();

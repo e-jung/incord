@@ -7,8 +7,8 @@ import WeekDots from './WeekDots.svelte';
 
 type Role = 'owner' | 'admin' | 'member';
 type Goal = {title:string; total:number; itemIds:string[]; selection:{translation:string;kind?:string;id?:string}};
-type Pending = {id:string;name:string;requestedAt:number};
-type Summary = {id:string; name:string; role:Role; memberCount:number; goal:Goal|null};
+type Pending = {id:string;name:string;ownerName:string;requestedAt:number};
+type Summary = {id:string; name:string; role:Role; memberCount:number; goal:Goal|null; pending?:{id:string;name:string}[]};
 type Member = {id:string; name:string; role:Role; self:boolean; weekDays:string[]; weeklyGoal:number; learnedCount:number; streak:number; titles?:{title:string; translation?:string; learned:boolean}[]; goalStatus:string; goalLearned:number; goalTotal:number};
 type Group = Summary & {members:Member[]; pending?:{id:string; name:string}[]; approveNewMembers:boolean; weeklyPush:boolean};
 type Invite = {code:string; url:string; expiresAt:number; maxUses:number};
@@ -28,6 +28,7 @@ let inviteInput = $state<HTMLInputElement>();
 let formsOpen = $state(false);
 let epoch = 0, listRequest = 0, detailRequest = 0, alive = true, attemptedInvite = '';
 const manager = $derived(group?.role === 'owner' || group?.role === 'admin');
+const pendingCount = $derived(groups.reduce((sum,item)=>sum+(item.pending?.length||0),0));
 const owner = $derived(group?.role === 'owner');
 const visible = $derived(!!account && String(account.id) === activeIdentity);
 const message = (key:string, text:string, error=false) => {notes = {...notes, [key]:{text,error}}};
@@ -102,7 +103,7 @@ async function join(value=code){
  cancelReads();const version=epoch;busy='join';clearNote('join');
  try{
   const out=await api('/groups/join',{code:value.trim()});if(!current(version))return;
-  if(out.pending){message('join',ui.groups.awaitingApproval(out.name));code='';onJoined();await refresh();return}
+  if(out.pending){message('join',ui.groups.awaitingApproval(out.ownerName));code='';onJoined();await refresh();return}
   if(!out.group)throw new Error(ui.groups.inviteInvalid);
   clearDetail();group=out.group;selected=out.group.id;code='';onJoined();
   await refresh();if(current(version))message('join',ui.groups.joined);
@@ -156,7 +157,7 @@ const confirmationTitle = $derived(confirmation?.kind==='delete'?ui.groups.delet
 {/snippet}
 
 <section class="groups-panel" aria-labelledby="groups-heading">
- <header class="heading"><h2 id="groups-heading">{ui.groups.heading}</h2>{#if visible}<button class="text-button" disabled={loading||!!busy} onclick={()=>void refresh()}>{loading?ui.groups.refreshing:ui.groups.refresh}</button>{/if}</header>
+ <header class="heading"><h2 id="groups-heading">{ui.groups.heading}</h2>{#if visible&&pendingCount}<span class="translation-badge" aria-label={ui.groups.pendingCount(pendingCount)}>{pendingCount}</span>{/if}{#if visible}<button class="text-button" disabled={loading||!!busy} onclick={()=>void refresh()}>{loading?ui.groups.refreshing:ui.groups.refresh}</button>{/if}</header>
  <p class="intro">{ui.groups.intro}</p>
  {#if !account}
   <p>{pendingCode?ui.groups.signInInvite:ui.groups.signInHelp}</p>
@@ -167,11 +168,11 @@ const confirmationTitle = $derived(confirmation?.kind==='delete'?ui.groups.delet
   {#if groups.length}
    <nav class="group-list" aria-label={ui.groups.listLabel}>
     {#each groups as item (item.id)}
-     <button class="group-choice secondary" class:chosen={selected===item.id} aria-pressed={selected===item.id} disabled={!!busy} onclick={()=>choose(item.id)}><strong>{item.name}</strong><small>{ui.groups.choiceSummary(item.memberCount,item.role)}</small></button>
+     <button class="group-choice secondary" class:chosen={selected===item.id} aria-pressed={selected===item.id} disabled={!!busy} onclick={()=>choose(item.id)}><strong>{item.name}</strong>{#if item.pending?.length}<span class="translation-badge" aria-label={ui.groups.pendingCount(item.pending.length)}>{item.pending.length}</span>{/if}<small>{ui.groups.choiceSummary(item.memberCount,item.role)}</small></button>
     {/each}
    </nav>
   {:else if !loading&&!notes.list}<p>{ui.groups.empty}</p>{/if}
-  {#if pendingMemberships.length}<section class="panel stack" aria-label={ui.groups.yourRequests}><h3>{ui.groups.yourRequests}</h3>{#each pendingMemberships as item (item.id)}<div class="stack"><strong>{item.name}</strong><small>{ui.groups.awaitingApproval(item.name)}</small><button class="text-button" disabled={!!busy} onclick={()=>void withdraw(item.id)}>{busy==='withdraw:'+item.id?ui.groups.withdrawing:ui.groups.withdraw}</button></div>{/each}</section>{/if}
+  {#if pendingMemberships.length}<section class="panel stack" aria-label={ui.groups.yourRequests}><h3>{ui.groups.yourRequests}</h3>{#each pendingMemberships as item (item.id)}<div class="stack"><strong>{item.name}</strong><small>{ui.groups.awaitingApproval(item.ownerName)}</small><button class="text-button" disabled={!!busy} onclick={()=>void withdraw(item.id)}>{busy==='withdraw:'+item.id?ui.groups.withdrawing:ui.groups.withdraw}</button></div>{/each}</section>{/if}
   {@render feedback('requests')}
   <details class="panel" bind:open={formsOpen}>
    <summary>{ui.groups.createOrJoin}</summary>

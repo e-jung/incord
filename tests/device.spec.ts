@@ -4,9 +4,9 @@ async function tab(page:Page,name:string){await page.getByRole('navigation').get
 async function shot(page:Page,project:string,name:string){await mkdir('test-results/screens/qa6',{recursive:true});await page.screenshot({path:`test-results/screens/qa6/${project}-${name}.png`})}
 test('WSC Q1 entry after library scroll and both steps stay inside standalone viewport',async({page},info)=>{
  await page.addInitScript(()=>Object.defineProperty(navigator,'standalone',{value:true}));
- await page.goto('/');await tab(page,'Discover');await page.getByRole('button',{name:'Catechisms',exact:true}).click();
- await page.getByRole('combobox',{name:'Browse',exact:true}).selectOption('wsc');
- await page.getByRole('button',{name:'Add Q1–12',exact:true}).click();
+ await page.goto('/');await tab(page,'Discover');await page.getByRole('button',{name:'Catechisms & creeds',exact:true}).click();
+ await page.locator('.document-cards').getByRole('button',{name:/^Westminster Shorter Catechism/}).click();
+ await page.locator('.document-range-panel').getByRole('button',{name:'Add 12 items',exact:true}).click();
  await tab(page,'Library');await page.getByRole('button',{name:/Westminster Shorter Catechism 0 of 12 learned/}).click();
  await page.evaluate(()=>window.scrollTo(0,400));
  expect(await page.evaluate(()=>scrollY)).toBeGreaterThan(0);

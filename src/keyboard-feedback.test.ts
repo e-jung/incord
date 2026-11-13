@@ -28,35 +28,11 @@ function fixtures(running = true) {
   return { vibrate, audioSession, Audio, context, oscillators, gains, source, resume() { context.state = 'running'; resolveResume(); } };
 }
 
-function ios(switchSupported = true, throws = false) {
-  class Element {
-    tag: string; attributes: Record<string, string> = {}; style = { display: '' }; children: Element[] = [];
-    type = ''; tabIndex = 0;
-    constructor(tag: string) { this.tag = tag; }
-    setAttribute(key: string, value: string) { this.attributes[key] = value; }
-    append(child: Element) { this.children.push(child); }
-    remove = vi.fn(() => { head.children = head.children.filter(child => child !== this); });
-    focus = vi.fn(() => { documentMock.activeElement = this; });
-    click = vi.fn(() => {
-      clicked.push(this);
-      documentMock.activeElement = this.children[0];
-      if (throws) throw new Error('unsupported');
-    });
-  }
-  const clicked: Element[] = [];
-  const head = new Element('head'), focused = new Element('button');
-  const documentMock = {
-    head, activeElement: focused,
-    createElement: vi.fn((tag: string) => {
-      const element = new Element(tag);
-      if (tag === 'input' && switchSupported) Object.assign(element, { switch: false });
-      return element;
-    }),
-  };
-  vi.stubGlobal('HTMLElement', Element);
-  vi.stubGlobal('document', documentMock);
-  vi.stubGlobal('navigator', { userAgent: 'iPhone', platform: 'iPhone', maxTouchPoints: 5 });
-  return { clicked, head, focused, documentMock };
+function ios() {
+  const documentMock = {createElement:vi.fn(),activeElement:{}};
+  vi.stubGlobal('document',documentMock);
+  vi.stubGlobal('navigator',{userAgent:'iPhone',platform:'iPhone',maxTouchPoints:5});
+  return documentMock;
 }
 
 const flush = async () => { await Promise.resolve(); await Promise.resolve(); };
@@ -160,24 +136,19 @@ describe('optional keyboard feedback', () => {
     feedback.play({}); expect(f.oscillators).toHaveLength(1); expect(f.vibrate).toHaveBeenCalledTimes(1);
     feedback.destroy();
   });
-  it('uses a temporary hidden switch label in head, synchronously removes it and preserves focus', () => {
-    const f = ios(), feedback = createKeyboardFeedback();
-    feedback.play({ haptics: true });
-    expect(f.clicked).toHaveLength(1);
-    const label = f.clicked[0];
-    expect(label.tag).toBe('label'); expect(label.attributes['aria-hidden']).toBe('true'); expect(label.style.display).toBe('none');
-    expect(label.children[0].type).toBe('checkbox'); expect(label.children[0].attributes.switch).toBe('');
-    expect(f.head.children).toEqual([]); expect(label.remove).toHaveBeenCalledOnce();
-    expect(f.focused.focus).toHaveBeenCalledWith({ preventScroll: true }); expect(f.documentMock.activeElement).toBe(f.focused);
-    feedback.testHaptic(); expect(f.clicked).toHaveLength(2); expect(f.head.children).toEqual([]); feedback.destroy();
+  it('never scripts a switch click or creates hidden controls for iOS playback/test', () => {
+    const document = ios(), focus = document.activeElement, feedback = createKeyboardFeedback();
+    feedback.play({haptics:true});feedback.play({haptics:true},true);feedback.testHaptic();
+    expect(document.createElement).not.toHaveBeenCalled();expect(document.activeElement).toBe(focus);
+    feedback.destroy();
   });
-  it('cleans up switch controls and restores focus even when label click fails', () => {
-    const f = ios(true, true), feedback = createKeyboardFeedback();
-    expect(() => feedback.testHaptic()).not.toThrow(); expect(f.head.children).toEqual([]);
-    expect(f.documentMock.activeElement).toBe(f.focused); feedback.destroy();
+  it('does not require a browser haptics API when unsupported', () => {
+    vi.stubGlobal('navigator',{userAgent:'desktop',platform:'Linux',maxTouchPoints:0});
+    const feedback=createKeyboardFeedback();expect(()=>feedback.testHaptic()).not.toThrow();
+    feedback.destroy();
   });
   it('conservatively offers iOS haptics even without a reflected switch property', () => {
-    ios(false); expect(supportsHaptics()).toBe(true);
+    ios(); expect(supportsHaptics()).toBe(true);
     ios(); expect(supportsHaptics()).toBe(true);
     vi.stubGlobal('navigator', { userAgent: 'Macintosh', platform: 'MacIntel', maxTouchPoints: 5 }); expect(supportsHaptics()).toBe(true);
     vi.stubGlobal('navigator', { userAgent: 'desktop', platform: 'MacIntel', maxTouchPoints: 0 }); expect(supportsHaptics()).toBe(false);

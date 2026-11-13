@@ -10,11 +10,11 @@ async function shot(page:Page,info:TestInfo,name:string){
 async function documents(page:Page){
   await page.goto('/');
   await page.getByRole('button',{name:'Discover',exact:true}).click();
-  await page.getByRole('button',{name:'Catechisms',exact:true}).click();
+  await page.getByRole('button',{name:'Catechisms & creeds',exact:true}).click();
 }
 test('notifications expire, stay above navigation without covering content, and never follow navigation into practice',async({page},info)=>{
   await documents(page);
-  await page.getByRole('combobox',{name:'Browse',exact:true}).selectOption({label:'Westminster Shorter Catechism'});
+  await page.locator('.document-cards').getByRole('button').filter({has:page.locator('b',{hasText:'Westminster Shorter Catechism'})}).click();
   await page.getByRole('button',{name:'Add Q1',exact:true}).click();
   const toast=page.locator('.added-toast');
   await expect(toast).toBeVisible();
@@ -67,14 +67,13 @@ test('numeric tokens have a reversible digit keyboard with four rows and full-he
   await expect(page.getByRole('dialog',{name:'Step 1 passed',exact:true})).toBeVisible();
   await expect(page.locator('.added-toast,.undo-toast')).toHaveCount(0);
 });
-test('documents with at most 12 items offer only Add all; larger documents keep batch chips',async({page},info)=>{
+test('document cards offer whole-document or inclusive range selection',async({page},info)=>{
   await documents(page);
-  for(const [label,name,count] of [['Apostles’ Creed','apostles',1],['Nicene Creed','nicene',3]] as const){
-    await page.getByRole('combobox',{name:'Browse',exact:true}).selectOption({label});
-    await expect(page.locator('.bulk-actions button')).toHaveCount(count);
-    await expect(page.locator('.bulk-actions').getByRole('button',{name:'Add all',exact:true})).toBeVisible();
+  for(const [label,name] of [['Apostles’ Creed','apostles'],['Nicene Creed','nicene'],['Westminster Shorter Catechism','wsc']] as const){
+    await page.locator('.document-cards').getByRole('button').filter({has:page.locator('b',{hasText:label})}).click();
+    await expect(page.getByRole('button',{name:'Whole document',exact:true})).toBeVisible();
+    await expect(page.getByRole('combobox',{name:'Browse',exact:true})).toHaveCount(0);
+    await expect(page.locator('.document-range-inputs input')).toHaveCount(2);
     await shot(page,info,name);
   }
-  await page.getByRole('combobox',{name:'Browse',exact:true}).selectOption({label:'Westminster Shorter Catechism'});
-  await expect(page.locator('.bulk-actions button')).toHaveCount(3);
 });

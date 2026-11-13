@@ -29,6 +29,7 @@ test('Test buttons give synchronous feedback with defaults OFF without enabling 
  await expect(page.getByLabel('Key sounds',{exact:true})).not.toBeChecked();await expect(page.getByLabel('Haptics',{exact:true})).not.toBeChecked();
  // Read counters in the same JS stack as click: deferring playback loses iOS user activation.
  const sound=await page.getByRole('button',{name:'Test sound',exact:true}).evaluate(button=>{(button as HTMLButtonElement).click();return {...(window as any).__feedbackCalls}});
+ await expect(page.getByRole('status').filter({hasText:'Hear nothing?'})).toHaveText('Hear nothing? Your iPhone may be on Silent — key sounds follow the Silent switch, like the keyboard.');
  expect(sound.audio).toBe(1);expect(sound.resume).toBe(1);expect(sound.vibrate).toBe(0);expect(await page.evaluate(()=>(navigator as any).audioSession.type)).toBe('ambient');await expect.poll(()=>page.evaluate(()=>(window as any).__feedbackCalls.tick)).toBe(1);
  const haptic=await page.getByRole('button',{name:'Test haptic',exact:true}).evaluate(button=>{(button as HTMLButtonElement).click();return {...(window as any).__feedbackCalls}});
  expect(haptic.vibrate).toBe(1);expect(haptic.tick).toBe(1);
@@ -78,7 +79,7 @@ test('signed-in default translation syncs from Settings and the single Discover 
   }
   await receivePreference('KJV');release();await expect(second.locator('.practice')).toContainText(text);await expect(second.locator('.practice .esv-attribution')).toContainText('ESV');
   // A remote translation update also leaves an unrelated catechism confirmation open.
-  await second.getByRole('button',{name:'Close practice',exact:true}).click();await tab(second,'Discover');await second.getByRole('button',{name:'Catechisms',exact:true}).click();await second.getByRole('combobox',{name:'Browse',exact:true}).selectOption('wlc');await second.getByRole('button',{name:'Add all',exact:true}).click();await expect(second.getByRole('dialog')).toBeVisible();
+  await second.getByRole('button',{name:'Close practice',exact:true}).click();await tab(second,'Discover');await second.getByRole('button',{name:'Catechisms & creeds',exact:true}).click();await second.locator('.document-cards').getByRole('button',{name:/^Westminster Larger Catechism/}).click();await second.getByRole('button',{name:'Whole document',exact:true}).click();await second.locator('.document-range-panel').getByRole('button',{name:/^Add \d+ items$/}).click();await expect(second.getByRole('dialog')).toBeVisible();
   await page.getByRole('combobox',{name:'Default translation',exact:true}).selectOption('WEB');await expect.poll(async()=>(await(await page.request.get('/api/export')).json()).settings.defaultTranslation).toBe('WEB');await receivePreference('WEB');await expect(second.getByRole('dialog')).toBeVisible();
   expect((await(await second.request.get('/api/export')).json()).items.find((i:any)=>i.id===item.id).text).toBe('');
  }finally{release();await context.close()}

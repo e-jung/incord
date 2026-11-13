@@ -37,6 +37,7 @@ export async function resolveGroupGoal(env:Env,selection:any):Promise<{goal:any;
  return {goal:{selection:{...selection},title,itemIds:items.map(i=>i.id),total:items.length},items:items.map(i=>({...i,origin:'group'}))};
 }
 export function groupZone(settings:any){const zone=settings.timezone??settings.timeZone??'UTC';try{new Intl.DateTimeFormat('en',{timeZone:zone});return zone}catch{return 'UTC'}}
+const displayName=(state:any)=>String(state.settings?.displayName??state.settings?.name??state.name??'Friend').trim()||'Friend';
 const day=(d:Date,zone:string)=>d.toLocaleDateString('en-CA',{timeZone:zone});
 export function weeklyWindow(now:Date,zone:string){const parts=new Intl.DateTimeFormat('en-US',{timeZone:zone,weekday:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(now);const get=(t:string)=>parts.find(p=>p.type===t)?.value;return get('weekday')==='Sun'&&get('hour')==='18'&&Number(get('minute'))<15}
 function safeEsvTitle(item:any){try{esvReferenceKeys(item.reference||'');return item.reference}catch{return 'ESV passage'}}
@@ -99,7 +100,7 @@ export async function handleGroupsRegistry(sql:SqlStorage,env:Env,path:string,da
 }
 function groupName(name:any){check(typeof name==='string'&&name.trim().length>0&&name.trim().length<=80,'Enter a group name (1–80 characters)');return name.trim()}
 async function inviteFor(g:Group,data:any){const days=data.expiresDays??14,uses=data.maxUses??20;check(Number.isInteger(days)&&days>=1&&days<=90&&Number.isInteger(uses)&&uses>=1&&uses<=100,'Invalid invite limits');const raw=generateInviteCode(),expiresAt=Date.now()+days*86400000;g.invite={hash:await groupHash(raw),expiresAt,maxUses:uses,uses:0};return {code:raw.match(/.{4}/g)!.join('-'),url:'/join/'+raw,expiresAt,maxUses:uses}}
-export async function getGroups(env:Env,uid:string):Promise<{groups:any[];pending:{id:string;name:string;requestedAt:number}[]}>{if(!env.GROUPS)return {groups:[],pending:[]};const result=await registry(env,'/groups/list',{uid});const groups=[],pending=[];for(const g of result.groups)groups.push(await groupView(env,g,uid));for(const g of result.pending||[])pending.push(await groupsCall(groupObject(env,g.id),'/pending-view',{uid,revision:g.revision}));return {groups,pending}}
+export async function getGroups(env:Env,uid:string):Promise<{groups:any[];pending:{id:string;name:string;ownerName:string;requestedAt:number}[]}>{if(!env.GROUPS)return {groups:[],pending:[]};const result=await registry(env,'/groups/list',{uid});const groups=[],pending=[];for(const g of result.groups)groups.push(await groupView(env,g,uid));for(const g of result.pending||[])pending.push(await groupsCall(groupObject(env,g.id),'/pending-view',{uid,revision:g.revision}));return {groups,pending}}
 export async function cleanupGroups(env:Env,uid:string){if(env.GROUPS)await registry(env,'/groups/cleanup',{uid})}
 export async function handleGroups(request:Request,env:Env,uid:string,input:any={}){
  check(env.GROUPS,'Groups unavailable',503);const path=new URL(request.url).pathname;
@@ -107,7 +108,7 @@ export async function handleGroups(request:Request,env:Env,uid:string,input:any=
  const parts=path.slice('/api/groups'.length).split('/').filter(Boolean);let action:string,id:string|undefined;
  if(!parts.length&&request.method==='POST')action='create';else if(parts.length===1&&parts[0]==='join'&&request.method==='POST')action='join';else {id=parts.shift();check(id&&/^[a-f0-9-]{36}$/.test(id),'Group not found',404);action=parts.join('/')||(request.method==='GET'?'get':request.method==='DELETE'?'delete':'');check((action==='get'&&request.method==='GET')||(action==='delete'&&request.method==='DELETE')||(!!parts.length&&request.method==='POST'),'Method not allowed',405)}
  const result=await registry(env,'/groups/'+action,{...input,uid,id,ip:request.headers.get('CF-Connecting-IP')||'local'});
- if(action==='join'){const me=result.group.members.find((m:Member)=>m.uid===uid);return json(me.pending?{pending:true,name:result.group.name}:{group:await groupView(env,result.group,uid)})}
+ if(action==='join'){const me=result.group.members.find((m:Member)=>m.uid===uid);return json(me.pending?{pending:true,...await groupsCall(groupObject(env,result.group.id),'/pending-view',{uid,revision:result.group.revision})}:{group:await groupView(env,result.group,uid)})}
  if(['get','create','update','goal'].includes(action))return json({group:await groupView(env,result.group,uid),...(action==='create'?{invite:result.invite}:{})});
  if(action==='invite')return json({code:result.code,url:result.url,expiresAt:result.expiresAt,maxUses:result.maxUses});
  return json(action==='pray'||action==='goal/add'?result:{ok:true});
@@ -116,10 +117,39 @@ export async function handleGroups(request:Request,env:Env,uid:string,input:any=
  * Dispatch/projection helpers share the namespace but never call the Registry.
  * Every invocation has <=30 external calls, for projection; scheduling uses at most 32 (30 reads + 2 delivery batches). */
 export class GroupDO {
- constructor(private ctx:DurableObjectState,private env:Env={} as Env){const sql=ctx.storage.sql;sql.exec('CREATE TABLE IF NOT EXISTS deliveries(id TEXT PRIMARY KEY)');sql.exec('CREATE TABLE IF NOT EXISTS group_state(id INTEGER PRIMARY KEY CHECK(id=1),value TEXT NOT NULL)')}
+ constructor(private ctx:DurableObjectState,private env:Env={} as Env){const sql=ctx.storage.sql;sql.exec('CREATE TABLE IF NOT EXISTS deliveries(id TEXT PRIMARY KEY)');sql.exec('CREATE TABLE IF NOT EXISTS membership_notifications(id TEXT PRIMARY KEY,value TEXT NOT NULL)');sql.exec('CREATE TABLE IF NOT EXISTS group_state(id INTEGER PRIMARY KEY CHECK(id=1),value TEXT NOT NULL)')}
  async fetch(request:Request){return this.ctx.blockConcurrencyWhile(async()=>{try{
   const data=await request.json<any>(),path=new URL(request.url).pathname,sql=this.ctx.storage.sql;
-  if(path==='/install'){const old=[...sql.exec<any>('SELECT value FROM group_state WHERE id=1')][0];if(!old||(JSON.parse(old.value).revision||0)<data.group.revision)sql.exec('INSERT INTO group_state VALUES(1,?) ON CONFLICT(id) DO UPDATE SET value=excluded.value',JSON.stringify(data.group));return json({ok:true})}
+  if(path==='/install'){
+   const oldRow=[...sql.exec<any>('SELECT value FROM group_state WHERE id=1')][0],old:Group|undefined=oldRow?JSON.parse(oldRow.value):undefined,g:Group=data.group;
+   if(!old||(old.revision||0)<g.revision!){
+    // Persist notification intents atomically with the roster. Reservations live in
+    // this GroupDO, not on ephemeral member ids, so withdrawal/rejoin cannot spam.
+    this.ctx.storage.transactionSync(()=>{
+     for(const member of g.members){
+      const previous=old?.members.find(m=>m.uid===member.uid);
+      const kind=member.pending&&!previous?'join':previous?.pending&&!member.pending?'approved':null;
+      if(!kind)continue;
+      const id=kind==='join'?`join:${member.uid}`:`approved:${member.id}`;
+      if([...sql.exec('SELECT id FROM deliveries WHERE id=?',id)].length)continue;
+      const recipients=kind==='join'?g.members.filter(m=>!m.pending&&m.role!=='member').map(m=>({uid:m.uid})):[{uid:member.uid}];
+      sql.exec('INSERT OR IGNORE INTO membership_notifications VALUES(?,?)',id,JSON.stringify({kind,requester:member.uid,recipients,name:g.name,groupId:g.id}));
+     }
+     sql.exec('INSERT INTO group_state VALUES(1,?) ON CONFLICT(id) DO UPDATE SET value=excluded.value',JSON.stringify(g));
+    });
+   }
+   for(const row of [...sql.exec<any>('SELECT id,value FROM membership_notifications')]){
+    // Reserve before dispatch, matching prayer/weekly at-most-once delivery.
+    sql.exec('INSERT OR IGNORE INTO deliveries VALUES(?)',row.id);sql.exec('DELETE FROM membership_notifications WHERE id=?',row.id);
+    await groupsCall(groupObject(this.env,'membership:'+g.id),'/membership-notify',JSON.parse(row.value));
+   }
+   return json({ok:true});
+  }
+  if(path==='/membership-notify'){
+   const body=data.kind==='join'?`${displayName(await user(this.env,data.requester,'/groups/state'))} asked to join ${data.name}`:`You’re in ${data.name}`;
+   for(let i=0;i<data.recipients.length;i+=15)await groupsCall(groupObject(this.env,'delivery:'+data.groupId+':membership:'+i),'/deliver',{recipients:data.recipients.slice(i,i+15),kind:data.kind,body,tag:'incord-group-'+data.kind+'-'+data.groupId+'-'+await groupHash(data.requester)});
+   return json({ok:true});
+  }
   if(path==='/project'){
    if(data.members.length>30){const mid=Math.ceil(data.members.length/2);const batches=await Promise.all([data.members.slice(0,mid),data.members.slice(mid)].map((members,i)=>groupsCall(groupObject(this.env,'projection:'+String(data.key||'root')+':'+i),'/project',{...data,members,key:String(data.key||'root')+':'+i})));return json({members:batches.flatMap(b=>b.members)})}
    const members=[];for(const member of data.members){const state=await user(this.env,member.uid,'/groups/state');members.push(member.pending?{id:member.id,name:String(state.settings?.displayName??state.settings?.name??state.name??'Friend').trim()||'Friend',requestedAt:member.requestedAt,pending:true}:projectGroupMember(state,member,data.uid,data.goal))}return json({members});
@@ -129,12 +159,12 @@ export class GroupDO {
    else for(const g of data.groups)await groupsCall(groupObject(this.env,g.id),'/schedule',{revision:g.revision,now:data.now});return json({ok:true});
   }
   if(path==='/remind-tree'){if(data.users.length>30){const mid=Math.ceil(data.users.length/2);for(const [i,users] of [data.users.slice(0,mid),data.users.slice(mid)].entries())await groupsCall(groupObject(this.env,'reminders:'+String(data.key||'root')+':'+i),'/remind-tree',{users,key:String(data.key||'root')+':'+i})}else for(const uid of data.users)await user(this.env,uid,'/push/remind');return json({ok:true})}
-  if(path==='/deliver'){for(const recipient of data.recipients)await user(this.env,recipient.uid,'/groups/push',{kind:'weekly',body:data.body,tag:data.tag});return json({ok:true})}
+  if(path==='/deliver'){for(const recipient of data.recipients)await user(this.env,recipient.uid,'/groups/push',{kind:data.kind||'weekly',body:data.body,tag:data.tag});return json({ok:true})}
   const reserve=(key:string)=>{if([...sql.exec('SELECT id FROM deliveries WHERE id=?',key)].length)return false;sql.exec('INSERT INTO deliveries VALUES(?)',key);return true};
   const row=[...sql.exec<any>('SELECT value FROM group_state WHERE id=1')][0];check(row,'Group not found',404);const g:Group=JSON.parse(row.value);
   check(g.revision===data.revision,'Group update pending; retry shortly',503);
   if(path==='/state')return json({group:g});check(!g.deleted,'Group not found',404);
-  if(path==='/pending-view'){const me=g.members.find(m=>m.uid===data.uid&&m.pending);check(me,'Group not found',404);return json({id:g.id,name:g.name,requestedAt:me.requestedAt})}
+  if(path==='/pending-view'){const me=g.members.find(m=>m.uid===data.uid&&m.pending);check(me,'Group not found',404);const owner=g.members.find(m=>m.role==='owner')!;const ownerName=displayName(await user(this.env,owner.uid,'/groups/state'));return json({id:g.id,name:g.name,ownerName,requestedAt:me.requestedAt})}
   if(path==='/view')return json(await projectView(this.env,g,data.uid));
   if(path==='/schedule'){
    const active=g.members.filter(m=>!m.pending);if(active.length<2)return json({ok:true});const now=new Date(data.now),states=[];

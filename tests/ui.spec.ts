@@ -235,9 +235,9 @@ test('add BSB verse by reference and complete all four ladder steps', async ({ p
 
 test('catechism browse and complete a full ladder', async ({ page }, info) => {
   await tab(page, 'Discover');
-  await page.getByRole('button', { name: 'Catechisms', exact: true }).click();
+  await page.getByRole('button', { name: 'Catechisms & creeds', exact: true }).click();
   await screen(page, info, 'documents-picker');
-  await page.getByRole('combobox', { name: 'Browse', exact: true }).selectOption({ label: 'Westminster Shorter Catechism' });
+  await page.locator('.document-cards').getByRole('button').filter({has:page.locator('b',{hasText:'Westminster Shorter Catechism' })}).click();
   await screen(page, info, 'documents-westminster');
   const title = (await page.locator('summary').first().innerText()).replace(/^Q1 · /, '');
   await expect(page.locator('details').first()).not.toHaveAttribute('open', '');
@@ -447,9 +447,9 @@ test('all featured covers and document choices, collection sessions and Next ite
     await page.getByRole('button', { name: 'Back to library', exact: true }).click();
   }
   await tab(page, 'Discover');
-  await page.getByRole('button', { name: 'Catechisms', exact: true }).click();
+  await page.getByRole('button', { name: 'Catechisms & creeds', exact: true }).click();
   for (const doc of ['Heidelberg Catechism', 'Apostles’ Creed', 'Nicene Creed']) {
-    await page.getByRole('combobox', { name: 'Browse', exact: true }).selectOption({ label: doc });
+    await page.locator('.document-cards').getByRole('button').filter({has:page.locator('b',{hasText:doc })}).click();
     await expect(page.locator('.document-add').first()).toBeVisible();
     await screen(page, info, `document-${doc.split(' ')[0].replace(/[^a-z]/gi, '').toLowerCase()}`);
   }
@@ -477,7 +477,7 @@ test('all featured covers and document choices, collection sessions and Next ite
 test('375px segments fit and email input clears floating navigation', async ({page}, info) => {
   await page.setViewportSize({width:375,height:812});
   await tab(page, 'Discover');
-  for (const label of ['Verses','Your text','Catechisms']) {
+  for (const label of ['Verses','Your text']) {
     const button=page.getByRole('button',{name:label,exact:true});
     await button.click();
     expect(await button.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);

@@ -45,18 +45,26 @@ test('feedback defaults off, toggles persist, enabled gestures invoke audio/vibr
  await page.evaluate(()=>Object.assign((window as any).__feedbackCalls,{audio:0,tick:0,vibrate:0}));
  await longPassage(page);await typeWords(page,2);expect(await page.evaluate(()=>(window as any).__feedbackCalls)).toEqual({audio:0,tick:0,vibrate:0});
 });
-test('iOS switch fallback is aria-hidden and retains physical keyboard focus',async({page})=>{
+test('iOS direct switch taps dispatch once, preserve focus and physical input, and disappear when off',async({page})=>{
  await page.addInitScript(()=>{
-  Object.defineProperty(navigator,'vibrate',{value:undefined,configurable:true});Object.defineProperty(navigator,'userAgent',{value:'iPhone OS 18',configurable:true});Object.defineProperty(HTMLInputElement.prototype,'switch',{configurable:true,value:false});
-  (window as any).__switchClicks=[];
-  const click=HTMLLabelElement.prototype.click;
-  HTMLLabelElement.prototype.click=function(){
-   if(this.querySelector('input[switch]'))(window as any).__switchClicks.push({head:this.parentElement===document.head,display:this.style.display,hidden:this.getAttribute('aria-hidden'),nested:!!this.querySelector('input[switch]')});
-   click.call(this);
-  };
+  Object.defineProperty(navigator,'vibrate',{value:undefined,configurable:true});Object.defineProperty(navigator,'userAgent',{value:'iPhone OS 26_5',configurable:true});
+  (window as any).__switchEvents=[];
+  document.addEventListener('click',event=>{if(event.target instanceof HTMLInputElement&&event.target.hasAttribute('switch'))(window as any).__switchEvents.push({trusted:event.isTrusted})},true);
  });
- await account(page);await page.getByLabel('Haptics',{exact:true}).check();await longPassage(page);await typeWords(page,3);
- expect(await page.evaluate(()=>(window as any).__switchClicks)).toEqual(Array.from({length:3},()=>({head:true,display:'none',hidden:'true',nested:true})));await expect(page.locator('input[switch]')).toHaveCount(0);await expect(page.getByLabel('Practice',{exact:true})).toBeFocused();await expect(page.locator('[data-word="3"]')).toHaveClass(/current/);
+ await account(page);
+ const testButton=page.getByRole('button',{name:'Test haptic',exact:true});await expect(testButton.locator('input[switch]')).toHaveCount(0);await expect(testButton).toBeDisabled();
+ await page.getByLabel('Haptics',{exact:true}).check();await expect(testButton.locator('input[switch]')).toHaveCount(1);await expect(testButton).toBeEnabled();await testButton.tap();
+ await longPassage(page);const region=page.getByLabel('Practice',{exact:true});
+ const key=page.getByRole('button',{name:'F',exact:true}),overlay=key.locator('input[switch]');
+ await expect(page.locator('.keyboard input[switch]')).toHaveCount(27);
+ await expect(overlay).toHaveAttribute('aria-hidden','true');await expect(overlay).toHaveAttribute('tabindex','-1');
+ expect(await overlay.evaluate(input=>({opacity:getComputedStyle(input).opacity,display:getComputedStyle(input).display,appearance:getComputedStyle(input).appearance}))).toMatchObject({opacity:'0',appearance:'auto'});
+ await key.tap();await expect(page.locator('[data-word="1"]')).toHaveClass(/current/);await expect(region).toBeFocused();
+ await page.getByRole('button',{name:'Peek',exact:true}).tap();await expect(page.locator('[data-word="2"]')).toHaveClass(/current/);await expect(region).toBeFocused();
+ await page.keyboard.press('w');await expect(page.locator('[data-word="3"]')).toHaveClass(/current/);await expect(region).toBeFocused();
+ expect(await page.evaluate(()=>(window as any).__switchEvents)).toEqual([{trusted:true},{trusted:true},{trusted:true}]);
+ await page.getByRole('button',{name:'Close practice',exact:true}).click();await account(page);await page.getByLabel('Haptics',{exact:true}).uncheck();await expect(page.locator('input[switch]')).toHaveCount(0);
+ await longPassage(page);await expect(page.locator('input[switch]')).toHaveCount(0);
 });
 test('keyboard feedback edited AFTER signing in syncs field clocks and survives both devices reloading',async({page,browser,baseURL})=>{
  const enableVibrate=()=>{Object.defineProperty(navigator,'vibrate',{value:()=>true,configurable:true})};

@@ -4,6 +4,7 @@ An offline-first, open-source Scripture/catechism memory PWA. Svelte 5 + Vite + 
 ## Product decisions
 - Preserve the soft, tactile visual design and reusable component system. One light/dark token file; self-hosted OFL Figtree/Literata.
 - Automatic four-step first-letter ladder. Score only hidden words; wrong letter or peek advances the word and records a slip.
+- iOS haptics require a trusted tap on a native transparent switch overlay (src/haptic-overlay.ts); never replace it with scripted click/hidden label activation. Keep default toggle activation, practice focus and single key dispatch. Android uses navigator.vibrate; sound remains ambient and respects Silent.
 - Pure engine in src/engine, rules/copy in src/config. FSRS review. IndexedDB is authoritative while offline; sync uses LWW items, append-only idempotent review events.
 - Bundled BSB/KJV/WEB and historic public-domain catechisms/creeds. ESV is fetched through the Crossway API under its published conditions; never bundle it or persist its text server-side. Never introduce other copyrighted translations without publisher authorization. See content/SOURCES.md.
 - All local functionality works signed out. Google OAuth and email codes conditional on credentials. No passwords.
