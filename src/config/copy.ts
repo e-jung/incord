@@ -220,7 +220,7 @@ export const copy = {
   "sendTestPush": "Send test notification",
   "exportData": "Export your data",
   "deleteAccount": "Delete account",
-  "aboutApp": "Incord (from Latin cor, heart): into the heart. ‘Thy word have I hid in mine heart’ (Psalm 119:11, KJV). Public-domain Scripture and historic confessions. Figtree and Literata fonts, SIL OFL. Scripture quotations marked “ESV” are from the ESV® Bible (The Holy Bible, English Standard Version®), © 2001 by Crossway, a publishing ministry of Good News Publishers. Used by permission. All rights reserved. The ESV text may not be quoted in any publication made available to the public by a Creative Commons license. The ESV may not be translated into any other language. Users may not copy or download more than 500 verses of the ESV Bible or more than one half of any book of the ESV Bible.",
+  "aboutApp": "Incord (from Latin cor, heart): into the heart. ‘Thy word have I hid in mine heart’ (Psalm 119:11, KJV). Public-domain Scripture and historic confessions. Figtree and Literata fonts, SIL OFL.",
   aboutPrivacy: 'Incord counts anonymous totals (like how many people practiced today) to improve the app. No ads, no third-party trackers.',
   aboutCredits: 'Public-domain BSB, KJV and WEB; historic confessions. ESV quotations by permission. Figtree and Literata fonts, SIL OFL.',
   esv: 'ESV',

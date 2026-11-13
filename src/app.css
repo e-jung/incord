@@ -72,3 +72,5 @@ main.practicing{position:fixed;inset:0;width:100%;height:100dvh;min-height:0;ove
 .practice{height:100%;padding-top:calc(16px + env(safe-area-inset-top));overflow:hidden;outline:none}
 .practice .verse{scroll-behavior:auto}
 @media(max-height:699px){.practice .prompt{padding-top:16px}.practice .verse{padding-top:16px;padding-bottom:16px}}
+
+.esv-attribution{display:block;color:var(--ink2)}.esv-attribution a{color:inherit;text-decoration:underline;text-decoration-color:color-mix(in srgb,currentColor 40%,transparent);text-underline-offset:3px}.source-row .row-title{display:block;background:none;color:inherit;box-shadow:none;border-radius:0;padding:0;text-align:left;min-height:44px}.keepsake .esv-attribution{color:inherit}

@@ -1,6 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "byheart",
+  "build": { "command": "npm run build" },
   "main": "cloudflare/worker.ts",
   "compatibility_date": "2025-11-13",
   "compatibility_flags": ["nodejs_compat"],

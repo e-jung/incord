@@ -3,5 +3,5 @@
 # secrets already set with `wrangler secret put` (SESSION_SECRET, VAPID_*).
 set -euo pipefail
 cd "$(dirname "$0")/.."
-npm run build
+# Wrangler rebuilds assets immediately before upload, stamping the current HEAD.
 WRANGLER_SEND_METRICS=false npx wrangler deploy --var APP_ORIGIN:https://incord.jesklabs.com "$@"

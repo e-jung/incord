@@ -23,7 +23,7 @@ public/sw.js — offline shell/book cache and notification receiver.
 ## Development
 Node 24. npm ci; npx playwright install chromium.
 npm run check; npm test; npm run build.
-npm run serve — local Wrangler at http://localhost:8793 (build first).
+npm run serve — local Wrangler at http://localhost:8793 (build hook runs automatically).
 For frontend HMR: npm run dev (API/account functionality requires Wrangler).
 npm run e2e — starts disposable localhost Worker when needed.
 See README.md for local secrets. Never commit .dev.vars or production credentials.
@@ -53,6 +53,7 @@ First-party operational logs only: Cloudflare dashboard → Workers → byheart 
 ## Incord identity and host migration
 - Product name is Incord; canonical origin is https://incord.jesklabs.com. Keep both custom-domain routes until the legacy migration is explicitly retired.
 - **Keep Worker script name `byheart`, existing UserDO/RegistryDO classes and bindings, migration history and internal browser/storage keys unchanged.** These are persistent identities, not product copy; renaming them can strand accounts/data. New DOs require additive bindings/migrations.
+- Wrangler’s build hook always rebuilds before serve/deploy; Vite stamps the short HEAD at build time. Commit before deploying; never upload stale prebuilt assets. Stats CSS is a separate stable Vite entry sharing app tokens/fonts.
 - `scripts/deploy.sh` passes production APP_ORIGIN; local dev remains origin-agnostic. Old pages redirect 301 with path/query preserved; old APIs return 410. Serve legacy SW unregister code and related-origin WebAuthn metadata before redirecting.
 - Crossway attribution verified 2026-11-13: https://api.esv.org/#copyright and https://api.esv.org/docs/passage-text/. Use exact full notice plus download limit from `copy.esvCopyright` / `copy.esvDownloadNotice` in About and a visible linked ESV label with each quotation. Device-only cache, 500-verse and half-book limits, no ESV text in sync/server storage/logs or SW caches. Never alter quoted words.
 - Anonymous first-party counts are opt-out, honor GPC/DNT, and contain categorical events only. Daily rotating tokens are deleted after rollup. Weekly totals sum daily counts and are not deduplicated people.
