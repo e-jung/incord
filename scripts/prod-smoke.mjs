@@ -2,9 +2,14 @@
 // Run manually: SMOKE_URL=http://localhost:8793 node scripts/prod-smoke.mjs
 // Uses real APIs and disposable browser profiles. Never mocks or seeds app state.
 import { chromium, devices, expect as baseExpect } from '@playwright/test';
+import { execFile } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
+import { parseEnv, promisify } from 'node:util';
+import { setTimeout as delay } from 'node:timers/promises';
+const run = promisify(execFile);
 
 if (process.argv.includes('--help')) {
-  console.log('Usage: SMOKE_URL=http://localhost:8793 node scripts/prod-smoke.mjs\nDefault: https://incord.jesklabs.com\nCreates a temporary account and deletes it in finally. Requires configured push keys. Legacy host checks run on production; override with SMOKE_LEGACY_URL.');
+  console.log('Usage: SMOKE_URL=http://localhost:8793 node scripts/prod-smoke.mjs\nDefault: https://incord.jesklabs.com\nSigns in with jung.ai.assistant@gmail.com and deletes the smoke account in finally. Requires configured email and push keys. SMOKE_CODE_CMD overrides the Gmail code reader (print a subject or six-digit code). Reader credentials come only from the selected GOG vars in /home/ubuntu/.openclaw/.env. Two codes/run; rate limits may require a 15-minute wait. Legacy host checks run on production; override with SMOKE_LEGACY_URL.');
   process.exit(0);
 }
 
@@ -20,7 +25,7 @@ const results = [];
 const contexts = [];
 const diagnostics = [];
 const secrets = new Set();
-let browser, cdp, creationAttempted = false, userId, learnedItem;
+let browser, creationAttempted = false, userId, learnedItem;
 const started = Date.now();
 
 function safe(error) {
@@ -48,7 +53,7 @@ async function api(context, path, method = 'GET') {
 }
 async function device(label) {
   const context = await browser.newContext({
-    ...devices['iPhone 13'], // iPhone 15 CSS viewport; Chromium enables CDP WebAuthn.
+    ...devices['iPhone 13'], // iPhone 15 CSS viewport.
     viewport: { width: 393, height: 852 },
     colorScheme: 'light', reducedMotion: 'reduce', serviceWorkers: 'allow',
     // Local Wrangler accepts this edge-owned header; isolate concurrent QA callers.
@@ -91,6 +96,67 @@ async function account(page) {
   await page.getByRole('button', { name: 'Account settings', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Account', exact: true })).toBeVisible();
 }
+const smokeEmail = 'jung.ai.assistant@gmail.com';
+const seenCodes = new Set();
+const defaultCodeCommand = "gog --account jung.ai.assistant@gmail.com --no-input gmail search 'from:signin@incord.jesklabs.com newer_than:10m' --max 1";
+async function readCodes() {
+  // Do not mutate the parent environment or expose command output/errors: they
+  // may contain mailbox content, codes, or credentials from a custom reader.
+  const env = { ...process.env };
+  const names = ['GOG_HOME', 'GOG_KEYRING_BACKEND', 'GOG_KEYRING_PASSWORD'];
+  for (const name of names) delete env[name];
+  try {
+    const configured = parseEnv(await readFile('/home/ubuntu/.openclaw/.env', 'utf8'));
+    for (const name of names) if (configured[name] !== undefined) env[name] = configured[name];
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw new Error('Unable to load smoke code-reader environment');
+  }
+  env.PATH = '/home/ubuntu/.local/bin:' + (env.PATH || '');
+  let stdout;
+  try {
+    ({ stdout } = await run('/bin/sh', ['-c', process.env.SMOKE_CODE_CMD || defaultCodeCommand], {
+      env, timeout: 15_000, maxBuffer: 128 * 1024,
+    }));
+  } catch { throw new Error('Smoke code reader failed (output withheld)'); }
+  const codes = [...stdout.matchAll(/Your Incord code:\s*(\d{6})\b/gi)].map(match => match[1]);
+  if (/^\d{6}$/.test(stdout.trim())) codes.push(stdout.trim());
+  for (const code of codes) secrets.add(code);
+  return codes;
+}
+async function emailSignin(page, beforeVerify = () => {}) {
+  // Snapshot the latest subject BEFORE requesting a code so an older delivery
+  // can never satisfy a new flow, including the second isolated browser.
+  for (const code of await readCodes()) seenCodes.add(code);
+  await page.getByLabel('Email address', { exact: true }).fill(smokeEmail);
+  for (let attempt = 0; ; attempt++) {
+    const [response] = await Promise.all([
+      page.waitForResponse(response => new URL(response.url()).pathname === '/api/auth/email/start' && response.request().method() === 'POST'),
+      page.getByRole('button', { name: 'Email me a code', exact: true }).click(),
+    ]);
+    if (response.status() !== 429) {
+      expect(response.ok(), 'Email code request succeeded').toBe(true);
+      break;
+    }
+    if (attempt >= 1) throw new Error('Email code send limit still active after waiting; no further sends attempted');
+    console.log('INFO Email send limit reached; waiting 15 minutes before one retry.');
+    await delay(15 * 60_000 + 1_000);
+    for (const code of await readCodes()) seenCodes.add(code);
+  }
+  await expect(page.getByLabel('Six-digit code')).toBeVisible();
+  const deadline = Date.now() + 120_000;
+  while (Date.now() < deadline) {
+    const code = (await readCodes()).find(code => !seenCodes.has(code));
+    if (code) {
+      seenCodes.add(code);
+      beforeVerify();
+      await page.getByLabel('Six-digit code').fill(code);
+      await expect(page.getByText('Signed in.', { exact: true })).toBeVisible();
+      return;
+    }
+    await delay(3_000);
+  }
+  throw new Error('No fresh sign-in code arrived within two minutes; no resend attempted');
+}
 // Read-only evidence that the actual UI persisted its attempts; never seed IDB.
 async function state(page) {
   return page.evaluate(async () => {
@@ -122,7 +188,7 @@ function syncResponse(page) {
 console.log(`Incord smoke: ${origin} (Chromium, iPhone 15 393×852)`);
 try {
   browser = await chromium.launch({ headless: true });
-  let first, second, recoveryCode;
+  let first, second;
   const localLegacy = ['localhost','127.0.0.1'].includes(target.hostname) && !process.env.SMOKE_LEGACY_URL;
   const canonicalOrigin = localLegacy ? 'https://incord.jesklabs.com' : origin;
   const legacyOrigin = process.env.SMOKE_LEGACY_URL || (localLegacy ? origin : origin === 'https://incord.jesklabs.com' ? 'https://byheart.jesklabs.com' : '');
@@ -197,29 +263,18 @@ try {
     expect(attempts.every(event => event.slips === 0)).toBe(true);
     await first.page.getByRole('button', { name: 'Back to Today', exact: true }).click();
   });
-  await check('Real virtual-passkey signup and /api/me identity', async () => {
+  await check('Email-code signup through UI and /api/me identity', async () => {
     const { page, context } = first;
     await account(page);
-    cdp = await context.newCDPSession(page);
-    await cdp.send('WebAuthn.enable');
-    await cdp.send('WebAuthn.addVirtualAuthenticator', { options: {
-      protocol: 'ctap2', transport: 'internal', hasResidentKey: true,
-      hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true,
-    } });
     creationAttempted = true;
-    await page.getByRole('button', { name: 'Create account with a passkey', exact: true }).click();
-    await expect(page.getByTestId('recovery-code')).toBeVisible();
-    recoveryCode = (await page.getByTestId('recovery-code').innerText()).trim();
-    secrets.add(recoveryCode);
-    expect(recoveryCode.length >= 24, 'Recovery code was issued').toBe(true);
+    await emailSignin(page);
     const me = await api(context, '/me');
     expect(typeof me.user?.id).toBe('string');
-    expect(me.user?.hasPasskey).toBe(true);
+    expect(me.user?.hasEmail).toBe(true);
     userId = me.user.id;
   });
   await check('Explicit Add ownership choice uploads learned item and history', async () => {
     const { page, context } = first;
-    await page.getByRole('button', { name: 'I saved my code', exact: true }).click();
     const merge = page.getByRole('dialog', { name: 'Add the 10 items on this device to your account?', exact: true });
     await expect(merge).toBeVisible();
     expect((await api(context, '/export')).items).toHaveLength(0);
@@ -236,24 +291,20 @@ try {
     expect(exported.events.filter(event => event.itemId === learnedItem.id)).toHaveLength(4);
     await expect.poll(async () => (await state(page)).queue.length).toBe(0);
   });
-  await check('Second isolated device recovers account and downloads learned item', async () => {
+  await check('Second isolated device signs in with a fresh email code and downloads learned item', async () => {
     second = await device('second device');
     const { page, context } = second;
     expect(await api(context, '/me')).toEqual({ user: null });
     expect(john(await state(page))).toBeUndefined();
     await account(page);
-    await page.getByLabel('One-time recovery code', { exact: true }).fill(recoveryCode);
-    const [response] = await Promise.all([
-      syncResponse(page),
-      page.getByRole('button', { name: 'Use recovery code', exact: true }).click(),
-    ]);
-    await expect(page.getByTestId('recovery-code')).toBeVisible();
-    const rotated = (await page.getByTestId('recovery-code').innerText()).trim();
-    secrets.add(rotated);
-    expect(rotated.length >= 24 && rotated !== recoveryCode, 'Recovery code rotates').toBe(true);
-    expect(response.ok(), 'Recovery triggers real sync').toBe(true);
-    await page.getByRole('button', { name: 'I saved my code', exact: true }).click();
-    await page.getByRole('button', {name:'Later',exact:true}).click();
+    let responsePromise;
+    await emailSignin(page, () => {
+      // Arm only when a code arrives: the send-limit cooldown can last 15 min.
+      responsePromise = syncResponse(page);
+      void responsePromise.catch(() => {}); // emailSignin can fail before sync.
+    });
+    const response = await responsePromise;
+    expect(response.ok(), 'Email sign-in triggers real sync').toBe(true);
     expect((await api(context, '/me')).user?.id).toBe(userId);
     await expect.poll(async () => learned(await state(page)), { timeout: 30_000 }).toBe(true);
     const recovered = await state(page);
@@ -282,7 +333,7 @@ try {
 } catch (error) {
   if (!results.some(result => !result.ok)) results.push({ name: 'Smoke setup', ok: false, error: safe(error) });
 } finally {
-  // Independent of UI state: a failure after registration must not leave an account.
+  // Independent of UI state: a failure after email sign-in must not leave an account.
   // APIRequestContext shares each isolated profile's cookies and sends the required Origin.
   await check('Cleanup: no smoke account remains', async () => {
     const failures = [];
@@ -304,7 +355,6 @@ try {
     }
     if (failures.length) throw new Error(failures.join('\n'));
   }).catch(() => {}); // Recorded by check; still close resources and print summary.
-  if (cdp) await cdp.detach().catch(() => {});
   // Closing profiles stops in-flight app requests and SWs; no storageState/trace persists secrets.
   for (const context of contexts) {
     await context.close().catch(error => results.push({ name: 'Close browser profile', ok: false, error: safe(error) }));

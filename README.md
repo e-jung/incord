@@ -42,7 +42,9 @@ With a local build and `npm run serve` running, use:
 SMOKE_URL=http://localhost:8793 node scripts/prod-smoke.mjs
 ```
 
-Without `SMOKE_URL`, the script targets https://incord.jesklabs.com. It uses Chromium at the iPhone 15 viewport, learns John 3:16 through all four steps, registers a virtual passkey, confirms explicit ownership/sync and recovery on a second device, checks CSP/console, push configuration and service workers, then deletes its temporary account even if a check fails. It never saves recovery codes or browser profiles. Push keys must be configured; provider delivery is not exercised.
+Without `SMOKE_URL`, the script targets https://incord.jesklabs.com. It uses Chromium at the iPhone 15 viewport, learns John 3:16 through all four steps, signs in as `jung.ai.assistant@gmail.com` with real emailed codes on two isolated devices, confirms explicit ownership/sync, checks CSP/console, push configuration and service workers, then deletes the smoke account even if a check fails. It never saves codes or browser profiles. Email delivery and push keys must be configured; push delivery itself is not exercised.
+
+The default code reader runs `gog --account jung.ai.assistant@gmail.com --no-input gmail search 'from:signin@incord.jesklabs.com newer_than:10m' --max 1`. Only `GOG_HOME`, `GOG_KEYRING_BACKEND`, and `GOG_KEYRING_PASSWORD` are loaded from `/home/ubuntu/.openclaw/.env` into that subprocess, never printed. Override with `SMOKE_CODE_CMD` (a trusted shell command printing the latest subject or bare six-digit code), including for a local test sink. Previously observed codes are ignored. Each successful run requests two codes; the per-email limit is three per 15 minutes. A 429 waits 15 minutes before one retry, and mailbox polling never resends a code.
 
 Local Wrangler commands disable route-based origin inference so WebAuthn sees `localhost`, not the production custom domain.
 
