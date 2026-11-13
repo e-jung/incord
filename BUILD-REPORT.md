@@ -69,3 +69,14 @@ node scripts/verify-content.mjs
 ```
 
 `AGENTS.md`, `README.md`, `cloudflare/BACKEND-API.md` and `content/SOURCES.md` document maintenance, runtime contracts and provenance.
+
+
+## Architect fix batch 1 — 2026-11-13
+
+Applied all eleven requests in FIX-1-architect.md: factual copy and result counts, shared count grammar, human-readable source/status labels, simplified welcome-back choices, bottom-flush dynamic-viewport keyboard with a scrolling passage, navigation clearance, initial/person avatar, collection-colored text keepsake with check-draw animation, nonwrapping Discover segments, single-line weekly label above the dots, and grouped Account cards.
+
+Verification: `npm run check` passes with zero errors/warnings; `npm test` passes all 124 tests (engine coverage remains 100%); `npm run e2e` passes all 34 journeys across light/dark mobile Chromium in 2.0 minutes, including the new 375px fit/navigation-clearance journey. The E2E server also rebuilt the production assets successfully. Assertions now cover singular/plural hero copy, source labels, absence of visible raw keys, hidden-word result counts, viewport keyboard bounds, and keepsake text/reference.
+
+Screenshots now default to viewport captures, with seven `-full.png` scrolling companions per theme. Refreshed review selections (Today, step 2, Learned, Discover and Account in both themes) are copied to `/home/ubuntu/.openclaw/workspace/reports/bible-memory-20261113/fix-1-screens/`; all captures remain in `test-results/screens/` and the browser report in `playwright-report/`.
+
+No push or deployment. The separate `/home/ubuntu/projects/byheart-qa` worktree was not touched.
