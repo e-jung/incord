@@ -338,6 +338,8 @@ test('passkey signup, sync, signout, signin, recovery rotation, export and accou
   await page.getByRole('button', { name: 'Delete account', exact: true }).click();
   await page.getByRole('button', { name: 'Yes, delete account', exact: true }).click();
   await expect(page.getByRole('status')).toHaveText('Account deleted. Local practice is still on this device.');
+  const cached=await page.evaluate(async()=>{const db=await new Promise<IDBDatabase>(resolve=>{const r=indexedDB.open('byheart',1);r.onsuccess=()=>resolve(r.result)});const value:any=await new Promise(resolve=>{const r=db.transaction('state').objectStore('state').get('current');r.onsuccess=()=>resolve(r.result)});db.close();return value.account});
+  expect(cached).toBeNull();
   expect(await (await page.request.get('/api/me')).json()).toMatchObject({ user: null });
   await screen(page, info, 'account-deleted');
   await tab(page, 'Today');

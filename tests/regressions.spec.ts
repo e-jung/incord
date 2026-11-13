@@ -174,6 +174,8 @@ for (const mode of ['passage', 'separate', 'chunks', 'large batch']) {
       await page.getByRole('dialog').getByRole('button', { name: 'Add items', exact: true }).click();
     }
     const count = { passage: 1, separate: 3, chunks: 6, 'large batch': 24 }[mode]!;
+    if(mode==='passage')expect((await state(page)).items[0].title).toBe('Romans 8:28–30');
+    if(mode==='chunks')expect((await state(page)).items[0].title).toBe('Psalm 119:1–4');
     await expect.poll(async () => (await state(page)).items.filter((i: any) => !i.deleted).length).toBe(count);
     await tab(page, 'Library');
     await expect(page.getByRole('button', { name: /^My verses/ })).toHaveCount(1);
@@ -334,6 +336,17 @@ test('P2-15 button-dismissed preview consumes its history entry',async({page})=>
  await expect(page.getByRole('dialog',{name:'Psalm 23',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'Close dialog',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>!!history.state?.sheet)).toBe(false);
+ await page.goBack();
+ await expect(page.getByRole('heading',{name:'Today',exact:true})).toBeVisible();
+});
+
+test('P2-15 preview add replaces the sheet entry with collection detail',async({page})=>{
+ await tab(page,'Library');
+ await page.locator('.covers button').filter({has:page.locator('b',{hasText:'Psalm 23'})}).click();
+ await page.getByRole('button',{name:'Add to my library',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Psalm 23',exact:true})).toBeVisible();
+ await page.goBack();
+ await expect(page.getByRole('heading',{name:'Library',exact:true})).toBeVisible();
  await page.goBack();
  await expect(page.getByRole('heading',{name:'Today',exact:true})).toBeVisible();
 });
