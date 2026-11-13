@@ -1,1 +1,3 @@
-<script lang="ts">import type {Snippet} from 'svelte';let {title,children,close}:{title:string,children:Snippet,close?:()=>void}=$props();</script><div class="scrim"><section class="sheet" role="dialog" aria-modal="true" aria-label={title}><header><h2>{title}</h2>{#if close}<button class="icon" onclick={close} aria-label="Close dialog">×</button>{/if}</header>{@render children()}</section></div>
+<script lang="ts">
+import {ui} from '../config/ui';
+import type {Snippet} from 'svelte';let {title,children,close}:{title:string,children:Snippet,close?:()=>void}=$props();</script><div class="scrim"><div class="sheet" role="dialog" tabindex="-1" aria-modal="true" aria-label={title}><header><h2>{title}</h2>{#if close}<button class="icon" onclick={close} aria-label={ui.c205}>×</button>{/if}</header>{@render children()}</div></div>

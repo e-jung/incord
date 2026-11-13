@@ -159,7 +159,7 @@ export class RegistryDO {
     if (path === '/google') { const old = this.rows('SELECT uid FROM mapping WHERE kind=? AND id=?', 'google', data.sub)[0]; if (old) return json(old); const uid = crypto.randomUUID(); this.sql.exec('INSERT INTO mapping VALUES(?,?,?)', 'google', data.sub, uid); return json({ uid, created: true }); }
     if (path === '/schedule/set') { this.sql.exec('INSERT OR IGNORE INTO schedule VALUES(?,0)', data.uid); return json({ ok: true }); }
     if (path === '/schedule/due') { const users = this.rows('SELECT uid FROM schedule WHERE next_at<=? ORDER BY next_at LIMIT 200', now).map(row => row.uid); for (const uid of users) this.sql.exec('UPDATE schedule SET next_at=? WHERE uid=?', now + 15 * 60_000, uid); return json({ users }); }
-    if (path === '/delete') { this.sql.exec('DELETE FROM mapping WHERE uid=?', data.uid); this.sql.exec('DELETE FROM schedule WHERE uid=?', data.uid); return json({ ok: true }); }
+    if (path === '/delete') { this.sql.exec('DELETE FROM mapping WHERE uid=?', data.uid); this.sql.exec("DELETE FROM challenges WHERE json_extract(value,'$.uid')=?", data.uid); this.sql.exec('DELETE FROM schedule WHERE uid=?', data.uid); return json({ ok: true }); }
     return json({ error: 'Not found' }, 404);
   } catch (e) { if (e instanceof ApiError) return json({ error: e.message }, e.status); throw e; } }); }
 }
@@ -170,6 +170,7 @@ function record(value: unknown): asserts value is SyncRecord { assert(value && t
 export function localDay(now: Date, timezone: string) { return new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now); }
 function settingsRecord(input: unknown): ObjectData { assert(input && typeof input === 'object' && !Array.isArray(input), 'Invalid settings'); const s = input as ObjectData; timestamp(s.updatedAt);
   if (s.name !== undefined) s.displayName = s.name; if (s.theme !== undefined) s.appearance = s.theme; if (s.goal !== undefined) s.weeklyGoal = s.goal; if (s.timeZone !== undefined) s.timezone = s.timeZone; if (s.pushEnabled !== undefined) s.remindersEnabled = s.pushEnabled;
+  if (s.remindersEnabled !== undefined) assert(typeof s.remindersEnabled === 'boolean', 'Invalid reminder setting');
   if (s.displayName !== undefined) assert(typeof s.displayName === 'string' && s.displayName.length <= 80, 'Invalid display name');
   if (s.weeklyGoal !== undefined) assert([3, 4, 5, 7].includes(Number(s.weeklyGoal)), 'Invalid weekly goal');
   if (s.appearance !== undefined) assert(['system', 'light', 'dark'].includes(String(s.appearance)), 'Invalid appearance');
@@ -194,7 +195,7 @@ export class UserDO {
   private settings() { return this.get('settings') || { appearance: 'system', weeklyGoal: 4, reminderTime: '09:00', timezone: 'UTC', remindersEnabled: false, updatedAt: 0 }; }
   async fetch(request: Request) { return this.ctx.blockConcurrencyWhile(async () => { try {
     const data = await request.json<any>(), path = new URL(request.url).pathname;
-    if (path === '/delete') { await this.ctx.storage.deleteAll(); this.set('deleted', true); return json({ ok: true }); }
+    if (path === '/delete') { await this.ctx.storage.deleteAll(); this.sql.exec('CREATE TABLE meta(key TEXT PRIMARY KEY,value TEXT NOT NULL)'); this.set('deleted', true); return json({ ok: true }); }
     assert(!this.get('deleted'), 'Account no longer exists', 401);
     if (path === '/init' || path === '/credential/add') {
       if (!this.get('profile')) { this.set('profile', { id: this.ctx.id.toString(), displayName: data.name || 'Friend', createdAt: Date.now() }); this.set('version', 1); }
@@ -244,7 +245,7 @@ export class UserDO {
       // Cron is quarter-hourly: permit the 15-minute window following the chosen time.
       const minutes = (s: string) => Number(s.slice(0, 2)) * 60 + Number(s.slice(3, 5)); const delta = (minutes(clock) - minutes(settings.reminderTime || '09:00') + 1440) % 1440; if (delta >= 15) return { sent: 0 };
       if (this.list('events').some(e => localDay(new Date(e.timestamp ?? e.createdAt ?? e.at), settings.timezone || 'UTC') === today)) return { sent: 0 };
-      const due = this.list('items').some(i => !i.deleted && (!i.due && !i.dueAt && !i.card?.due || new Date(i.dueAt ?? i.due ?? i.card?.due).getTime() <= now.getTime())); if (!due) return { sent: 0 };
+      const due = this.list('items').some(i => !i.deleted && (!i.learned || !i.due && !i.dueAt && !i.card?.due || new Date(i.dueAt ?? i.due ?? i.card?.due).getTime() <= now.getTime())); if (!due) return { sent: 0 };
       this.set('remindedDay', today); // Reserve before network I/O, so retries cannot duplicate a daily reminder.
     }
     let sent = 0, failed = 0;
@@ -256,7 +257,7 @@ export class UserDO {
 type PushSubscriptionData = { endpoint: string; keys: { p256dh: string; auth: string } };
 export function validateSubscription(sub: PushSubscriptionData) {
   assert(sub && typeof sub.endpoint === 'string' && sub.endpoint.length < 2048 && sub.keys, 'Invalid push subscription');
-  const endpoint = new URL(sub.endpoint); const host = endpoint.hostname;
+  let endpoint: URL; try { endpoint = new URL(sub.endpoint); } catch { throw new ApiError(400, 'Invalid push endpoint'); } const host = endpoint.hostname;
   assert(endpoint.protocol === 'https:' && !endpoint.username && !endpoint.password && (!endpoint.port || endpoint.port === '443') && (host === 'fcm.googleapis.com' || host === 'android.googleapis.com' || host === 'updates.push.services.mozilla.com' || host.endsWith('.push.services.mozilla.com') || host.endsWith('.push.apple.com') || host.endsWith('.notify.windows.com')), 'Unsupported push service');
   try { assert(unb64(sub.keys.p256dh).length === 65 && unb64(sub.keys.auth).length === 16, 'Invalid subscription keys'); } catch { throw new ApiError(400, 'Invalid subscription keys'); }
 }

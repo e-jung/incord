@@ -23,3 +23,11 @@ Set local `SESSION_SECRET` (32+ characters) using `.dev.vars`; never commit real
 Cron every 15 minutes checks due users (up to 200/batch). Reminders are reserved once per local calendar day in a 15-minute window after reminderTime, only with due/non-deleted items, no practice event that local day, and remindersEnabled. DST uses IANA timezone. Expired 404/410 subscriptions removed. Push encryption implements RFC8291 aes128gcm and VAPID ES256. Supported public push providers: Google/FCM, Mozilla, Apple, Windows; redirects refused. VAPID_PUBLIC_KEY is the uncompressed raw P-256 public key (65 bytes, base64url); VAPID_PRIVATE_KEY is the raw 32-byte private scalar (base64url); VAPID_SUBJECT is a contact mailto URL.
 
 Optional APP_ORIGIN pins host/origin. Auth rate limit 60 requests per IP per 15 min, IP stored only as secret-salted SHA256. API body capped at 2 MB including chunked data. Auth requires user verification; no attestation. No provider API for licensed ESV is included (not launch brief scope).
+
+## Verified checks
+
+- `npx tsc -p tsconfig.worker.json`
+- `npx vitest run --config cloudflare/vitest.config.ts` (6 security/crypto tests)
+- `API_BASE_URL=http://localhost:8793 npx playwright test --config cloudflare/api.playwright.config.ts` (3 real Worker/SQLite/WebAuthn journeys)
+
+Use **localhost**, not 127.0.0.1, for WebAuthn: browsers reject IP-address RP IDs. The API tests run a Chromium virtual resident-key authenticator via CDP. The isolated API test config expects an already-running local Worker. Main Playwright config may run this same spec alongside UI journeys. Backend crypto tests have a separate config because the main Vitest config only includes engine tests. Google live-provider callback and real push delivery are not verified without operator credentials/subscriptions.
