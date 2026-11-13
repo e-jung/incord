@@ -1,0 +1,25 @@
+{
+  "extends": "@tsconfig/svelte/tsconfig.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": false,
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "strict": true,
+    "types": [
+      "vite/client"
+    ],
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "target": "ES2022"
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.svelte",
+    "vite.config.ts"
+  ]
+}

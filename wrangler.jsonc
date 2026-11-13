@@ -1,0 +1,18 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "byheart",
+  "main": "cloudflare/worker.ts",
+  "compatibility_date": "2025-11-13",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "assets": { "directory": "./dist", "binding": "ASSETS", "not_found_handling": "single-page-application", "run_worker_first": ["/api/*"] },
+  "durable_objects": { "bindings": [ { "name": "USERS", "class_name": "UserDO" }, { "name": "REGISTRY", "class_name": "RegistryDO" } ] },
+  "migrations": [ { "tag": "v1", "new_sqlite_classes": ["UserDO", "RegistryDO"] } ],
+  "triggers": { "crons": ["*/15 * * * *"] },
+  "observability": { "enabled": true },
+  // Required secret: SESSION_SECRET (at least 32 random characters).
+  // Optional: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET; VAPID_PUBLIC_KEY,
+  // VAPID_PRIVATE_KEY (base64url raw P-256 scalar), VAPID_SUBJECT.
+  // Set APP_ORIGIN to the deployed https origin after review.
+  "vars": {}
+}

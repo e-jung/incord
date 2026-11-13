@@ -1,0 +1,1 @@
+<script lang="ts">let {active,onchange}:{active:string,onchange:(tab:string)=>void}=$props();</script><nav class="tabbar" aria-label="Main navigation">{#each [['Today','◉'],['Library','▥'],['Discover','✧']] as [tab,icon]}<button class:active={active===tab} onclick={()=>onchange(tab)}><span aria-hidden="true">{icon}</span>{tab}</button>{/each}</nav>
