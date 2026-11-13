@@ -30,6 +30,12 @@ async function passkey(page: Page, kind: 'register' | 'login') {
 }
 
 test.describe('Worker API (real local SQLite DOs and virtual WebAuthn)', () => {
+  test.beforeEach(async({context})=>{await context.setExtraHTTPHeaders({'CF-Connecting-IP':'api-'+crypto.randomUUID()})});
+  test('auth rate limits isolate and throttle a single caller',async({page})=>{
+    await page.goto(base);
+    for(let n=0;n<60;n++)expect((await api(page,'/auth/login/options',{})).status).toBe(200);
+    expect((await api(page,'/auth/login/options',{})).status).toBe(429);
+  });
   test('origin protection, anonymous access and config', async ({ page, request }) => {
     await page.goto(base);
     expect((await api(page, '/config')).data).toMatchObject({ passkeys: true });
