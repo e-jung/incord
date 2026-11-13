@@ -15,5 +15,6 @@
   // VAPID_PRIVATE_KEY (base64url raw P-256 scalar), VAPID_SUBJECT.
   // Set APP_ORIGIN to the deployed https origin after review.
   "routes": [ { "pattern": "byheart.jesklabs.com", "custom_domain": true } ],
-  "vars": { "APP_ORIGIN": "https://byheart.jesklabs.com" }
+  // APP_ORIGIN is passed at deploy time (scripts/deploy.sh) so local dev stays origin-agnostic.
+  "vars": {}
 }
