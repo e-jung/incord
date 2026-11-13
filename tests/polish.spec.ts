@@ -2,7 +2,7 @@ import {test,expect,type Page,type TestInfo} from '@playwright/test';
 import {mkdir} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 const sha=execFileSync('git',['rev-parse','--short','HEAD']).toString().trim();
-async function shot(page:Page,info:TestInfo,name:string){await page.evaluate(()=>document.fonts.ready);await mkdir('fix-8-screens',{recursive:true});await page.screenshot({path:`fix-8-screens/${info.project.name}-${name}.png`,animations:'disabled'});}
+async function shot(page:Page,info:TestInfo,name:string){await page.evaluate(()=>document.fonts.ready);await mkdir('test-results/screens/qa8',{recursive:true});await page.screenshot({path:`test-results/screens/qa8/${info.project.name}-${name}.png`,animations:'disabled'});}
 test.use({serviceWorkers:'block'});
 test('ESV source links stay with references in Discover, Library, Practice and Learned; About shows build HEAD',async({page},info)=>{
  await page.route('**/api/esv?*',route=>route.fulfill({contentType:'text/plain',body:'The LORD is my shepherd; I shall not want.'}));

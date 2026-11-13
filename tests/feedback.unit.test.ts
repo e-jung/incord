@@ -57,7 +57,7 @@ describe('Feedback boundary',()=>{
  it('sends safe subjects to support with explicit reply-to only, and a short keyed reference instead of UID',async()=>{
   const f=fixture();f.env.RESEND_API_KEY='unit-key';const fetch=vi.fn().mockResolvedValue(new Response('{}'));vi.stubGlobal('fetch',fetch);
   await f.send({...input,message:'A feature\nwith a newline\u0000 and more text',contact:' person@example.com '},undefined,{uid:'raw-private-id',clientName:'Desktop\nclient'});
-  const p=JSON.parse(fetch.mock.calls[0][1].body);expect(p).toMatchObject({to:'incord-support@googlegroups.com',from:'Incord <signin@incord.jesklabs.com>',reply_to:'person@example.com'});expect(p.subject).not.toMatch(/[\r\n\x00]/);expect(p.text).not.toContain('raw-private-id');
+  const p=JSON.parse(fetch.mock.calls[0][1].body);expect(p).toMatchObject({to:'incord@jesklabs.com',from:'Incord <signin@incord.jesklabs.com>',reply_to:'person@example.com'});expect(p.subject).not.toMatch(/[\r\n\x00]/);expect(p.text).not.toContain('raw-private-id');
   await f.send(input,'other');expect(JSON.parse(fetch.mock.calls[1][1].body)).not.toHaveProperty('reply_to');expect(fetch.mock.calls[0][1].redirect).toBe('manual');
  });
  it('reserves the hard 30/day budget before network, stores overcap feedback, and carries the summary across midnight',async()=>{

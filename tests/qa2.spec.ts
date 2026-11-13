@@ -12,7 +12,7 @@ async function emailSignin(page: Page, email: string) {
   await expect(page.getByText('Signed in.',{exact:true})).toBeVisible();
 }
 test.beforeEach(async({context})=>{await context.setExtraHTTPHeaders({'CF-Connecting-IP':'qa2-'+crypto.randomUUID()})});
-const shots='/home/ubuntu/.openclaw/workspace/reports/bible-memory-20261113/fix-5-screens';
+const shots='test-results/screens/qa5';
 async function shot(page:any,info:any,name:string){await mkdir(shots,{recursive:true});await page.screenshot({path:`${shots}/${info.project.name}-${name}.png`})}
 test('N2/N8 Psalm 119 defaults to exclusive chunks and confirms the count above results',async({page},info)=>{
  await page.goto('/');await page.getByRole('button',{name:'Discover',exact:true}).click();await page.getByLabel('Bible reference').fill('Psalm 119');await page.getByRole('button',{name:'Find verses',exact:true}).click();

@@ -12,7 +12,8 @@
     "serve": "WRANGLER_SEND_METRICS=false wrangler dev --local --infer-origin-from-routes=false --port 8793",
     "content:build": "python3 scripts/build-content.py",
     "content:verify": "node scripts/verify-content.mjs",
-    "smoke:esv": "node scripts/esv-live-smoke.mjs"
+    "smoke:esv": "node scripts/esv-live-smoke.mjs",
+    "docs:support": "node scripts/readme-support.mjs"
   },
   "dependencies": {
     "@cloudflare/workers-oauth-provider": "1.2.4",
@@ -37,5 +38,6 @@
     "vite": "7.3.8",
     "vitest": "5.1.0",
     "wrangler": "4.161.0"
-  }
+  },
+  "license": "AGPL-3.0-only"
 }

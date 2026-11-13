@@ -1,8 +1,8 @@
 # Incord
-A private, offline-first Scripture/catechism memory PWA. Svelte 5 + Vite + TypeScript; one Cloudflare Worker, SQLite-backed UserDO per account and RegistryDO. No D1. First-party anonymous daily usage counts only; no third-party trackers. ESV is fetched through a same-origin proxy.
+An offline-first, open-source Scripture/catechism memory PWA. Svelte 5 + Vite + TypeScript; one Cloudflare Worker, SQLite-backed UserDO per account and RegistryDO. No D1. First-party anonymous daily usage counts only; no third-party trackers. ESV is fetched through a same-origin proxy.
 
 ## Product decisions
-- Match design C in /home/ubuntu/.openclaw/workspace/reports/bible-memory-20261113/designs/c-soft-tactile.html. One light/dark token file; self-hosted OFL Figtree/Literata.
+- Preserve the soft, tactile visual design and reusable component system. One light/dark token file; self-hosted OFL Figtree/Literata.
 - Automatic four-step first-letter ladder. Score only hidden words; wrong letter or peek advances the word and records a slip.
 - Pure engine in src/engine, rules/copy in src/config. FSRS review. IndexedDB is authoritative while offline; sync uses LWW items, append-only idempotent review events.
 - Bundled BSB/KJV/WEB and historic public-domain catechisms/creeds. ESV is fetched through the Crossway API under its published conditions; never bundle it or persist its text server-side. Never introduce other copyrighted translations without publisher authorization. See content/SOURCES.md.
@@ -31,9 +31,8 @@ See README.md for local secrets. Never commit .dev.vars or production credential
 ## Security
 Parameterized SQL; never render user HTML. Same-origin checks on all writes, signed HttpOnly cookies, auth throttling, single-use keyed-hash email codes. Use Secure cookies on HTTPS; localhost HTTP omits Secure for development only. Push endpoints allowlisted and redirects refused with `redirect: 'manual'` (3xx is failure; Workers reject the `error` redirect mode).
 Preserve migration history; additive migrations only. Never log text, recovery codes or secrets.
-No deployment or GitHub push is authorized in the initial build. Architect reviews first. Do not add a remote or publish.
 
-## QA-fixed lifecycle contracts (2026-11-13)
+## Lifecycle contracts
 - Practice uses a detached attempt. Shortcut/rehearsal never mutate stored progress on opening. Save completed attempts before the result sheet; result buttons only navigate. Rehearsals are blank, no-stakes and append no review event.
 - `dailyPlan` reserves the new/learning allowance (default 3, options 1/2/3/5); completing today's new learning must not free another slot. Reviews do not consume new slots. Estimate from remaining ladder steps and token count.
 - Use `addItems`/`findLiveItem`; ids are unique even across tombstones. Re-add revives with strictly newer revision and reset progress. Sort collections canonically, not by sync arrival.
@@ -57,3 +56,9 @@ First-party operational logs only: Cloudflare dashboard → Workers → byheart 
 - Crossway attribution verified 2026-11-13: https://api.esv.org/#copyright and https://api.esv.org/docs/passage-text/. Use exact full notice plus download limit from `copy.esvCopyright` / `copy.esvDownloadNotice` in About and a visible linked ESV label with each quotation. Device-only cache, 500-verse and half-book limits, no ESV text in sync/server storage/logs or SW caches. Never alter quoted words.
 - Anonymous first-party counts are opt-out, honor GPC/DNT, and contain categorical events only. Daily rotating tokens are deleted after rollup. Weekly totals sum daily counts and are not deduplicated people.
 - Live ESV smoke is opt-in (`ESV_LIVE_SMOKE=1 npm run smoke:esv`), one request with no retries. Normal tests mock ESV; do not spend real API requests in CI.
+
+
+## Licensing and contributions
+- Original project code is AGPL-3.0-only; preserve LICENSE and NOTICE. Third-party Scripture/content/fonts retain their separate terms. See content/SOURCES.md and licenses/fonts/.
+- Do not commit credentials, private account data or operator-specific machine paths. Use .dev.vars.example for local configuration and README.md for self-hosting.
+- Report vulnerabilities through SECURITY.md. Keep ordinary bug reports free of private text and credentials.

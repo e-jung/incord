@@ -1,7 +1,7 @@
 import {test,expect,type Page,type TestInfo} from '@playwright/test';
 import {mkdir} from 'node:fs/promises';
 
-const shots='/home/ubuntu/.openclaw/workspace/reports/bible-memory-20261113/fix-5-screens';
+const shots='test-results/screens/qa5';
 async function shot(page:Page,info:TestInfo,name:string){
   await mkdir(shots,{recursive:true});
   await page.evaluate(()=>document.fonts.ready);

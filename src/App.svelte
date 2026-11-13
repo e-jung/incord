@@ -1,4 +1,5 @@
 <script lang="ts">
+import {supportUrl} from '../shared/support';
 import {incordCopy as incord} from './config/incord';
 import EsvAttribution from './components/EsvAttribution.svelte';
 import * as stats from './stats';
@@ -263,7 +264,7 @@ const hapticsSupported=supportsHaptics();
  <label class="toggle"><input type="checkbox" bind:checked={feedbackIncludeMeta} disabled={feedbackBusy} aria-describedby="feedback-meta-help"/>{ui.feedbackIncludeMeta}</label><small id="feedback-meta-help">{ui.feedbackMetaHelp}</small>
  <button type="submit" disabled={feedbackBusy} aria-busy={feedbackBusy} class:feedback-sending={feedbackBusy}>{feedbackBusy?ui.feedbackSending:ui.feedbackSend}</button>
  {#if feedbackError||feedbackStatus}<p class="feedback-result" class:feedback-failed={!!feedbackError} bind:this={feedbackResult} role={feedbackError?'alert':'status'} tabindex="-1">{feedbackError||feedbackStatus}</p>{/if}
- </form></section><section class="settings-group" aria-label={ui.aboutLabel}><h3>{ui.aboutVersion(appVersion)}</h3><small>{ui.aboutApp}</small><EsvAttribution translation={incord.esv} full/><p>{incord.privacyAbout}</p><a href="/privacy">{incord.privacyPolicy}</a></section></div>
+ </form></section><section class="settings-group" aria-label={ui.aboutLabel}><h3>{ui.aboutVersion(appVersion)}</h3><small>{ui.aboutApp}</small><EsvAttribution translation={incord.esv} full/><p>{incord.privacyAbout}</p><a href="/privacy">{incord.privacyPolicy}</a>{#if supportUrl(config.donateUrl)}<a href={supportUrl(config.donateUrl)!} rel="noopener noreferrer">{ui.supportIncord}</a>{/if}</section></div>
  {:else if tab===ui.gallery}<div class="gallery"><Button>{ui.primaryButton}</Button><Button secondary>{ui.secondaryButton}</Button><StepDots step={3}/><WeekDots days={data.settings.days}/><Cover title={ui.gospelTitle} subtitle={ui.galleryVerseCount} color={0} large/><Row title={ui.johnReference} subtitle={ui.galleryStep} translation={ui.bsb}><StepDots step={2}/></Row><VerseText words={[ui.sampleFor,ui.sampleGod,ui.sampleSo,ui.sampleLoved,ui.sampleThe,ui.sampleWorld]} mask={[false,true,false,true,true,false]} index={2}/><Keyboard onkey={()=>{}} onpeek={()=>{}}/></div>{/if}
  </section><TabBar active={tab} onchange={navigate}/>
 {/if}

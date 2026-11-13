@@ -1,7 +1,7 @@
 import {test,expect,type Page} from '@playwright/test';
 import {mkdir} from 'node:fs/promises';
 async function tab(page:Page,name:string){await page.getByRole('navigation').getByRole('button',{name,exact:true}).click()}
-async function shot(page:Page,project:string,name:string){await mkdir('fix-6-screens',{recursive:true});await page.screenshot({path:`fix-6-screens/${project}-${name}.png`})}
+async function shot(page:Page,project:string,name:string){await mkdir('test-results/screens/qa6',{recursive:true});await page.screenshot({path:`test-results/screens/qa6/${project}-${name}.png`})}
 test('WSC Q1 entry after library scroll and both steps stay inside standalone viewport',async({page},info)=>{
  await page.addInitScript(()=>Object.defineProperty(navigator,'standalone',{value:true}));
  await page.goto('/');await tab(page,'Discover');await page.getByRole('button',{name:'Catechisms',exact:true}).click();

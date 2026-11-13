@@ -42,7 +42,7 @@ test.describe('Secure-origin worker integration',()=>{
   await shot(page,info.project.name,'stats');const logout=await worker.fetch(new Request(origin+'/stats/logout',{method:'POST',headers:{Origin:origin}}),env);expect(logout.status).toBe(303);expect(logout.headers.get('set-cookie')).toContain('Max-Age=0');await page.context().clearCookies();await page.goto(origin+'/stats');await expect(page.getByLabel('Stats token')).toBeVisible();
  });
 });
-async function shot(page:Page,project:string,name:string){await page.evaluate(()=>document.fonts.ready);await mkdir('fix-7-screens',{recursive:true});await page.screenshot({path:`fix-7-screens/${project}-${name}.png`})}
+async function shot(page:Page,project:string,name:string){await page.evaluate(()=>document.fonts.ready);await mkdir('test-results/screens/qa7',{recursive:true});await page.screenshot({path:`test-results/screens/qa7/${project}-${name}.png`})}
 const tab=async(page:Page,name:string)=>page.getByRole('navigation').getByRole('button',{name,exact:true}).click();
 test.describe('FIX-7 UI migration evidence',()=>{
  test.use({serviceWorkers:'block'});

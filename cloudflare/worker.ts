@@ -1,3 +1,4 @@
+import { supportUrl } from '../shared/support';
 import { handleEsv, assertEsvLimit, stripEsvText } from './esv';
 import { handleStatsRequest } from './stats';
 import { submitFeedback, FeedbackError, initializeFeedbackStorage, handleFeedbackRegistry } from './feedback';
@@ -15,6 +16,7 @@ export interface Env {
   REGISTRY: DurableObjectNamespace;
   SESSION_SECRET: string;
   APP_ORIGIN?: string;
+  DONATE_URL?: string;
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;
   EMAIL_TEST_SINK?: string;
@@ -48,7 +50,7 @@ export function constantTimeEqual(a: string, b: string) { let diff = a.length ^ 
 export function emailTestMode(env: Env, request: Request) { return env.EMAIL_TEST_SINK === '1' && ['localhost', '127.0.0.1'].includes(new URL(request.url).hostname); }
 function emailEnabled(env: Env, request: Request) { return !!(env.RESEND_API_KEY || emailTestMode(env, request)); }
 export async function sendLoginCode(env: Env, to: string, code: string) {
-  const message = { from: env.EMAIL_FROM || 'Incord <signin@incord.jesklabs.com>', reply_to: 'incord-support@googlegroups.com', to, subject: `Your Incord code: ${code}`, text: `Your Incord sign-in code is ${code}. It expires in 10 minutes. If you didn't ask for this code, ignore this email.`, html: `<p>Your Incord sign-in code is <strong>${code}</strong>.</p><p>It expires in 10 minutes. If you didn't ask for this code, ignore this email.</p>` };
+  const message = { from: env.EMAIL_FROM || 'Incord <signin@incord.jesklabs.com>', reply_to: 'incord@jesklabs.com', to, subject: `Your Incord code: ${code}`, text: `Your Incord sign-in code is ${code}. It expires in 10 minutes. If you didn't ask for this code, ignore this email.`, html: `<p>Your Incord sign-in code is <strong>${code}</strong>.</p><p>It expires in 10 minutes. If you didn't ask for this code, ignore this email.</p>` };
   if (env.RESEND_API_KEY) { try { const response = await fetch('https://api.resend.com/emails', { method: 'POST', redirect: 'manual', headers: { Authorization: 'Bearer ' + env.RESEND_API_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify(message) }); assert(response.ok, 'We couldn’t send your code. Please try again shortly.', 503); } catch { throw new ApiError(503, 'We couldn’t send your code. Please try again shortly.'); } }
   else throw new ApiError(404, 'Email sign-in is not enabled.');
 }
@@ -121,7 +123,7 @@ export function clientErrorRecord(input: ObjectData, origin: string) {
 async function api(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url), path = url.pathname, origin = originFor(request, env);
   if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method)) assert(request.headers.get('Origin') === origin, 'Cross-origin write denied', 403);
-  if (path === '/api/config' && request.method === 'GET') return json({ email: emailEnabled(env, request), google: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET), googleEnabled: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET), push: !!(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY), vapidPublicKey: env.VAPID_PUBLIC_KEY || null });
+  if (path === '/api/config' && request.method === 'GET') return json({ donateUrl: supportUrl(env.DONATE_URL), email: emailEnabled(env, request), google: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET), googleEnabled: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET), push: !!(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY), vapidPublicKey: env.VAPID_PUBLIC_KEY || null });
   if (path === '/api/test/last-code') assert(emailTestMode(env, request) && request.method === 'GET', 'Not found', 404);
   assert(env.SESSION_SECRET?.length >= 32, 'Service secrets are not configured', 503);
   if (path === '/api/test/last-code') { assert(emailTestMode(env, request) && request.method === 'GET', 'Not found', 404); return json(await registry(env, '/email/test-get', { key: await emailKey(env, normalizeEmail(url.searchParams.get('email'))) })); }

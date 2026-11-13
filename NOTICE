@@ -1,0 +1,57 @@
+Incord
+
+Original project code is licensed under the GNU Affero General Public License,
+version 3 only (SPDX: AGPL-3.0-only). See LICENSE for the full, unmodified license.
+Third-party content and dependencies retain their own licenses and notices;
+this designation does not relicense any Scripture text or font.
+
+BUNDLED SCRIPTURE AND HISTORIC DOCUMENTS
+
+Berean Standard Bible (BSB): dedicated to the public domain / CC0 by its
+publisher. https://berean.bible/licensing.htm
+
+King James Version (KJV): public domain in the United States. Rights in the
+Authorized Version in the United Kingdom are vested in the Crown. Inclusion
+here does not assert a grant of United Kingdom permission.
+https://ebible.org/eng-kjv/copyright.htm
+
+World English Bible (WEB): public domain. World English Bible is a trademark
+identifying the unaltered translation.
+https://worldenglish.bible/ and https://ebible.org/eng-web/copyright.htm
+
+The bundled Westminster Shorter and Larger, Heidelberg, Baptist/Keach,
+Spurgeon and Engles Young Children catechisms and Apostles' and Nicene creeds
+use the identified public-domain historical English editions, not copyrighted
+modernizations. Public-domain status refers to those historical works, not
+to source-site software, metadata, navigation or editorial compilations.
+Exact editions, source URLs, reproducible source hashes, transcription changes
+and jurisdictional caveats are recorded in content/SOURCES.md and
+content/source-lock.json. No blanket license over upstream repositories is
+claimed.
+
+OPTIONAL ESV QUOTATIONS — NOT BUNDLED
+
+The English Standard Version is not part of the bundled content and is not
+licensed under the AGPL. Optional quotations are obtained through Crossway's
+API under its conditions. Do not bundle ESV text, cache it server-side, put it
+in logs or expose it through sync or MCP. Retain visible linked ESV attribution
+with quotations: https://www.esv.org
+
+Scripture quotations marked “ESV” are from the ESV® Bible (The Holy Bible, English Standard Version®), © 2001 by Crossway, a publishing ministry of Good News Publishers. Used by permission. All rights reserved. The ESV text may not be quoted in any publication made available to the public by a Creative Commons license. The ESV may not be translated into any other language.
+
+Users may not copy or download more than 500 verses of the ESV Bible or more than one half of any book of the ESV Bible.
+
+Both limits apply: no more than 500 verses and no more than one half of any
+book, whichever is less. Practice masking changes display, not quoted words.
+Crossway conditions: https://api.esv.org/#copyright
+API documentation: https://api.esv.org/docs/
+
+FONTS
+
+Figtree and Literata are self-hosted through @fontsource packages, version
+5.2.8. Both font families are licensed under the SIL Open Font License 1.1,
+not the AGPL. Exact package-supplied copyright notices and full license text
+are preserved without modification in public/licenses/figtree-OFL.txt and
+public/licenses/literata-OFL.txt. Keep these notices with redistributed fonts.
+
+Other dependencies retain their respective package licenses.

@@ -7,10 +7,10 @@ STATS_TOKEN="replace-with-a-separate-random-stats-access-token"
 # GOOGLE_CLIENT_SECRET=""
 # VAPID_PUBLIC_KEY="base64url-uncompressed-public-P256-key"
 # VAPID_PRIVATE_KEY="base64url-private-P256-scalar"
-# VAPID_SUBJECT="mailto:hello@jesklabs.com"
+# VAPID_SUBJECT="mailto:operator@example.com"
 
 # Email: configure Resend; EMAIL_FROM optionally overrides the default below.
-# Replies go to incord-support@googlegroups.com.
+# Replies go to incord@jesklabs.com.
 # RESEND_API_KEY=""
 # EMAIL_FROM="Incord <signin@incord.jesklabs.com>"
 # EMAIL_TEST_SINK="1" # LOCAL ONLY: localhost/127.0.0.1 are also required.
