@@ -226,8 +226,8 @@ try {
   });
   await check('Gospel starter added through the UI', async () => {
     const { page } = first;
-    await tab(page, 'Library');
-    await page.locator('.covers').getByRole('button').filter({ has: page.locator('b', { hasText: 'The Gospel in 10 verses' }) }).click();
+    await tab(page, 'Discover');
+    await page.locator('.featured-cards').getByRole('button').filter({ has: page.locator('b', { hasText: 'The Gospel in 10 verses' }) }).click();
     const preview = page.getByRole('dialog', { name: 'The Gospel in 10 verses', exact: true });
     await expect(preview).toBeVisible();
     await preview.getByRole('button', { name: 'Add to my library', exact: true }).click();
