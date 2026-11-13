@@ -77,8 +77,8 @@ test('keyboard feedback edited AFTER signing in syncs field clocks and survives 
  }finally{await context.close()}
 });
 test('passage added from a collection stays in that collection',async({page})=>{
- await page.goto('/');await page.getByRole('navigation').getByRole('button',{name:'Library',exact:true}).click();
- await page.locator('.covers').getByRole('button').filter({has:page.locator('b',{hasText:'The Gospel in 10 verses'})}).click();
+ await page.goto('/');await page.getByRole('navigation').getByRole('button',{name:'Discover',exact:true}).click();
+ await page.locator('.featured-cards').getByRole('button').filter({has:page.locator('b',{hasText:'The Gospel in 10 verses'})}).click();
  await page.getByRole('dialog').getByRole('button',{name:'Add to my library',exact:true}).click();
  await page.getByRole('button',{name:'Add items',exact:true}).click();
  await page.locator('.passage-cards').getByRole('button',{name:/Psalm 23/}).click();await page.getByRole('dialog').getByRole('button',{name:'Add to my library',exact:true}).click();

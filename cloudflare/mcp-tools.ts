@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import {topics} from '../shared/topics';
 import books from '../public/content/books.json';
 import {assertEsvLimit, esvReferenceKeys, isEsv} from '../shared/esv';
 import {gentleCap} from '../src/engine/today';
@@ -18,7 +19,7 @@ export const MCP_TOOL_SCHEMAS = {
  list_library:{description:'List live library items, optionally filtered by collection. Never returns ESV quotations.',inputSchema:z.object({collection:z.string().min(1).max(100).optional(),limit:z.number().int().min(1).max(1000).default(100)}).strict()},
  get_due_today:{description:'Get the daily learning/review plan in the account timezone, respecting new-item allowance and gentle return.',inputSchema:z.object({}).strict()},
  get_progress:{description:'Get library totals, practiced-day streak, and Monday-based weekly rhythm in the account timezone.',inputSchema:z.object({}).strict()},
- list_collections:{description:'List bundled starters, the 17 curated Passages, catechisms and creeds, including item IDs and available metadata.',inputSchema:z.object({}).strict()},
+ list_collections:{description:'List bundled starters, ten Topics, the 17 curated Passages, catechisms and creeds, including item IDs and available metadata.',inputSchema:z.object({}).strict()},
 } as const;
 const normalize = (s: string) => s.toLowerCase().replace(/\./g, '').replace(/\s/g, '');
 const aliases = new Map<string, string>();
@@ -124,7 +125,7 @@ function publicItem(item:any):any {
 }
 async function collections(deps:McpToolDeps) {
  const [starters,documents]=await Promise.all([asset<any[]>(deps,'starters.json'),asset<any[]>(deps,'documents.json')]);
- return {starters:starters.map(({items,...meta})=>({...meta,itemCount:items.length,items:items.map(publicItem)})),passages:{id:'passages',title:'Passages',itemCount:passages.length,translations:['BSB','KJV','WEB','ESV'],items:passages},documents:documents.map(({items,...meta})=>({...meta,itemCount:items.length,items:items.map(publicItem)})),translations:['BSB','KJV','WEB','ESV'],esvNote:DEVICE_NOTE};
+ return {topics:topics.map(topic=>({...topic,id:`topic-${topic.id}`,itemCount:topic.verseCount,translations:['BSB','KJV','WEB','ESV']})),starters:starters.map(({items,...meta})=>({...meta,itemCount:items.length,items:items.map(publicItem)})),passages:{id:'passages',title:'Passages',itemCount:passages.length,translations:['BSB','KJV','WEB','ESV'],items:passages},documents:documents.map(({items,...meta})=>({...meta,itemCount:items.length,items:items.map(publicItem)})),translations:['BSB','KJV','WEB','ESV'],esvNote:DEVICE_NOTE};
 }
 async function normalized(source:unknown,deps:McpToolDeps):Promise<Item[]> {
  const input=passageInput.parse(source);
@@ -135,8 +136,9 @@ async function normalized(source:unknown,deps:McpToolDeps):Promise<Item[]> {
   items=await lookup(input.reference,input.translation,deps);
   if(input.as_one_passage&&input.translation!=='ESV')items=[joinVerses(items)];
  }else if(input.id) {
-  const passage=passages.find(p=>p.id===input.id);
-  if(passage){items=[joinVerses(await lookup(passage.reference,input.translation,deps))]}
+  const passage=passages.find(p=>p.id===input.id),topic=topics.find(t=>`topic-${t.id}`===input.id);
+  if(topic){items=[];for(const reference of topic.references){const verses=await lookup(reference,input.translation==='ESV'?'BSB':input.translation,deps);for(const verse of verses)items.push(...(input.translation==='ESV'?await lookup(verse.title,'ESV',deps):[verse]));}items=items.map(item=>({...item,collection:`topic-${topic.id}`}));}
+  else if(passage){items=[joinVerses(await lookup(passage.reference,input.translation,deps))]}
   else {
    const catalog=await collections(deps);
    const found=[...catalog.starters,...catalog.documents].flatMap(c=>c.items).find(i=>i.id===input.id);

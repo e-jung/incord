@@ -103,3 +103,8 @@ main.practicing{position:fixed;inset:0;width:100%;height:100dvh;min-height:0;ove
 .feedback-form .feedback-result{margin:0;overflow-wrap:anywhere;scroll-margin-block:24px}
 .feedback-form .feedback-failed{color:var(--slip)}
 .feedback-result:focus-visible{outline:2px solid var(--acc);outline-offset:4px;border-radius:4px}
+
+/* Discover keeps its small catalog filters on one horizontal, scrollable row. */
+.featured-cards{margin-top:16px}.featured-cards .cover{padding-top:42px}.discover-filters{display:flex;gap:8px;overflow-x:auto;max-width:100%;padding:4px 1px}.discover-filters .text-button{flex:none;white-space:nowrap;padding:8px 12px;border-radius:22px;border:1px solid var(--line);font-size:13px}.discover-filters .active{background:var(--fill);color:var(--ink)}.library-empty{display:flex;flex-direction:column;gap:18px;padding:28px 0}.document-cards{margin-bottom:24px}.document-cards .cover{min-height:200px}#document-browser{scroll-margin-top:20px}
+
+.topic-cards .cover{padding-top:42px}

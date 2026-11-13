@@ -3,6 +3,7 @@ import {readFile} from 'node:fs/promises';
 import {MCP_TOOL_SCHEMAS,runMcpTool,type McpToolDeps} from '../cloudflare/mcp-tools';
 import {lookupReference} from '../src/content';
 import {loadPassages} from '../src/passages';
+import {topics,loadTopic} from '../src/topics';
 
 function fixture(items:any[]=[],events:any[]=[],settings:any={}) {
  const paths:string[]=[];
@@ -43,6 +44,12 @@ describe('MCP public-domain reference lookup',()=>{
 });
 
 describe('MCP additions',()=>{
+ it.each(['BSB','KJV','WEB','ESV'] as const)('adds topic collections as canonical individual %s verses matching Discover',async translation=>{
+  const f=fixture();vi.stubGlobal('fetch',f.fetch);
+  const catalog=await run('list_collections',{},f);expect(catalog.topics).toHaveLength(10);
+  for(const topic of topics){const frontend=await loadTopic(topic.id,translation);await run('add_passages',{items:[{id:`topic-${topic.id}`,translation}]},f);const added=f.add.mock.calls.at(-1)![0];expect(added.map(i=>i.id)).toEqual(frontend.map(i=>i.id));expect(added.every(i=>i.collection===`topic-${topic.id}`)).toBe(true);if(translation==='ESV')expect(added.every(i=>i.text==='')).toBe(true);}
+ });
+
  it('validates each input independently, normalizes ranges and assigns MCP origin',async()=>{
   const f=fixture();const out=await run('add_passages',{items:[{reference:'Jn 3:16-17'},{reference:'John 3:18-19',as_one_passage:true},{reference:'Nope 9:9'},{title:'My words',text:'Practice this.'},null]},f);
   expect(out.results.map((r:any)=>r.status)).toEqual(['added','added','invalid reference','added','invalid reference']);

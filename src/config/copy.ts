@@ -20,6 +20,11 @@ export function collectionColor(item: SourceItem): string {
 }
 
 export const copy = {
+ findSomething:'Find something to memorize',discoverCategories:'Discover categories',
+ discoverFilters:['All','Topics','Passages','Catechisms & creeds'],topics:'Topics',catechismsAndCreeds:'Catechisms & creeds',
+ gospelFeaturedDetail:'10 verses · Grace, received by faith',psalmFeaturedDetail:'6 verses · One passage',wscFeaturedDetail:'Questions 1–12',
+ documentDescriptions:{wsc:'Reformed · 1647',heidelberg:'Reformed · historic English',apostles:'The faith we confess',nicene:'Historic Christian creed',wlc:'Reformed · American edition',baptist:'Particular Baptist',spurgeon:'Baptist · 1855', 'young-children':'For children · 1840'},
+
  feedbackTitle:'Send feedback',feedbackDetail:'An idea, a problem, or something else — Eric would love to hear it.',
  feedbackKind:'Kind',feedbackKinds:['Idea','Problem','Other'] as const,feedbackMessage:'Message',
  feedbackMessageHelp:'10–4000 characters.',

@@ -309,8 +309,8 @@ test('P2-14/15 tab and detail history restores screens, closes sheets and protec
  expect(await page.evaluate(()=>scrollY)).toBe(0);
  await page.goBack();
  await expect(page.getByRole('heading',{name:'Discover',exact:true})).toBeVisible();
- await tab(page,'Library');
- await page.locator('.covers button').filter({has:page.locator('b',{hasText:'Psalm 23'})}).click();
+ await tab(page,'Discover');
+ await page.locator('.featured-cards button').filter({has:page.locator('b',{hasText:'Psalm 23'})}).click();
  await expect(page.getByRole('dialog',{name:'Psalm 23',exact:true})).toBeVisible();
  await page.goBack();
  await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -335,8 +335,8 @@ for(const removed of [false,true])test(`P1-19 startup identity acquisition requi
 });
 
 test('P2-15 button-dismissed preview consumes its history entry',async({page})=>{
- await tab(page,'Library');
- await page.locator('.covers button').filter({has:page.locator('b',{hasText:'Psalm 23'})}).click();
+ await tab(page,'Discover');
+ await page.locator('.featured-cards button').filter({has:page.locator('b',{hasText:'Psalm 23'})}).click();
  await expect(page.getByRole('dialog',{name:'Psalm 23',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'Close dialog',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>!!history.state?.sheet)).toBe(false);
@@ -345,12 +345,12 @@ test('P2-15 button-dismissed preview consumes its history entry',async({page})=>
 });
 
 test('P2-15 preview add replaces the sheet entry with collection detail',async({page})=>{
- await tab(page,'Library');
- await page.locator('.covers button').filter({has:page.locator('b',{hasText:'Psalm 23'})}).click();
+ await tab(page,'Discover');
+ await page.locator('.featured-cards button').filter({has:page.locator('b',{hasText:'Psalm 23'})}).click();
  await page.getByRole('button',{name:'Add to my library',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Psalm 23',exact:true})).toBeVisible();
  await page.goBack();
- await expect(page.getByRole('heading',{name:'Library',exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'Discover',exact:true})).toBeVisible();
  await page.goBack();
  await expect(page.getByRole('heading',{name:'Today',exact:true})).toBeVisible();
 });

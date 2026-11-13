@@ -416,18 +416,20 @@ for (const choice of ['Start', 'Check what I remember']) test(`gentle return wel
 });
 
 
-test('all starter covers and document choices, collection sessions and Next item', async ({ page }, info) => {
+test('all featured covers and document choices, collection sessions and Next item', async ({ page }, info) => {
   await tab(page, 'Library');
-  const covers = [
-    'The Gospel in 10 verses', 'Westminster Shorter Catechism',
-    'Heidelberg · Lord’s Day 1', 'The Apostles’ Creed', 'Psalm 23',
-  ];
+  await expect(page.locator('.covers')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Find something to memorize', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Discover', exact: true })).toBeVisible();
+  const covers = ['The Gospel in 10 verses', 'Psalm 23', 'Westminster Shorter Catechism'];
+  await expect(page.locator('.featured-cards .cover')).toHaveCount(3);
   for (let index = 0; index < covers.length; index++) {
-    await page.locator('.covers').getByRole('button').filter({ has: page.locator('b', { hasText: covers[index] }) }).click();
+    await tab(page, 'Discover');
+    await page.locator('.featured-cards').getByRole('button').filter({ has: page.locator('b', { hasText: covers[index] }) }).click();
     await expect(page.getByRole('dialog', { name: covers[index], exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Add to my library', exact: true }).click();
     await expect(page.getByRole('heading', { level: 1, name: covers[index], exact: true })).toBeVisible();
-    await screen(page, info, `starter-${index + 1}`);
+    await screen(page, info, `featured-${index + 1}`);
     await page.getByRole('button', { name: 'Start practice', exact: true }).click();
     await step(page, 1);
     if (index === 0) {
