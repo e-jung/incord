@@ -54,6 +54,12 @@ export class StatsDO {
       });
       return reply({ok},ok?200:429);
     }
+    if(path==='/aggregate'&&request.method==='POST') {
+      const input=await request.json<{event?:string}>();
+      if(!['lookup_passage','add_passages','list_library','get_due_today','get_progress','list_collections'].some(name=>input.event==='mcp_tool:'+name))return reply({error:'Invalid event'},400);
+      await this.state.storage.transaction(async tx=>{await this.rollup(tx,now);const row=await tx.get<StatsDay>('day:'+day)||{day,activeDevices:0,counters:{}};row.counters[input.event!]=(row.counters[input.event!]||0)+1;await tx.put('day:'+day,row)});
+      await this.state.storage.setAlarm((Math.floor(now/DAY)+1)*DAY);return reply({ok:true});
+    }
     if(path==='/record' && request.method==='POST') {
       let input:unknown;try{input=await request.json()}catch{return reply({error:'Invalid batch'},400)}
       const batch=validateStatsBatch(input);if(!batch)return reply({error:'Invalid batch'},400);

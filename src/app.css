@@ -85,3 +85,6 @@ main.practicing{position:fixed;inset:0;width:100%;height:100dvh;min-height:0;ove
 .passage-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:16px}
 .passage-cards .cover{min-width:0;width:100%;flex:auto}
 @media(max-width:350px){.passage-cards{grid-template-columns:minmax(0,1fr)}}
+
+/* Account connections use the same quiet, tactile settings surfaces. */
+.mcp-consent{padding-top:calc(36px + env(safe-area-inset-top));padding-bottom:calc(36px + env(safe-area-inset-bottom))}.mcp-consent h1{font-size:30px}.mcp-client-name{font-size:22px}.mcp-client-name,.mcp-app h3,.mcp-consent small,.mcp-consent p{overflow-wrap:anywhere}.mcp-scopes{margin:0;padding-left:22px;color:var(--ink2);line-height:1.6;overflow-wrap:anywhere}.mcp-app{border-top:1px solid var(--line);padding-top:16px}.mcp-consent form button{width:100%}.mcp-consent .notice{margin:0}

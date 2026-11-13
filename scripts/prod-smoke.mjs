@@ -211,6 +211,15 @@ try {
     await context.close();
     contexts.splice(contexts.indexOf(context), 1);
   });
+  await check('MCP challenges with discoverable OAuth metadata', async () => {
+    const response=await fetch(origin+'/mcp');expect(response.status).toBe(401);
+    const challenge=response.headers.get('WWW-Authenticate')||'';
+    const metadataUrl=/resource_metadata="([^"]+)"/.exec(challenge)?.[1];
+    expect(metadataUrl).toBe(origin+'/.well-known/oauth-protected-resource/mcp');
+    const resource=await(await fetch(metadataUrl)).json();expect(resource.resource).toBe(origin+'/mcp');expect(resource.authorization_servers).toContain(origin);
+    const discovery=await fetch(origin+'/.well-known/oauth-authorization-server');expect(discovery.ok).toBe(true);
+    const auth=await discovery.json();expect(auth.issuer).toBe(origin);expect(auth.registration_endpoint).toBe(origin+'/oauth/register');expect(auth.code_challenge_methods_supported).toContain('S256');
+  });
   await check('App loads signed out with enforcing CSP', async () => {
     first = await device('first device');
     expect(await api(first.context, '/me')).toEqual({ user: null });

@@ -45,8 +45,14 @@
   <h2>Sign in with Google</h2>
   <p>If you choose Google sign-in, Incord receives your Google account ID, your name, and your verified email address. It uses them only to sign you in, including recognizing the same verified email used for email sign-in. Your email is stored only as the same one-way keyed hash, not as a readable address. Incord does not read your inbox, contacts, or files, and does not sell your Google information or use it for advertising.</p>
 
+  <h2>Connected apps</h2>
+  <p>You can choose to connect an AI assistant or another MCP client to your account. Before it connects, Incord asks you to approve read and/or write permissions. Read access can expose your library and practice information to that app; write access lets it add memory items, not edit or delete existing ones. ESV text is never sent through the connector.</p>
+  <p>Incord stores the authorization records needed to keep the connection working, with tokens hashed and authorization properties encrypted; app names, permission scopes, connection dates and account identifiers remain in the authorization records. The connected app handles any information it receives under its own privacy policy. You can stop future access at any time in Settings → Connected apps; revocation does not erase information the app has already received. See <a href="/connect.html">how to connect an app</a>.</p>
+
   <h2>Anonymous usage counts</h2>
   <p>Incord keeps daily totals, such as how many people practiced today or how many steps were passed, so the app can be improved. These totals contain no account identity, passage references or text. You can turn them off in Settings → Privacy. They are off automatically if your browser sends Global Privacy Control or Do Not Track.</p>
+
+  <p>Incord also keeps aggregate server-side MCP operation counts to understand connector use and reliability. These contain no library content, passage references, prompts or ESV text. They respect the privacy preference when you authorize the connection, later account opt-outs, and privacy signals sent by the connected client.</p>
 
   <h2>Where data lives</h2>
   <p>Incord runs on Cloudflare. Data is sent over HTTPS and is not sold, rented or shared for advertising.</p>
@@ -54,6 +60,7 @@
   <h2>Your choices</h2>
   <ul>
     <li><strong>Export:</strong> Settings → Export data downloads everything tied to your account.</li>
+    <li><strong>Revoke connected apps:</strong> Settings → Connected apps stops an app’s future access.</li>
     <li><strong>Delete:</strong> Settings → Delete account permanently removes your account and its synced data.</li>
   </ul>
 

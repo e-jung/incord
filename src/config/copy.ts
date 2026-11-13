@@ -20,6 +20,27 @@ export function collectionColor(item: SourceItem): string {
 }
 
 export const copy = {
+ mcpConsentTitle:'Connect to Incord',
+ mcpConsentIntro:(name:string)=>`${name} would like access to your Incord account.`,
+ mcpUnverified:'This app registered itself. Incord has not verified who operates it. Only connect apps you trust.',
+ mcpPermissions:'This app can',
+ mcpScope:(scope:string)=>scope==='library:read'?'See your library and progress':scope==='library:write'?'Add passages to your library':scope,
+ mcpRedirect:(host:string)=>`After your decision, you’ll return to ${host}.`,
+ mcpLoopback:'This connection returns to an app running on your device. Continue only if you started it there.',
+ mcpRevokeHint:'You can disconnect this app at any time in Settings → Connected apps.',
+ mcpApprove:'Approve connection',mcpDeny:'Deny',mcpWorking:'Returning to app…',mcpRetry:'Try again',
+ mcpLoadingConsent:'Loading connection request…',
+ mcpConsentError:'This connection request could not be loaded. Try again, or start a new connection from your app.',
+ mcpDecisionError:'Your decision could not be completed. Try again, or start a new connection from your app.',
+ mcpReturnError:'Your browser could not save this connection request. Allow session storage, then try signing in again.',
+ mcpSigninTitle:'Sign in to connect an app',mcpSigninDetail:'Use your existing Incord account below. You’ll review the app’s access before anything is connected.',
+ mcpConnectedApps:'Connected apps',mcpConnectedDetail:'Manage apps that can access your account. Disconnecting stops future access; it does not remove passages already added.',
+ mcpConnectGuide:'How to connect an AI app',mcpLoadingApps:'Loading connected apps…',mcpNoApps:'No apps connected.',
+ mcpConnectedDate:(at:number)=>`Connected ${new Date(at).toLocaleDateString()}`,
+ mcpLastUsed:(at:number)=>`Last used ${new Date(at).toLocaleString()}`,mcpNeverUsed:'Not used yet',
+ mcpRevoke:'Disconnect',mcpRevoking:'Disconnecting…',mcpRevoked:(name:string)=>`${name} disconnected.`,
+ mcpAppsError:'Connected apps could not be loaded. Try again when you’re online.',mcpRevokeError:'This app could not be disconnected. Please try again.',
+
  practiceRegionLabel:'Practice',aboutLabel:'About',textSize:'Text size',textSizes:[['small','Small'],['default','Default'],['large','Large'],['extra-large','Extra large']],
  reminderOn:'Reminders on this device: on',reminderMissing:'Permission granted but not subscribed. Turn on again.',
  reminderOff:'Reminders on this device: off',reminderDenied:'Permission denied. Enable notifications in iOS Settings → Notifications → Incord, then return here.',

@@ -28,6 +28,11 @@ describe('Anonymous stats boundary',()=>{
   await f.record();const report=await (await f.object.fetch(new Request('https://internal/report'))).json<any>();expect(report.days).toHaveLength(30);expect(report.days.at(-1).activeDevices).toBe(1);
   vi.setSystemTime(new Date('2026-12-14T00:00:00Z'));await f.object.alarm();expect([...f.data.keys()].filter(key=>key.startsWith('day:'))).toEqual([]);
  });
+ it('counts MCP tools without inventing a device token or active user',async()=>{
+  const f=fixture();const aggregate=(event:string)=>f.object.fetch(new Request('https://internal/aggregate',{method:'POST',body:JSON.stringify({event})}));
+  expect((await aggregate('mcp_tool:add_passages')).status).toBe(200);expect((await aggregate('mcp_tool:add_passages')).status).toBe(200);expect((await aggregate('private text')).status).toBe(400);
+  const rows=[...f.data.values()] as any[];expect(rows.find(row=>row?.counters)).toMatchObject({activeDevices:0,counters:{'mcp_tool:add_passages':2}});expect([...f.data.keys()].some(key=>key.startsWith('token:'))).toBe(false);
+ });
  it('limits batches per token and resets the limit each minute without storing IP or UA',async()=>{
   vi.useFakeTimers();vi.setSystemTime(new Date('2026-11-13T12:00:00Z'));const f=fixture();for(let i=0;i<20;i++)expect((await f.record()).status).toBe(200);
   expect((await f.record()).status).toBe(429);vi.advanceTimersByTime(60000);expect((await f.record()).status).toBe(200);

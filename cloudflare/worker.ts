@@ -1,9 +1,12 @@
 import { handleEsv, assertEsvLimit, stripEsvText } from './esv';
 import { handleStatsRequest } from './stats';
 export { StatsDO } from './stats';
+export { OAuthStorageDO } from './oauth-storage';
+import { oauthCall } from './oauth-storage';
 
 export interface Env {
   ASSETS: Fetcher;
+  OAUTH_STORAGE: DurableObjectNamespace;
   STATS: DurableObjectNamespace;
   STATS_TOKEN?: string;
   ESV_API_KEY?: string;
@@ -149,7 +152,7 @@ async function api(request: Request, env: Env): Promise<Response> {
       return issue(env, result.uid, origin);
     }
 
-    if (path === '/api/auth/logout-everywhere' && request.method === 'POST') { const session = await signedIn(request, env); await user(env, session.uid, '/revoke'); return json({ ok: true }, 200, { 'Set-Cookie': cookie(cookieName, '', 0, origin) }); }
+    if (path === '/api/auth/logout-everywhere' && request.method === 'POST') { const session = await signedIn(request, env); await user(env, session.uid, '/revoke'); assert((await oauthCall(env,'/revoke-all',{origin,uid:session.uid})).ok,'Unable to disconnect apps. Please try again.',503); return json({ ok: true }, 200, { 'Set-Cookie': cookie(cookieName, '', 0, origin) }); }
     if (path === '/api/auth/logout' && request.method === 'POST') return json({ ok: true }, 200, { 'Set-Cookie': cookie(cookieName, '', 0, origin) });
     if (path === '/api/auth/google' && request.method === 'GET') {
       assert(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET, 'Google sign-in is not enabled', 404); const state = random(), verifier = random(48);
@@ -175,10 +178,17 @@ async function api(request: Request, env: Env): Promise<Response> {
   let session: Session;
   try { session = await signedIn(request, env); } catch (error) { if (path === '/api/me' && request.method === 'GET' && error instanceof ApiError && error.status === 401) return json({ user: null, ...(error.message === 'Session expired' ? { signedOutEverywhere: true } : {}) }); throw error; }
   const uid = session.uid;
+  if (path === '/api/oauth/consent') {
+    if(request.method==='GET')return oauthCall(env,'/consent',{origin,url:origin+'/oauth/authorize'+url.search,headers:[...request.headers],uid,version:session.version});
+    if(request.method==='POST'){const input=await body(request,4096);assert(typeof input.handle==='string'&&input.handle.length<=1024,'Invalid consent');return oauthCall(env,'/decision',{origin,url:origin+'/oauth/authorize',method:'POST',headers:[...request.headers],handle:input.handle,decision:input.decision,uid,version:session.version,statsEnabled:input.statsEnabled===true&&request.headers.get('DNT')!=='1'&&request.headers.get('Sec-GPC')!=='1'});}
+  }
+  if(path==='/api/oauth/privacy'&&request.method==='POST'){const input=await body(request,1024);assert(typeof input.enabled==='boolean','Invalid privacy preference');return json(await user(env,uid,'/mcp/privacy',{enabled:input.enabled}));}
+  if(path==='/api/oauth/apps'&&request.method==='GET')return oauthCall(env,'/apps',{origin,uid});
+  if(path==='/api/oauth/revoke'&&request.method==='POST'){const input=await body(request,4096);assert(typeof input.id==='string'&&input.id.length<=200,'Invalid connected app');return oauthCall(env,'/revoke',{origin,uid,id:input.id});}
   if (path === '/api/me' && request.method === 'GET') { const me = await user(env, uid, '/me'), flags = await identityFlags(env, uid); return json({ user: { ...me.user, ...flags } }); }
   if (path === '/api/sync' && request.method === 'POST') { const input = await body(request); const result = await user(env, uid, '/sync', input); await registry(env, '/schedule/set', { uid }); return json(result); }
   if (path === '/api/export' && request.method === 'GET') return json(await user(env, uid, '/export'), 200, { 'Content-Disposition': 'attachment; filename="incord.json"' });
-  if (path === '/api/account' && request.method === 'DELETE') { await user(env, uid, '/delete'); await registry(env, '/delete', { uid }); return json({ ok: true }, 200, { 'Set-Cookie': cookie(cookieName, '', 0, origin) }); }
+  if (path === '/api/account' && request.method === 'DELETE') { assert((await oauthCall(env,'/revoke-all',{origin,uid})).ok,'Unable to disconnect apps. Please try again.',503); await user(env, uid, '/delete'); await registry(env, '/delete', { uid }); return json({ ok: true }, 200, { 'Set-Cookie': cookie(cookieName, '', 0, origin) }); }
   if (path === '/api/push/subscribe' && request.method === 'POST') { const input = await body(request); assert(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY, 'Push is not configured', 503); const result = await user(env, uid, '/push/subscribe', { ...input, origin }); await registry(env, '/schedule/set', { uid }); return json(result); }
   if (path === '/api/push/status' && request.method === 'GET') {
     const endpointHash = url.searchParams.get('endpointHash');
@@ -192,13 +202,13 @@ const legacyServiceWorker = `self.addEventListener('install',()=>self.skipWaitin
 self.addEventListener('activate',event=>event.waitUntil((async()=>{await self.registration.unregister();for(const client of await self.clients.matchAll({type:'window',includeUncontrolled:true})){const url=new URL(client.url);url.hostname='incord.jesklabs.com';url.protocol='https:';url.port='';await client.navigate(url.href)}})()));
 self.addEventListener('fetch',event=>{const url=new URL(event.request.url);if(event.request.mode==='navigate'){url.hostname='incord.jesklabs.com';url.protocol='https:';url.port='';event.respondWith(Response.redirect(url.href,301))}});`;
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const requestId = request.headers.get('cf-ray')?.replace(/[^a-zA-Z0-9-]/g, '').slice(0, 100) || crypto.randomUUID();
     const finish = async (response: Response, unexpected = false, errorName?: string) => {
       if (response.status >= 500) {
         console.log(JSON.stringify({ evt: 'server_error', requestId, status: response.status, unexpected, ...(errorName ? { errorName } : {}) }));
       }
-      if (response.status >= 400 && (new URL(request.url).pathname.startsWith('/api/') || response.headers.get('Content-Type')?.includes('application/json'))) {
+      if (response.status >= 400 && !/^\/(?:mcp(?:\/|$)|oauth(?:\/|$)|\.well-known\/oauth-)/.test(new URL(request.url).pathname) && (new URL(request.url).pathname.startsWith('/api/') || response.headers.get('Content-Type')?.includes('application/json'))) {
         let error = 'Something went wrong. Please try again.';
         try { const data = await response.json<{ error?: string }>(); if (data.error) error = data.error; } catch { /* Do not log response content. */ }
         response = json({ error, requestId }, response.status);
@@ -212,6 +222,8 @@ export default {
         if (path.startsWith('/api/')) return finish(json({ error: 'Incord has moved. Update this app at https://incord.jesklabs.com.' }, 410));
         url.hostname = 'incord.jesklabs.com'; url.protocol = 'https:'; url.port = ''; return finish(Response.redirect(url.href, 301));
       }
+      const mcpResponse = /^\/(?:mcp(?:\/|$)|oauth\/(?:token|register)$|\.well-known\/oauth-)/.test(path) ? await (await import('./mcp')).handleMcpRequest(request,env,ctx) : null;
+      if(mcpResponse)return await finish(mcpResponse);
       const statsResponse = await handleStatsRequest(request, env);
       if (statsResponse) return await finish(statsResponse);
       if (path.startsWith('/api/')) return await finish(await api(request, env));
@@ -347,29 +359,37 @@ export class UserDO {
       return json({ ok: true });
     }
     assert(this.get('profile'), 'Account not found', 401);
-    if (path === '/me') { const profile = this.get('profile'); return json({ user: { ...profile, displayName: this.settings().displayName === undefined ? profile.displayName : (this.settings().displayName || 'Friend'), settings: this.settings() }, version: this.get('version') }); }
+    if (path === '/me') { const profile = this.get('profile'); return json({ user: { ...profile, displayName: this.settings().displayName === undefined ? profile.displayName : (this.settings().displayName || 'Friend'), settings: this.settings() }, version: this.get('version'),mcpCountsEnabled:this.get('mcpCountsEnabled')!==false }); }
     if (path === '/revoke') { this.set('version', this.get('version') + 1); return json({ ok: true }); }
+    if(path==='/mcp/privacy'){assert(typeof data.enabled==='boolean');this.set('mcpCountsEnabled',data.enabled);return json({ok:true});}
+    if(path==='/mcp/add') {
+      assert(data.version===undefined||data.version===this.get('version'),'Session expired',401);
+      assert(Array.isArray(data.items)&&data.items.length<=10000,'Too many verses in one call');
+      const results:any[]=[],admitted:any[]=[],existing=new Map(this.list('items').map(i=>[i.id,i]));
+      // Insert-if-absent and device sync share the same merge, caps and ESV path.
+      // One batch transaction avoids re-reading the whole library for every verse.
+      for(const source of data.items){
+        assert(source&&typeof source.id==='string','Invalid item');const old=existing.get(source.id);
+        if(old&&!old.deleted){results.push({id:source.id,status:'already in library'});continue;}
+        // A low initial revision lets an unsynced device's existing practice win.
+        const now=Date.now(),item=stripEsvText({...source,origin:'mcp',step:1,learned:false,deleted:false,due:new Date(now).toISOString(),createdAt:new Date(now).toISOString(),updatedAt:old?timestamp(old.updatedAt)+1:1});
+        try{
+          record(item);assert(existing.has(item.id)||existing.size<10000,'Account item limit reached');
+          if(item.translation==='ESV'||item.id.startsWith('esv-'))try{assertEsvLimit([...existing.values()].filter(i=>i.id!==item.id).concat(item));}catch(error){throw new ApiError(400,error instanceof Error?error.message:'ESV limit reached');}
+          existing.set(item.id,item);admitted.push(item);results.push({id:item.id,status:'added'});
+        }catch(error){if(error instanceof ApiError)results.push({id:source.id,status:'invalid reference',reason:error.message});else throw error;}
+      }
+      this.mergeData(admitted,[],null);return json({results});
+    }
     if (path === '/sync') {
       const incomingItems = data.items || [], events = data.events || []; assert(Array.isArray(incomingItems), 'Invalid items'); const items = incomingItems.map((item: any) => item && typeof item.id === 'string' ? stripEsvText(item) : item); assert(Array.isArray(items) && items.length <= 1000 && Array.isArray(events) && events.length <= 2000, 'Sync batch too large');
       for (const item of items) record(item);
       for (const event of events) { assert(event && typeof event.id === 'string' && event.id.length > 0 && event.id.length <= 160 && JSON.stringify(event).length <= 10_000, 'Invalid event'); assert(event.timestamp !== undefined || event.createdAt !== undefined || event.at !== undefined, 'Event needs timestamp, createdAt, or at'); timestamp(event.timestamp ?? event.createdAt ?? event.at); }
       const settings = data.settings ? settingsRecord(data.settings) : null;
-      this.ctx.storage.transactionSync(() => {
-        assert(Number(this.rows('SELECT COUNT(*) AS n FROM items')[0].n) + items.filter((i: SyncRecord) => !this.rows('SELECT id FROM items WHERE id=?', i.id).length).length <= 10_000, 'Account item limit reached');
-        assert(Number(this.rows('SELECT COUNT(*) AS n FROM events')[0].n) + events.filter((e: ObjectData) => !this.rows('SELECT id FROM events WHERE id=?', String(e.id)).length).length <= 100_000, 'Account review log limit reached');
-        const prospective = new Map(this.list('items').map(item => [item.id, item]));
-        for (const item of items) { const old = prospective.get(item.id); if (!old || timestamp(item.updatedAt) > timestamp(old.updatedAt) || (timestamp(item.updatedAt) === timestamp(old.updatedAt) && JSON.stringify(item) > JSON.stringify(old))) prospective.set(item.id, item); }
-        try { assertEsvLimit([...prospective.values()]); } catch (error) { throw new ApiError(400, error instanceof Error ? error.message : 'ESV limit reached'); }
-        for (const item of items as SyncRecord[]) {
-          const serialized = JSON.stringify(item), updated = timestamp(item.updatedAt); const existing = this.rows('SELECT updated,value FROM items WHERE id=?', item.id)[0];
-          // Equal-timestamp conflicts converge deterministically, independent of arrival order.
-          if (!existing || updated > Number(existing.updated) || (updated === Number(existing.updated) && serialized > String(existing.value))) this.sql.exec('INSERT INTO items VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET value=excluded.value,updated=excluded.updated', item.id, serialized, updated);
-        }
-        for (const event of events) this.sql.exec('INSERT OR IGNORE INTO events VALUES(?,?)', event.id, JSON.stringify(event));
-        if (settings) this.set('settings', mergeServerSettings(this.settings(), settings));
-      });
+      this.mergeData(items,events,settings);
       return json({ items: this.list('items'), events: this.list('events'), settings: this.settings(), serverTime: Date.now() });
     }
+    if(path==='/mcp/state')return json({items:this.list('items'),settings:this.settings(),events:data.events?this.list('events').map(({itemId,at,mode})=>({itemId,at,mode})):[]});
     if (path === '/export') return json({ format: 'by-heart', version: 1, exportedAt: new Date().toISOString(), user: { ...this.get('profile'), displayName: this.settings().displayName === undefined ? this.get('profile').displayName : (this.settings().displayName || 'Friend') }, items: this.list('items'), events: this.list('events'), settings: this.settings() });
     if (path === '/push/subscribe') {
       if (data.subscription === null || data.enabled === false) { if (data.endpoint) this.sql.exec('DELETE FROM subscriptions WHERE endpoint=?', data.endpoint); else this.sql.exec('DELETE FROM subscriptions'); return json({ ok: true }); }
@@ -386,6 +406,22 @@ export class UserDO {
     if (path === '/push/remind') return json(await this.sendPush(false));
     return json({ error: 'Not found' }, 404);
   } catch (e) { if (e instanceof ApiError) return json({ error: e.message }, e.status); throw e; } }); }
+  private mergeData(items:any[],events:any[],settings:any) {
+      this.ctx.storage.transactionSync(() => {
+        assert(Number(this.rows('SELECT COUNT(*) AS n FROM items')[0].n) + items.filter((i: SyncRecord) => !this.rows('SELECT id FROM items WHERE id=?', i.id).length).length <= 10_000, 'Account item limit reached');
+        assert(Number(this.rows('SELECT COUNT(*) AS n FROM events')[0].n) + events.filter((e: ObjectData) => !this.rows('SELECT id FROM events WHERE id=?', String(e.id)).length).length <= 100_000, 'Account review log limit reached');
+        const prospective = new Map(this.list('items').map(item => [item.id, item]));
+        for (const item of items) { const old = prospective.get(item.id); if (!old || timestamp(item.updatedAt) > timestamp(old.updatedAt) || (timestamp(item.updatedAt) === timestamp(old.updatedAt) && JSON.stringify(item) > JSON.stringify(old))) prospective.set(item.id, item); }
+        try { assertEsvLimit([...prospective.values()]); } catch (error) { throw new ApiError(400, error instanceof Error ? error.message : 'ESV limit reached'); }
+        for (const item of items as SyncRecord[]) {
+          const serialized = JSON.stringify(item), updated = timestamp(item.updatedAt); const existing = this.rows('SELECT updated,value FROM items WHERE id=?', item.id)[0];
+          // Equal-timestamp conflicts converge deterministically, independent of arrival order.
+          if (!existing || updated > Number(existing.updated) || (updated === Number(existing.updated) && serialized > String(existing.value))) this.sql.exec('INSERT INTO items VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET value=excluded.value,updated=excluded.updated', item.id, serialized, updated);
+        }
+        for (const event of events) this.sql.exec('INSERT OR IGNORE INTO events VALUES(?,?)', event.id, JSON.stringify(event));
+        if (settings) this.set('settings', mergeServerSettings(this.settings(), settings));
+      });
+  }
   private async sendPush(test: boolean) {
     assert(this.env.VAPID_PRIVATE_KEY && this.env.VAPID_PUBLIC_KEY, 'Push is not configured', 503); const settings = this.settings(), now = new Date(), today = localDay(now, settings.timezone || 'UTC');
     let dueCount = 0;

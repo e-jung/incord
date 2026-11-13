@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
+import {OAuthStorageDO} from '../cloudflare/oauth-storage';
 import worker, { RegistryDO, UserDO, generateLoginCode, emailKey, loginCodeHash, constantTimeEqual, normalizeEmail, sendLoginCode, type Env } from '../cloudflare/worker';
 afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();vi.useRealTimers()});
 function state(id:string) { const db=new DatabaseSync(':memory:'); return {id:{toString:()=>id},storage:{sql:{exec(q:string,...args:any[]){const stmt=db.prepare(q);return stmt.columns().length?stmt.all(...args):(stmt.run(...args),[])}},transactionSync:(fn:()=>unknown)=>fn()},blockConcurrencyWhile:(fn:()=>unknown)=>fn()} as unknown as DurableObjectState }
@@ -8,6 +9,7 @@ function fixture(){
  const registryState=state('registry'),registry=new RegistryDO(registryState),users=new Map<string,UserDO>();
  env.REGISTRY={idFromName:(id:string)=>id,get:()=>({fetch:(url:string,init:RequestInit)=>registry.fetch(new Request(url,init))})} as unknown as DurableObjectNamespace;
  env.USERS={idFromName:(id:string)=>id,get:(id:string)=>({fetch:(url:string,init:RequestInit)=>{if(!users.has(id))users.set(id,new UserDO(state(id),env));return users.get(id)!.fetch(new Request(url,init))}})} as unknown as DurableObjectNamespace;
+ const oauth=new OAuthStorageDO(state('oauth'));env.OAUTH_STORAGE={idFromName:(id:string)=>id,get:()=>({fetch:(url:string,init:RequestInit)=>oauth.fetch(new Request(url,init))})} as unknown as DurableObjectNamespace;
  const call=(path:string,data?:unknown,cookie='',ip='192.0.2.1',host='localhost')=>worker.fetch(new Request('http://'+host+path,{method:data===undefined?'GET':'POST',headers:{Origin:'http://'+host,'Content-Type':'application/json',Cookie:cookie,'CF-Connecting-IP':ip},...(data===undefined?{}:{body:JSON.stringify(data)})}),env);
  const code=async(email:string)=>(await (await call('/api/test/last-code?email='+encodeURIComponent(email))).json<any>()).code as string;
  const start=(email:string,link=false,cookie='')=>call('/api/auth/email/start',{email,link},cookie);

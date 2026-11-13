@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connect an app · Incord</title>
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<style>
+  :root { color-scheme: light dark; --bg: #faf8f4; --text: #26231f; --muted: #6f685f; --rule: #e6e0d6; --accent: #8a5a2b; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #171614; --text: #ece7df; --muted: #a59d92; --rule: #2e2b27; --accent: #d9a46c; } }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 48px 24px 72px; }
+  h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  h2 { font-size: 18px; margin: 32px 0 8px; }
+  p, li { margin: 0 0 12px; }
+  ul, ol { padding-left: 24px; }
+  code { font-size: 0.9em; overflow-wrap: anywhere; }
+  pre { padding: 16px; border: 1px solid var(--rule); border-radius: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  pre code { font-size: 14px; }
+  .muted { color: var(--muted); font-size: 15px; }
+  a { color: var(--accent); }
+  hr { border: 0; border-top: 1px solid var(--rule); margin: 32px 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Connect an app</h1>
+  <p class="muted">Bring a passage into your practice.</p>
+
+  <p>Connect an AI assistant to your Incord account using MCP (Model Context Protocol). Once you sign in and approve access, it can read your library and add passages for you. You can keep practicing in Incord as usual.</p>
+
+  <h2>Claude</h2>
+  <ol>
+    <li>In Claude, open <strong>Settings → Connectors → Add custom connector</strong>.</li>
+    <li>Enter <strong>Incord</strong> as the name and <code>https://incord.jesklabs.com/mcp</code> as the URL.</li>
+    <li>Connect, sign in to Incord, and review the permissions before approving.</li>
+  </ol>
+  <p class="muted">Custom connector availability and menu names can vary by plan, workspace policy and app version.</p>
+
+  <h2>Claude Code</h2>
+  <p>Add Incord as an HTTP MCP server from your terminal:</p>
+  <pre><code>claude mcp add --transport http incord https://incord.jesklabs.com/mcp</code></pre>
+  <p>Then run <code>/mcp</code> in Claude Code and follow the authentication prompts to sign in and approve access.</p>
+
+  <h2>ChatGPT and other clients</h2>
+  <p>If your client supports remote MCP over Streamable HTTP with OAuth, use the same server URL: <code>https://incord.jesklabs.com/mcp</code>. Follow its connection and authorization steps. ChatGPT support may depend on its developer mode, your plan and workspace settings; not every client supports this connection.</p>
+
+  <h2>Try a prompt</h2>
+  <ul>
+    <li>“Add Romans 8:28–39 to Incord as one passage.”</li>
+    <li>“Add the Beatitudes, Matthew 5:3–12, to Incord verse by verse.”</li>
+  </ul>
+  <p>You can also ask what is already in your library. Review your assistant's proposed passages and translation when adding something new.</p>
+
+  <h2>What you allow</h2>
+  <p>The authorization screen offers read and write permissions. Read access lets the connected app see your library and practice information. Write access lets it add memory items. This connection is read-and-add only: it cannot edit or delete your existing items.</p>
+  <p>ESV text stays on your device. The connector does not return or store ESV text; open Incord on your device to read and practice ESV passages.</p>
+
+  <h2>Disconnect whenever you like</h2>
+  <p>In Incord, open <strong>Settings → Connected apps</strong> and revoke the app's access. Revocation stops future access; it cannot remove information an assistant has already received. You can also remove the connector from your assistant's settings.</p>
+
+  <hr>
+  <p><a href="/privacy.html">Privacy</a> · <a href="/">Back to Incord</a></p>
+</main>
+</body>
+</html>
