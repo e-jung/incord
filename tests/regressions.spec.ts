@@ -295,3 +295,20 @@ for (const [mistakes, title] of [[0, 'Solid'], [1, 'Remembered'], [3, 'Got there
     expect(saved.events).toHaveLength(2);
   });
 }
+
+test('P2-14/15 tab and detail history restores screens, closes sheets and protects the app root',async({page})=>{
+ await tab(page,'Discover');
+ await page.evaluate(()=>window.scrollTo(0,100));
+ await tab(page,'Library');
+ expect(await page.evaluate(()=>scrollY)).toBe(0);
+ await page.goBack();
+ await expect(page.getByRole('heading',{name:'Discover',exact:true})).toBeVisible();
+ await tab(page,'Library');
+ await page.locator('.covers button').filter({has:page.locator('b',{hasText:'Psalm 23'})}).click();
+ await expect(page.getByRole('dialog',{name:'Psalm 23',exact:true})).toBeVisible();
+ await page.goBack();
+ await expect(page.getByRole('dialog')).toHaveCount(0);
+ for(let n=0;n<8;n++){await page.evaluate(()=>history.back());await page.waitForTimeout(60)}
+ await expect(page.getByRole('heading',{name:'Today',exact:true})).toBeVisible();
+ expect(page.url()).not.toBe('about:blank');
+});

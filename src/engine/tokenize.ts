@@ -55,7 +55,7 @@ export function displayTokens(text: string): DisplayToken[] {
   });
   return words.map((word, i) => {
     const segment = text.slice(boundaries[i], boundaries[i + 1] ?? text.length);
-    const separator = i + 1 < words.length ? (segment.match(/\s*$/u)?.[0] ?? '') : '';
+    const separator = i + 1 < words.length ? segment.match(/\s*$/u)![0] : '';
     return { word, text: separator ? segment.slice(0, -separator.length) : segment, separator };
   });
 }

@@ -20,6 +20,7 @@ export function collectionColor(item: SourceItem): string {
 }
 
 export const copy = {
+  passkeyCanceled:"Passkey request canceled. Try again when you’re ready.",
   myVerses: "My verses",
   myTexts: "My texts",
   alreadyAdded: "Already in your library.",
@@ -57,7 +58,7 @@ export const copy = {
   mergeAdd: "Add",
   keepSeparate: "Keep separate",
   discardTitle: "Discard this device’s local items?",
-  discardDetail: "Your account items will replace the signed-out items on this device.",
+  discardDetail: "Discard the signed-out items on this device? Your account items will replace them.",
   discardLocal: "Discard local items",
   new: "New",
   optionsPrefix: "Options for ",
@@ -296,7 +297,7 @@ export const COPY = copy;
 
 /** Content lookup and persistence messages; wording can change without engine edits. */
 export const contentCopy={
- offline:'This book isn’t saved on this device yet. Connect once to download it.',
+ offline:"This book isn't saved on this device yet. Connect once to download it.",
  translation:'Choose BSB, KJV, or WEB.',
  reference:'Enter a reference such as Romans 8:28-30 or Psalm 23.',
  book:'That Bible book was not recognized.',
