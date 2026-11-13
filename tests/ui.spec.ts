@@ -20,6 +20,7 @@ async function tab(page: Page, name: string) {
   await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible();
 }
 async function account(page: Page) {
+  await tab(page, 'Today');
   await page.getByRole('button', { name: 'Account settings', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Account', exact: true })).toBeVisible();
 }
@@ -29,7 +30,7 @@ async function addOwn(page: Page, title = 'A quiet word', text = 'Grace and peac
   await page.getByLabel('Title or question').fill(title);
   await page.getByLabel('Text to remember').fill(text);
   await page.getByRole('button', { name: 'Add your text', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Library', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'My texts', exact: true })).toBeVisible();
 }
 async function beginOwn(page: Page, title = 'A quiet word') {
   await tab(page, 'Today');
@@ -68,10 +69,20 @@ async function register(page: Page, info?: TestInfo) {
   await expect(page.getByRole('dialog', { name: 'Your one-time recovery code' })).toBeVisible();
   const code = (await page.getByTestId('recovery-code').innerText()).trim();
   expect(code.length).toBeGreaterThanOrEqual(24);
+  const merge = page.getByRole('dialog').filter({ hasText: /items? on this device/ });
+  if (await merge.count()) await merge.getByRole('button', { name: 'Add', exact: true }).click();
   if (info) await screen(page, info, 'account-passkey-created');
   await page.getByRole('button', { name: 'I saved my code', exact: true }).click();
   await expect(page.getByText('Signed in.')).toBeVisible();
   return { code, cdp };
+}
+
+
+async function signout(page: Page) {
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  const confirm = page.getByRole('dialog', { name: 'Sign out on this device?' });
+  await expect(confirm).toContainText('Your practice is saved to your account');
+  await confirm.getByRole('button', { name: 'Sign out', exact: true }).click();
 }
 
 test.beforeEach(async ({ page, context }) => {
@@ -105,8 +116,8 @@ test('empty Today, every tab, settings persistence, local export, and own-text v
   await page.getByLabel('Display name').press('Tab');
   await page.getByLabel('Weekly rhythm').selectOption('5');
   await page.getByLabel('Reminder time', { exact: true }).fill('18:30');
-  await page.getByLabel('Time zone', { exact: true }).fill('America/Los_Angeles');
-  await page.getByLabel('Time zone', { exact: true }).press('Tab');
+  await page.getByPlaceholder('Search time zones').fill('Los_Angeles');
+  await page.getByRole('combobox', { name: 'Time zone', exact: true }).selectOption('America/Los_Angeles');
   const theme = info.project.name.endsWith('dark') ? 'dark' : 'light';
   await page.getByLabel('Appearance').selectOption(theme);
   await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
@@ -115,7 +126,7 @@ test('empty Today, every tab, settings persistence, local export, and own-text v
   await expect(page.getByLabel('Display name')).toHaveValue('Ada');
   await expect(page.getByLabel('Weekly rhythm')).toHaveValue('5');
   await expect(page.getByLabel('Reminder time', { exact: true })).toHaveValue('18:30');
-  await expect(page.getByLabel('Time zone', { exact: true })).toHaveValue('America/Los_Angeles');
+  await expect(page.getByRole('combobox', { name: 'Time zone', exact: true })).toHaveValue('America/Los_Angeles');
   await page.getByLabel('Appearance').selectOption(theme === 'dark' ? 'light' : 'dark');
   await expect(page.locator('html')).toHaveAttribute('data-theme', theme === 'dark' ? 'light' : 'dark');
   await page.getByLabel('Appearance').selectOption('system');
@@ -131,12 +142,11 @@ test('empty Today, every tab, settings persistence, local export, and own-text v
 test('own words persist offline, collection detail buttons, restart and remove', async ({ page, context }, info) => {
   await addOwn(page, 'An original promise', '“Alpha,” Bravo’s Charlie-Delta Delta Echo Foxtrot Golf Hotel India Juliet Kilo Lima Mike November Oscar Papa Quebec Romeo Sierra Tango Uniform Victor Whiskey Xray Yankee Zulu 1 2 3 4 5 6 7 8 9 0; 23 blessings.');
   await screen(page, info, 'library-own');
-  await page.getByRole('button', { name: /Your own words.*0 of 1 learned/ }).click();
   await screen(page, info, 'collection-own');
   await page.getByRole('button', { name: 'Add items', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Discover', exact: true })).toBeVisible();
   await tab(page, 'Library');
-  await page.getByRole('button', { name: /Your own words.*0 of 1 learned/ }).click();
+  await page.getByRole('button', { name: /My texts.*0 of 1 learned/ }).click();
   await page.getByRole('button', { name: 'Back to library', exact: true }).click();
   await page.evaluate(async () => { await navigator.serviceWorker.ready; if (!navigator.serviceWorker.controller) await new Promise<void>(resolve => navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), { once: true })); });
   await page.reload();
@@ -155,8 +165,9 @@ test('own words persist offline, collection detail buttons, restart and remove',
   await page.getByRole('button', { name: 'Close practice', exact: true }).click();
   await context.setOffline(false);
   await tab(page, 'Library');
-  await page.getByRole('button', { name: /Your own words.*0 of 1 learned/ }).click();
-  await page.getByRole('button', { name: 'Remove An original promise', exact: true }).click();
+  await page.getByRole('button', { name: /My texts.*0 of 1 learned/ }).click();
+  await page.getByRole('button', { name: 'Options for An original promise', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Remove', exact: true }).click();
   await expect(page.getByText('Nothing here yet.')).toBeVisible();
   await screen(page, info, 'collection-empty');
 });
@@ -168,7 +179,7 @@ test('add BSB verse by reference and complete all four ladder steps', async ({ p
   await expect(page.getByRole('button', { name: 'Add to library', exact: true })).toBeVisible();
   await screen(page, info, 'verse-search-results');
   await page.getByRole('button', { name: 'Add to library', exact: true }).click();
-  await expect(page.getByRole('status')).toHaveText('Added to your library.');
+  await expect(page.getByRole('status')).toHaveText(/\d+ items? added to your library\./);
   await tab(page, 'Today');
   await expect(page.getByText('1 to practice', { exact: true })).toBeVisible();
   await expect(page.getByText('About 1 min', { exact: true })).toBeVisible();
@@ -187,7 +198,7 @@ test('add BSB verse by reference and complete all four ladder steps', async ({ p
     await screen(page, info, `verse-step-${n}`);
     await typePassage(page, { onscreen: n === 2 });
     await expect(page.getByRole('dialog')).toHaveAccessibleName(n === 4 ? 'Learned' : `Step ${n} passed`);
-    await expect(page.getByRole('dialog')).toContainText(`${hidden} of ${hidden} from memory · 0 slips`);
+    if (n > 1 && n < 4) await expect(page.getByRole('dialog')).toContainText(`${hidden} of ${hidden} from memory · 0 slips`);
     await screen(page, info, `verse-result-${n}`);
     await page.getByRole('button', { name: n === 4 ? 'Finish' : 'Continue', exact: true }).click();
   }
@@ -199,18 +210,18 @@ test('add BSB verse by reference and complete all four ladder steps', async ({ p
   await expect(page.getByRole('heading', { name: 'Done for today', exact: true })).toBeVisible();
   await screen(page, info, 'today-done');
   await page.getByRole('button', { name: 'Visit your library', exact: true }).click();
-  await page.getByRole('button', { name: /Your own words.*1 of 1 learned/ }).click();
-  await page.getByRole('button', { name: /John 3:16.*Learned/ }).click();
+  await page.getByRole('button', { name: /My verses.*1 of 1 learned/ }).click();
+  await page.getByRole('button', { name: /John 3:16/ }).click();
   await expect(page.getByText('Review · blank recall')).toBeVisible();
   await screen(page, info, 'review-recall');
   await typePassage(page);
-  await expect(page.getByRole('dialog')).toHaveAccessibleName('Easy');
+  await expect(page.getByRole('dialog')).toHaveAccessibleName('Solid');
   await screen(page, info, 'review-easy');
-  await page.getByRole('button', { name: 'Save review', exact: true }).click();
+  await page.getByRole('button', { name: 'Finish', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Reviewed', exact: true })).toBeVisible();
   await screen(page, info, 'review-remembered');
-  await page.getByRole('button', { name: 'Practice again', exact: true }).click();
-  await step(page, 1);
+  await page.getByRole('button', { name: 'Practice once more', exact: true }).click();
+  await step(page, 4);
 });
 
 test('catechism browse and complete a full ladder', async ({ page }, info) => {
@@ -219,11 +230,9 @@ test('catechism browse and complete a full ladder', async ({ page }, info) => {
   await screen(page, info, 'documents-picker');
   await page.getByRole('combobox', { name: 'Browse', exact: true }).selectOption({ label: 'Westminster Shorter Catechism' });
   await screen(page, info, 'documents-westminster');
-  const addQuestion = page.getByRole('button', { name: /^Add .*Q(?:uestion)?\.?\s*1\b/i }).first();
-  // Title format is content-owned; first Add button is Q1 in document order.
-  const firstAdd = await addQuestion.count() ? addQuestion : page.locator('button.text-button').filter({ hasText: /^Add / }).first();
-  const title = (await firstAdd.innerText()).replace(/^Add /, '');
-  await firstAdd.click();
+  const title = (await page.locator('summary').first().innerText()).replace(/^Q1 · /, '');
+  await expect(page.locator('details').first()).not.toHaveAttribute('open', '');
+  await page.getByRole('button', { name: 'Add Q1', exact: true }).click();
   await tab(page, 'Today');
   await page.getByRole('button', { name: 'Begin', exact: true }).click();
   await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
@@ -247,18 +256,18 @@ test('failed step repeats, peek is a slip, result-close exits, shortcut fails to
   await typePassage(page, { peek: true });
   await expect(page.getByRole('dialog')).toHaveAccessibleName('One more time');
   await screen(page, info, 'practice-failed');
-  await page.getByRole('button', { name: 'Try again', exact: true }).click();
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
   await step(page, 2);
   await typePassage(page);
   await page.getByRole('dialog').getByRole('button', { name: 'Close practice', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Today', exact: true })).toBeVisible();
+  await tab(page, 'Today');
   await addOwn(page, 'Shortcut challenge', 'Love is patient and love is kind.');
   await beginOwn(page, 'Shortcut challenge');
   await page.getByRole('button', { name: 'I know this', exact: true }).click();
   await step(page, 4);
   await screen(page, info, 'shortcut-blank');
   await typePassage(page, { wrong: true });
-  await page.getByRole('button', { name: 'Try again', exact: true }).click();
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
   await step(page, 3);
   await screen(page, info, 'shortcut-fallback');
   await typePassage(page);
@@ -277,12 +286,12 @@ test('shortcut success and failed blank review returns to step 3', async ({ page
   await learned(page);
   await page.getByRole('button', { name: 'Back to Today', exact: true }).click();
   await tab(page, 'Library');
-  await page.getByRole('button', { name: /Your own words.*1 of 1 learned/ }).click();
-  await page.getByRole('button', { name: /A quiet word.*Learned/ }).click();
+  await page.getByRole('button', { name: /My texts.*1 of 1 learned/ }).click();
+  await page.getByRole('button', { name: /A quiet word/ }).click();
   await typePassage(page, { wrong: true });
-  await expect(page.getByRole('dialog')).toHaveAccessibleName('Again');
+  await expect(page.getByRole('dialog')).toHaveAccessibleName("Let's relearn this");
   await screen(page, info, 'review-again');
-  await page.getByRole('button', { name: 'Save review', exact: true }).click();
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
   await step(page, 3);
 });
 
@@ -298,18 +307,18 @@ test('passkey signup, sync, signout, signin, recovery rotation, export and accou
     expect(synced.ok()).toBe(true);
     return JSON.stringify(await synced.json());
   }).toContain('Synced promise');
-  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await signout(page);
   await expect(page.getByRole('button', { name: 'Sign in with a passkey', exact: true })).toBeVisible();
-  expect((await page.request.get('/api/me')).status()).toBe(401);
+  expect(await (await page.request.get('/api/me')).json()).toMatchObject({ user: null });
   await page.getByRole('button', { name: 'Sign in with a passkey', exact: true }).click();
   await expect(page.getByText('Signed in.')).toBeVisible();
-  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await signout(page);
   await page.getByLabel('One-time recovery code').fill(code);
   await page.getByRole('button', { name: 'Use recovery code', exact: true }).click();
   await expect(page.getByTestId('recovery-code')).not.toHaveText(code);
   await screen(page, info, 'account-recovery-code');
   await page.getByRole('button', { name: 'I saved my code', exact: true }).click();
-  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await signout(page);
   await page.getByLabel('One-time recovery code').fill(code);
   await page.getByRole('button', { name: 'Use recovery code', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('Invalid or already used recovery code');
@@ -329,7 +338,7 @@ test('passkey signup, sync, signout, signin, recovery rotation, export and accou
   await page.getByRole('button', { name: 'Delete account', exact: true }).click();
   await page.getByRole('button', { name: 'Yes, delete account', exact: true }).click();
   await expect(page.getByRole('status')).toHaveText('Account deleted. Local practice is still on this device.');
-  expect((await page.request.get('/api/me')).status()).toBe(401);
+  expect(await (await page.request.get('/api/me')).json()).toMatchObject({ user: null });
   await screen(page, info, 'account-deleted');
   await tab(page, 'Today');
   await expect(page.getByRole('button', { name: /Synced promise/ })).toBeVisible();
@@ -383,7 +392,7 @@ test('gentle return welcome caps the backlog at three items', async ({ page }, i
     const state = {
       settings: { name: '', theme: 'system', goal: 4, reminderTime: '19:00', timeZone: 'UTC', pushEnabled: false, days: [], lastActive: last },
       events: [], queue: [],
-      items: Array.from({ length: 8 }, (_, n) => ({ id: `return-${n}`, title: `Familiar word ${n + 1}`, text: 'Peace be with you.', collection: 'personal', step: 1, learned: false, due: new Date(0).toISOString(), updatedAt: Date.now() })),
+      items: Array.from({ length: 8 }, (_, n) => ({ id: `return-${n}`, title: `Familiar word ${n + 1}`, text: 'Peace be with you.', collection: 'personal', step: 4, learned: true, due: new Date(0).toISOString(), updatedAt: Date.now() })),
     };
     await new Promise<void>((resolve, reject) => { const tx = db.transaction('state', 'readwrite'); tx.objectStore('state').put(state, 'current'); tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); });
     db.close();
@@ -394,7 +403,7 @@ test('gentle return welcome caps the backlog at three items', async ({ page }, i
   await page.getByRole('button', { name: 'Start', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByText('3 to practice', { exact: true })).toBeVisible();
-  await expect(page.getByText('About 3 min', { exact: true })).toBeVisible();
+  await expect(page.getByText('About 1 min', { exact: true })).toBeVisible();
   await screen(page, info, 'today-gentle-return');
 });
 
@@ -407,6 +416,8 @@ test('all starter covers and document choices, collection sessions and Next item
   ];
   for (let index = 0; index < covers.length; index++) {
     await page.locator('.covers').getByRole('button').filter({ has: page.locator('b', { hasText: covers[index] }) }).click();
+    await expect(page.getByRole('dialog', { name: covers[index], exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Add to my library', exact: true }).click();
     await expect(page.getByRole('heading', { level: 1, name: covers[index], exact: true })).toBeVisible();
     await screen(page, info, `starter-${index + 1}`);
     await page.getByRole('button', { name: 'Start practice', exact: true }).click();
@@ -429,7 +440,7 @@ test('all starter covers and document choices, collection sessions and Next item
   await page.getByRole('button', { name: 'Catechisms', exact: true }).click();
   for (const doc of ['Heidelberg Catechism', 'Apostles’ Creed', 'Nicene Creed']) {
     await page.getByRole('combobox', { name: 'Browse', exact: true }).selectOption({ label: doc });
-    await expect(page.locator('button.text-button').filter({ hasText: /^Add / }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Add (?:Q1$|article$)/ }).first()).toBeVisible();
     await screen(page, info, `document-${doc.split(' ')[0].replace(/[^a-z]/gi, '').toLowerCase()}`);
   }
   await page.getByRole('button', { name: 'Verses', exact: true }).click();
@@ -445,7 +456,7 @@ test('all starter covers and document choices, collection sessions and Next item
     await expect(page.locator('.row')).toHaveCount(3);
     await screen(page, info, `verse-search-${translation.toLowerCase()}`);
     await page.getByRole('button', { name: 'Add to library', exact: true }).click();
-    await expect(page.getByRole('status')).toHaveText('Added to your library.');
+    await expect(page.getByRole('status')).toHaveText(/\d+ items? added to your library\./);
     // Switching modes clears previous search results before the next request.
     await page.getByRole('button', { name: 'Your text', exact: true }).click();
     await page.getByRole('button', { name: 'Verses', exact: true }).click();

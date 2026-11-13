@@ -4,6 +4,7 @@ test('hidden component gallery is usable and self-hosted',async({page},info)=>{
  const external:string[]=[],errors:string[]=[];
  page.on('request',r=>{if(new URL(r.url()).origin!==new URL(info.project.use.baseURL||'http://localhost:8793').origin)external.push(r.url())});
  page.on('pageerror',e=>errors.push(e.message));
+ await page.addInitScript(() => { localStorage.debug = '1'; });
  await page.goto('/gallery');
  await expect(page.getByRole('heading',{name:'Components',exact:true})).toBeVisible();
  await expect(page.getByRole('button',{name:'Primary button',exact:true})).toBeVisible();
@@ -19,4 +20,10 @@ test('hidden component gallery is usable and self-hosted',async({page},info)=>{
  expect(response.headers()['content-security-policy']).toContain("default-src 'self'");
  await page.getByRole('navigation').getByRole('button',{name:'Today',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Today',exact:true})).toBeVisible();
+});
+
+test('production gallery is hidden without the device debug flag', async ({ page }) => {
+ await page.goto('/gallery');
+ await expect(page.getByRole('heading', { name: 'Components', exact: true })).toHaveCount(0);
+ await expect(page.getByRole('heading', { name: 'Today', exact: true })).toBeVisible();
 });
