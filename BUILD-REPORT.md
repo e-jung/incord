@@ -148,3 +148,36 @@ The production smoke helper follows the new recovery-before-merge sequence and i
 **N5 finding:** Cloudflare's [official Web Analytics FAQ](https://developers.cloudflare.com/web-analytics/faq/#my-website-is-proxied-through-cloudflare-but-web-analytics-automatic-setup-is-not-working) explicitly documents `Cache-Control: public, no-transform` as preventing automatic beacon injection. Adding the no-transform directive therefore suppresses automatic RUM/beacon injection without allowing the beacon through CSP. Local headers and console checks pass; live edge suppression remains unverified because no deployment or production smoke was performed. No zone/NEL settings were changed.
 
 Review captures: `/home/ubuntu/.openclaw/workspace/reports/bible-memory-20261113/fix-4-screens/`. Complete HTML report/traces remain in `playwright-report/` and `test-results/`. No push or deployment performed; the QA worktree was not touched. Existing live-provider/iOS/Safari verification gaps remain unchanged.
+
+
+## Batch 7 — Incord, ESV and anonymous totals (2026-11-13)
+
+Renamed the product and added a heart/cord SVG mark, manifest PNGs and Apple icon. Kept the `byheart` Worker identity, existing Durable Object bindings/migrations and browser storage keys. Both custom-domain routes are configured; deployment supplies the canonical Incord APP_ORIGIN. Legacy pages permanently redirect to HTTPS with path/query intact, APIs return 410, and the legacy service worker unregisters and navigates existing clients. The old RP publishes related-origin WebAuthn metadata. Login challenges bind their selected old/new RP; new registrations use Incord. Legacy sign-in invites a new passkey once on that device. Push subscriptions retain old-origin endpoints until a new-origin replacement is accepted.
+
+ESV uses the existing Worker secret through a no-store, plain-text proxy. Anonymous callers are limited to 30 upstream requests/hour/IP. Only references/progress sync; quotations remain in device IndexedDB and hydrate on demand. Both device and account storage enforce 500 unique verses and the publisher's half-book restriction. ESV passages remain intact, with linked attribution beside quotations and the full notice in About. Missing offline passages explain how to load once. Live smoke is opt-in and performs one request; no real ESV API requests were made during implementation.
+
+Anonymous counters are categorical-only, credentialless, batched and opt-out; GPC/DNT disable them. Tokens rotate each local day and are erased by the daily StatsDO rollup. Weekly reporting explicitly sums device-days. The private 30-day tables/SVG dashboard requires STATS_TOKEN and a signed HttpOnly cookie. Stats pages bypass the service-worker cache. Same-origin referrer policies preserve Origin on real HTML form submissions and Safari's credentialless counter requests while retaining strict same-origin checks.
+
+Final verification (isolated browser run; no concurrent asset rebuilds):
+
+| Check | Result |
+| --- | --- |
+| `npm run check` | PASS — zero errors/warnings |
+| `npm test` | PASS — 273 tests / 18 files; 100% engine coverage |
+| `npm run e2e` | PASS — 143 tests: 128 Chromium light/dark and 15 WebKit subset, no skips |
+| Production build | PASS — built by the final complete E2E run |
+| `npm run content:verify` | PASS — 198 packs, 93,302 verses, 268 document items, five starters |
+| Local production smoke | PASS — 15/15, including loopback legacy-host redirect/API retirement/ROR metadata/SW, ladder, virtual passkeys, recovery/sync, CSP and account cleanup |
+| Migration WebAuthn | PASS — real Chromium virtual authenticators for both new RP and legacy RP via real isolated loopback HTTPS related-origin metadata; signed wrong-RP/origin/replay unit cases |
+| Screenshots | 16 PNGs in `fix-7-screens/`, including About, icon, ESV Discover/practice, privacy and private statistics; light/dark coverage |
+
+Architect deployment (not performed):
+
+1. Keep the existing SESSION_SECRET, ESV_API_KEY and VAPID credentials on Worker `byheart`.
+2. Run `npx wrangler secret put STATS_TOKEN` with a separate random secret of at least 32 characters.
+3. Confirm the `incord.jesklabs.com` custom-domain route can attach to `byheart`; keep `byheart.jesklabs.com` attached. The committed Wrangler configuration adds StatsDO using the additive `v2-stats` migration.
+4. If Google sign-in is enabled, allow `https://incord.jesklabs.com/api/auth/google/callback` in its provider configuration.
+5. Run `scripts/deploy.sh` (builds and supplies `APP_ORIGIN=https://incord.jesklabs.com`), then `node scripts/prod-smoke.mjs`.
+6. Optionally run `ESV_LIVE_SMOKE=1 WORKER_URL=https://incord.jesklabs.com npm run smoke:esv` for one real ESV proxy request.
+
+No push, deployment, production configuration change or live ESV request was performed. Live edge/browser delivery after deployment remains architect verification. Unsynced old-origin device data is not automatically transferred across origins; this is documented in README.
