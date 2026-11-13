@@ -1,5 +1,16 @@
-import {test,expect} from '@playwright/test';
+import {test,expect,type Page} from '@playwright/test';
 import {mkdir} from 'node:fs/promises';
+async function emailSignin(page: Page, email: string) {
+  await page.getByLabel('Email address', { exact: true }).fill(email);
+  await page.getByRole('button', { name: 'Email me a code', exact: true }).click();
+  await expect(page.getByLabel('Six-digit code')).toBeVisible();
+  const response = await page.request.get('/api/test/last-code?email=' + encodeURIComponent(email));
+  expect(response.ok()).toBe(true);
+  const { code } = await response.json();
+  expect(code).toMatch(/^\d{6}$/);
+  await page.getByLabel('Six-digit code').fill(code);
+  await expect(page.getByText('Signed in.',{exact:true})).toBeVisible();
+}
 test.beforeEach(async({context})=>{await context.setExtraHTTPHeaders({'CF-Connecting-IP':'qa2-'+crypto.randomUUID()})});
 const shots='/home/ubuntu/.openclaw/workspace/reports/bible-memory-20261113/fix-5-screens';
 async function shot(page:any,info:any,name:string){await mkdir(shots,{recursive:true});await page.screenshot({path:`${shots}/${info.project.name}-${name}.png`})}
@@ -13,14 +24,11 @@ test('N2/N8 Psalm 119 defaults to exclusive chunks and confirms the count above 
 });
 test('N4 confirms global signout and notifies another device only once',async({page},info)=>{
  await page.goto('/');await page.getByRole('button',{name:'Account settings',exact:true}).click();
- const cdp=await page.context().newCDPSession(page);await cdp.send('WebAuthn.enable');await cdp.send('WebAuthn.addVirtualAuthenticator',{options:{protocol:'ctap2',transport:'internal',hasResidentKey:true,hasUserVerification:true,isUserVerified:true,automaticPresenceSimulation:true}});
- await page.getByLabel('Display name').fill('Account name');await page.getByLabel('Display name').press('Tab');await page.getByRole('button',{name:'Create account with a passkey',exact:true}).click();const code=(await page.getByTestId('recovery-code').textContent())!;await page.getByRole('button',{name:'I saved my code',exact:true}).click();
+ await page.getByLabel('Display name').fill('Account name');await page.getByLabel('Display name').press('Tab');const email=`qa2-${crypto.randomUUID()}@example.com`;await emailSignin(page,email);await expect(page.getByText('Signed in.',{exact:true})).toBeVisible();
  const second=await page.context().browser()!.newContext({extraHTTPHeaders:{'CF-Connecting-IP':'qa2-secondary-'+crypto.randomUUID()}});const other=await second.newPage();await other.goto('/');await other.getByRole('button',{name:'Account settings',exact:true}).click();
- await other.getByLabel('One-time recovery code').fill(code);await other.getByRole('button',{name:'Use recovery code',exact:true}).click();await expect(other.getByTestId('recovery-code')).toBeVisible();await expect(other.getByRole('dialog')).toHaveCount(1);await other.getByRole('button',{name:'I saved my code',exact:true}).click();
- await expect(other.getByRole('dialog')).toContainText("Add a passkey so you won't need the code next time.");await other.getByRole('button',{name:'Later',exact:true}).click();await expect(other.getByRole('button',{name:'Add a passkey to this device',exact:true})).toBeVisible();await expect(other.getByText('Signed in.',{exact:true})).toBeVisible();
- const otherCdp=await second.newCDPSession(other);await otherCdp.send('WebAuthn.enable');await otherCdp.send('WebAuthn.addVirtualAuthenticator',{options:{protocol:'ctap2',transport:'internal',hasResidentKey:true,hasUserVerification:true,isUserVerified:true,automaticPresenceSimulation:true}});
- await other.getByRole('button',{name:'Add a passkey to this device',exact:true}).click();await other.getByRole('button',{name:'I saved my code',exact:true}).click();await expect(other.getByRole('button',{name:'Add a passkey to this device',exact:true})).toHaveCount(0);
- const uid=(await (await other.request.get('/api/me')).json()).user.id;await other.evaluate(uid=>localStorage.removeItem('passkey:'+uid),uid);await other.reload();await other.getByRole('button',{name:'Account settings',exact:true}).click();await other.getByRole('button',{name:'Add a passkey to this device',exact:true}).click();await expect(other.getByRole('status')).toContainText('This device already has a passkey.');await expect(other.getByRole('button',{name:'Add a passkey to this device',exact:true})).toHaveCount(0);
+ await emailSignin(other,email);
+ await expect(other.getByText('Signed in.',{exact:true})).toBeVisible();await expect(other.getByRole('button',{name:'Add a passkey to this device',exact:true})).toHaveCount(0);
+ const uid=(await (await other.request.get('/api/me')).json()).user.id;
 
  await page.getByRole('button',{name:'Sign out everywhere',exact:true}).click();const confirm=page.getByRole('dialog',{name:'Sign out everywhere?',exact:true});await expect(confirm).toBeVisible();expect((await (await page.request.get('/api/me')).json()).user).toBeTruthy();await shot(page,info,'signout-confirm');
  await confirm.getByRole('button',{name:'Sign out everywhere',exact:true}).click();await expect(page.getByText('Account data removed from this device.',{exact:false})).toBeVisible();

@@ -62,25 +62,37 @@ async function learned(page: Page) {
   await expect(page.getByRole('heading', { name: 'Learned', level: 1, exact: true })).toBeVisible();
   await expect(page.getByText(/Next review ·/)).toBeVisible();
 }
+async function emailSignin(page: Page, email: string) {
+  await page.getByLabel('Email address', { exact: true }).fill(email);
+  await page.getByRole('button', { name: 'Email me a code', exact: true }).click();
+  await expect(page.getByLabel('Six-digit code')).toBeVisible();
+  const response = await page.request.get('/api/test/last-code?email=' + encodeURIComponent(email));
+  expect(response.ok()).toBe(true);
+  const { code } = await response.json();
+  expect(code).toMatch(/^\d{6}$/);
+  await page.getByLabel('Six-digit code').fill(code);
+  await expect(page.getByText('Signed in.',{exact:true})).toBeVisible();
+}
+async function enrollLegacy(page:Page){
+ const cdp=await page.context().newCDPSession(page);await cdp.send('WebAuthn.enable');await cdp.send('WebAuthn.addVirtualAuthenticator',{options:{protocol:'ctap2',transport:'internal',hasResidentKey:true,hasUserVerification:true,isUserVerified:true,automaticPresenceSimulation:true}});
+ const options=await (await page.request.post('/api/auth/register/options',{headers:{Origin:new URL(page.url()).origin},data:{displayName:'Legacy account'}})).json();
+ const response=await page.evaluate(async options=>{
+  const decode=(v:string)=>Uint8Array.from(atob(v.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
+  const publicKey={...options,challenge:decode(options.challenge),user:{...options.user,id:decode(options.user.id)},excludeCredentials:(options.excludeCredentials||[]).map((c:any)=>({...c,id:decode(c.id)}))};
+  return (await navigator.credentials.create({publicKey}) as any).toJSON();
+ },options);
+ const registration=await page.request.post('/api/auth/register/verify',{headers:{Origin:new URL(page.url()).origin},data:{response}});expect(registration.ok()).toBe(true);
+ return {cdp,code:(await registration.json()).recoveryCode};
+}
+
 async function register(page: Page, info?: TestInfo) {
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send('WebAuthn.enable');
-  await cdp.send('WebAuthn.addVirtualAuthenticator', { options: {
-    protocol: 'ctap2', transport: 'internal', hasResidentKey: true,
-    hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true,
-  } });
-  await page.getByRole('button', { name: 'Create account with a passkey', exact: true }).click();
-  await expect(page.getByRole('dialog', { name: 'Your one-time recovery code' })).toBeVisible();
-  const code = (await page.getByTestId('recovery-code').innerText()).trim();
-  expect(code.length).toBeGreaterThanOrEqual(24);
-  await expect(page.getByRole('dialog')).toHaveCount(1);
-  await page.getByRole('button', { name: 'I saved my code', exact: true }).click();
+  const email = `ui-${crypto.randomUUID()}@example.com`;
+  await emailSignin(page, email);
   const merge = page.getByRole('dialog').filter({ hasText: /items? on this device/ });
   if (await merge.count()) await merge.getByRole('button', { name: 'Add', exact: true }).click();
-  if (info) await screen(page, info, 'account-passkey-created');
-
-  await expect(page.getByText('Signed in.')).toBeVisible();
-  return { code, cdp };
+  if (info) await screen(page, info, 'account-email-created');
+  await expect(page.getByText('Signed in.', {exact:true})).toBeVisible();
+  return {email};
 }
 
 
@@ -114,7 +126,9 @@ test('empty Today, every tab, settings persistence, local export, and own-text v
   await screen(page, info, 'discover-own-validation');
   await account(page);
   await expect(page.getByRole('button', { name: 'Continue with Google' })).toHaveCount(0);
+  await page.getByText('Signed up before November 14?', {exact:true}).click();
   await expect(page.getByRole('button', { name: 'Use recovery code' })).toBeDisabled();
+  await page.getByText('Signed up before November 14?', {exact:true}).click();
   const reminders=page.getByRole('button', { name: 'Enable reminders', exact: true });
   if(await reminders.isEnabled()){await reminders.click();await expect(page.getByRole('alert')).toHaveText('Sign in to enable reminders.')}else{await expect(page.getByRole('region',{name:'Reminders',exact:true})).toContainText(/Permission denied|Add to Home Screen/)}
   await screen(page, info, 'account-signed-out');
@@ -303,12 +317,12 @@ test('shortcut success and failed blank review returns to step 3', async ({ page
   await step(page, 3);
 });
 
-test('passkey signup, sync, signout, signin, recovery rotation, export and account deletion', async ({ page }, info) => {
+test('email signup, sync, signout, signin, export and account deletion', async ({ page }, info) => {
   await addOwn(page, 'Synced promise', 'Good words travel with you.');
   await account(page);
   await page.getByLabel('Display name').fill('Test pilgrim');
   await page.getByLabel('Display name').press('Tab');
-  const { code, cdp } = await register(page, info);
+  const { email } = await register(page, info);
   await screen(page, info, 'account-signed-in');
   await expect.poll(async () => {
     const synced = await page.request.get('/api/export');
@@ -316,23 +330,10 @@ test('passkey signup, sync, signout, signin, recovery rotation, export and accou
     return JSON.stringify(await synced.json());
   }).toContain('Synced promise');
   await signout(page);
-  await expect(page.getByRole('button', { name: 'Sign in with a passkey', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Email me a code', exact: true })).toBeVisible();
   expect(await (await page.request.get('/api/me')).json()).toMatchObject({ user: null });
-  await page.getByRole('button', { name: 'Sign in with a passkey', exact: true }).click();
+  await emailSignin(page, email);
   await expect(page.getByText('Signed in.')).toBeVisible();
-  await signout(page);
-  await page.getByLabel('One-time recovery code').fill(code);
-  await page.getByRole('button', { name: 'Use recovery code', exact: true }).click();
-  await expect(page.getByTestId('recovery-code')).not.toHaveText(code);
-  await screen(page, info, 'account-recovery-code');
-  await page.getByRole('button', { name: 'I saved my code', exact: true }).click();
-  await page.getByRole('button', {name:'Later',exact:true}).click();
-  await signout(page);
-  await page.getByLabel('One-time recovery code').fill(code);
-  await page.getByRole('button', { name: 'Use recovery code', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('Invalid or already used recovery code');
-  await screen(page, info, 'account-recovery-used');
-  await page.getByRole('button', { name: 'Sign in with a passkey', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Export your data', exact: true }).click();
@@ -353,13 +354,18 @@ test('passkey signup, sync, signout, signin, recovery rotation, export and accou
   await screen(page, info, 'account-deleted');
   await tab(page, 'Today');
   await expect(page.getByRole('button', { name: /Synced promise/ })).toBeVisible();
-  await cdp.detach();
+});
+
+test('legacy recovery rotation and single-use remain available in the disclosure',async({page},info)=>{
+ await account(page);const {code,cdp}=await enrollLegacy(page);await page.reload();await account(page);await expect(page.getByText('Signed in.',{exact:true})).toBeVisible();await signout(page);
+ await page.getByText('Signed up before November 14?',{exact:true}).click();await page.getByLabel('One-time recovery code').fill(code);await page.getByRole('button',{name:'Use recovery code',exact:true}).click();await expect(page.getByTestId('recovery-code')).not.toHaveText(code);await screen(page,info,'account-recovery-code');await page.getByRole('button',{name:'I saved my code',exact:true}).click();await signout(page);
+ await page.getByText('Signed up before November 14?',{exact:true}).click();await page.getByLabel('One-time recovery code').fill(code);await page.getByRole('button',{name:'Use recovery code',exact:true}).click();await expect(page.getByRole('alert')).toContainText('Invalid or already used recovery code');await screen(page,info,'account-recovery-used');await cdp.detach();
 });
 
 test('push permission, mock subscription, test notification and disable', async ({ page }, info) => {
   const subscriptions: unknown[] = [];
   let notificationTests = 0;
-  await page.route('**/api/config', route => route.fulfill({ json: { googleEnabled: false, vapidPublicKey: 'B' + 'A'.repeat(86) } }));
+  await page.route('**/api/config', route => route.fulfill({ json: { email: true, googleEnabled: false, vapidPublicKey: 'B' + 'A'.repeat(86) } }));
   await page.route('**/api/push/subscribe', async route => {
     subscriptions.push(route.request().postDataJSON());
     await route.fulfill({ json: { ok: true } });
@@ -383,7 +389,7 @@ test('push permission, mock subscription, test notification and disable', async 
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Today', exact: true })).toBeVisible();
   await account(page);
-  const { cdp } = await register(page, info);
+  await register(page, info);
   await page.getByRole('button', { name: 'Enable reminders', exact: true }).click();
   await expect(page.getByRole('status')).toHaveText('Gentle reminders enabled.');
   expect(subscriptions).toEqual([{ subscription: { endpoint: 'https://push.example.invalid/byheart-test', keys: { p256dh: 'mock-p256dh', auth: 'mock-auth' } } }]);
@@ -396,7 +402,6 @@ test('push permission, mock subscription, test notification and disable', async 
   expect(subscriptions.at(-1)).toEqual({ subscription: null,endpoint:'https://push.example.invalid/byheart-test' });
   await page.getByRole('button', { name: 'Delete account', exact: true }).click();
   await page.getByRole('button', { name: 'Yes, delete account', exact: true }).click();
-  await cdp.detach();
 });
 
 for (const choice of ['Start', 'Check what I remember']) test(`gentle return welcome caps the backlog before and after ${choice}`, async ({ page }, info) => {

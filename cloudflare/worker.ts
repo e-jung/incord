@@ -13,6 +13,9 @@ export interface Env {
   REGISTRY: DurableObjectNamespace;
   SESSION_SECRET: string;
   APP_ORIGIN?: string;
+  RESEND_API_KEY?: string;
+  EMAIL_FROM?: string;
+  EMAIL_TEST_SINK?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
   VAPID_PUBLIC_KEY?: string;
@@ -34,6 +37,20 @@ export function unb64(data: string): Uint8Array<ArrayBuffer> { return Uint8Array
 const random = (n = 32) => b64(crypto.getRandomValues(new Uint8Array(n)));
 async function digest(value: string) { return b64(new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(value)))); }
 async function hmac(secret: string, data: string) { const key = await crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']); return b64(new Uint8Array(await crypto.subtle.sign('HMAC', key, encoder.encode(data)))); }
+/** Rejection sampling keeps all million possible codes equally likely. */
+export function generateLoginCode() { const value = new Uint32Array(1); do { crypto.getRandomValues(value); } while (value[0] >= 4_294_000_000); return String(value[0] % 1_000_000).padStart(6, '0'); }
+export function normalizeEmail(value: unknown) { assert(typeof value === 'string', 'Enter a valid email address.'); const email = value.trim().toLowerCase(); assert(email.length <= 254 && /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email), 'Enter a valid email address.'); return email; }
+export const emailKey = (env: Env, email: string) => hmac(env.SESSION_SECRET, 'email:' + normalizeEmail(email));
+export const loginCodeHash = (env: Env, key: string, code: string) => hmac(env.SESSION_SECRET, 'email-code:' + key + ':' + code);
+export function constantTimeEqual(a: string, b: string) { let diff = a.length ^ b.length; for (let i = 0; i < Math.max(a.length, b.length); i++) diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0); return diff === 0; }
+export function emailTestMode(env: Env, request: Request) { return env.EMAIL_TEST_SINK === '1' && ['localhost', '127.0.0.1'].includes(new URL(request.url).hostname); }
+function emailEnabled(env: Env, request: Request) { return !!(env.RESEND_API_KEY || emailTestMode(env, request)); }
+export async function sendLoginCode(env: Env, to: string, code: string) {
+  const message = { from: env.EMAIL_FROM || 'Incord <signin@incord.jesklabs.com>', reply_to: 'incord-support@googlegroups.com', to, subject: `Your Incord code: ${code}`, text: `Your Incord sign-in code is ${code}. It expires in 10 minutes. If you didn't ask for this code, ignore this email.`, html: `<p>Your Incord sign-in code is <strong>${code}</strong>.</p><p>It expires in 10 minutes. If you didn't ask for this code, ignore this email.</p>` };
+  if (env.RESEND_API_KEY) { try { const response = await fetch('https://api.resend.com/emails', { method: 'POST', redirect: 'manual', headers: { Authorization: 'Bearer ' + env.RESEND_API_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify(message) }); assert(response.ok, 'We couldn’t send your code. Please try again shortly.', 503); } catch { throw new ApiError(503, 'We couldn’t send your code. Please try again shortly.'); } }
+  else throw new ApiError(404, 'Email sign-in is not enabled.');
+}
+async function identityFlags(env: Env, uid: string) { return registry(env, '/identity', { uid }); }
 export async function signSession(session: Session, secret: string) { const value = b64(encoder.encode(JSON.stringify(session))); return value + '.' + await hmac(secret, value); }
 export async function readSession(value: string | undefined, secret: string): Promise<Session | null> {
   try { if (!value || value.length > 2048) return null; const [payload, signature, extra] = value.split('.'); if (extra || !signature) return null;
@@ -78,11 +95,11 @@ function secure(response: Response) {
   headers.set('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
   return new Response(response.body, { status: response.status, headers });
 }
-async function issue(env: Env, uid: string, origin: string, extra: ObjectData = {}) { const me = await user(env, uid, '/me'); const token = await signSession({ uid, version: me.version, exp: Math.floor(Date.now() / 1000) + SESSION_AGE }, env.SESSION_SECRET); return json({ user: me.user, ...extra }, 200, { 'Set-Cookie': cookie(cookieName, token, SESSION_AGE, origin) }); }
+async function issue(env: Env, uid: string, origin: string, extra: ObjectData = {}) { const me = await user(env, uid, '/me'); const token = await signSession({ uid, version: me.version, exp: Math.floor(Date.now() / 1000) + SESSION_AGE }, env.SESSION_SECRET); return json({ user: { ...me.user, ...await identityFlags(env, uid) }, ...extra }, 200, { 'Set-Cookie': cookie(cookieName, token, SESSION_AGE, origin) }); }
 async function signedIn(request: Request, env: Env) { const s = await readSession(cookies(request)[cookieName], env.SESSION_SECRET); assert(s, 'Sign in required', 401); const me = await user(env, s.uid, '/me'); assert(me.version === s.version, 'Session expired', 401); return s; }
 function originFor(request: Request, env: Env) { const origin = new URL(request.url).origin; if (env.APP_ORIGIN) assert(origin === new URL(env.APP_ORIGIN).origin, 'Wrong host', 403); return origin; }
 async function authChallenge(env: Env, request: Request, kind: string) { const id = cookies(request).bh_flow; assert(id, 'Start sign-in again'); const flow = await registry(env, '/challenge/take', { id }); assert(flow && flow.kind === kind, 'Sign-in expired; start again'); return flow as Challenge; }
-async function recoveryCode(env: Env, uid: string) { const code = random(24); await registry(env, '/recovery/set', { uid, hash: await digest(code) }); return code; }
+async function recoveryCode(env: Env, uid: string) { const flags = await identityFlags(env, uid); if (flags.hasEmail || flags.hasGoogle) return undefined; const code = random(24); await registry(env, '/recovery/set', { uid, hash: await digest(code) }); return code; }
 
 /** Telemetry is deliberately lossy: never forward arbitrary exception text or URLs. */
 export function clientErrorRecord(input: ObjectData, origin: string) {
@@ -103,8 +120,10 @@ export function clientErrorRecord(input: ObjectData, origin: string) {
 async function api(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url), path = url.pathname, origin = originFor(request, env);
   if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method)) assert(request.headers.get('Origin') === origin, 'Cross-origin write denied', 403);
-  if (path === '/api/config' && request.method === 'GET') return json({ passkeys: true, google: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET), googleEnabled: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET), push: !!(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY), vapidPublicKey: env.VAPID_PUBLIC_KEY || null });
+  if (path === '/api/config' && request.method === 'GET') return json({ email: emailEnabled(env, request), passkeys: true, google: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET), googleEnabled: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET), push: !!(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY), vapidPublicKey: env.VAPID_PUBLIC_KEY || null });
+  if (path === '/api/test/last-code') assert(emailTestMode(env, request) && request.method === 'GET', 'Not found', 404);
   assert(env.SESSION_SECRET?.length >= 32, 'Service secrets are not configured', 503);
+  if (path === '/api/test/last-code') { assert(emailTestMode(env, request) && request.method === 'GET', 'Not found', 404); return json(await registry(env, '/email/test-get', { key: await emailKey(env, normalizeEmail(url.searchParams.get('email'))) })); }
   if (path === '/api/log' && request.method === 'POST') {
     await registry(env, '/limit', { key: 'log:' + await digest(env.SESSION_SECRET + ':' + (request.headers.get('CF-Connecting-IP') || 'local')), limit: 10, window: 60_000 });
     const input = await body(request, 2048);
@@ -118,6 +137,22 @@ async function api(request: Request, env: Env): Promise<Response> {
   if (path.startsWith('/api/auth/')) {
     await registry(env, '/limit', { key: await digest(env.SESSION_SECRET + ':' + (request.headers.get('CF-Connecting-IP') || 'local')), limit: 60, window: 900_000 });
     const rpID = url.hostname;
+    if ((path === '/api/auth/email/start' || path === '/api/auth/email/verify') && request.method === 'POST') {
+      assert(emailEnabled(env, request), 'Email sign-in is not enabled.', 404);
+      const input = await body(request, 2048), email = normalizeEmail(input.email), key = await emailKey(env, email);
+      const linkUid = input.link === true ? (await signedIn(request, env)).uid : undefined;
+      if (path.endsWith('/start')) {
+        const code = generateLoginCode(), hash = await loginCodeHash(env, key, code);
+        await registry(env, '/email/start', { key, hash, uid: linkUid, ip: await hmac(env.SESSION_SECRET, 'email-ip:' + (request.headers.get('CF-Connecting-IP') || 'local')), ...(emailTestMode(env, request) ? { testCode: code } : {}) });
+        if (!emailTestMode(env, request)) await sendLoginCode(env, email, code);
+        return json({ ok: true, message: 'Check your email for a six-digit code.' });
+      }
+      assert(typeof input.code === 'string' && /^\d{6}$/.test(input.code), 'Enter the six-digit code.');
+      const result = await registry(env, '/email/verify', { key, hash: await loginCodeHash(env, key, input.code), uid: linkUid });
+      await user(env, result.uid, '/init', { name: 'Friend' });
+      return issue(env, result.uid, origin);
+    }
+
     if (path === '/api/auth/register/options' && request.method === 'POST') {
       const input = await body(request), name = typeof (input.displayName ?? input.name) === 'string' ? String(input.displayName ?? input.name).trim().slice(0, 80) : 'Friend';
       const old = await readSession(cookies(request)[cookieName], env.SESSION_SECRET); let uid = crypto.randomUUID(); let credentials: any[] = [];
@@ -158,17 +193,20 @@ async function api(request: Request, env: Env): Promise<Response> {
     if (path === '/api/auth/google' && request.method === 'GET') {
       assert(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET, 'Google sign-in is not enabled', 404); const state = random(), verifier = random(48);
       await registry(env, '/challenge/set', { id: state, value: { kind: 'google', challenge: state, verifier } });
-      const target = new URL('https://accounts.google.com/o/oauth2/v2/auth'); target.search = new URLSearchParams({ client_id: env.GOOGLE_CLIENT_ID, redirect_uri: origin + '/api/auth/google/callback', response_type: 'code', scope: 'openid profile', state, code_challenge: await digest(verifier), code_challenge_method: 'S256' }).toString();
+      const target = new URL('https://accounts.google.com/o/oauth2/v2/auth'); target.search = new URLSearchParams({ client_id: env.GOOGLE_CLIENT_ID, redirect_uri: origin + '/api/auth/google/callback', response_type: 'code', scope: 'openid profile email', state, code_challenge: await digest(verifier), code_challenge_method: 'S256' }).toString();
       return new Response(null, { status: 302, headers: { Location: target.href, 'Set-Cookie': cookie('bh_flow', state, 300, origin), 'Cache-Control': 'no-store' } });
     }
     if (path === '/api/auth/google/callback' && request.method === 'GET') {
       assert(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET, 'Google sign-in is not enabled', 404); assert(url.searchParams.get('state') === cookies(request).bh_flow, 'Invalid OAuth state'); const flow = await authChallenge(env, request, 'google'); const code = url.searchParams.get('code'); assert(code, 'Google sign-in cancelled');
       const tokens = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: new URLSearchParams({ client_id: env.GOOGLE_CLIENT_ID, client_secret: env.GOOGLE_CLIENT_SECRET, code, code_verifier: flow.verifier!, grant_type: 'authorization_code', redirect_uri: origin + '/api/auth/google/callback' }) }); assert(tokens.ok, 'Google sign-in failed', 401);
       const token = await tokens.json<{ access_token: string }>(); const profileResponse = await fetch('https://openidconnect.googleapis.com/v1/userinfo', { headers: { Authorization: 'Bearer ' + token.access_token } }); assert(profileResponse.ok, 'Google sign-in failed', 401);
-      const profile = await profileResponse.json<{ sub: string; name?: string; email_verified?: boolean }>(); assert(profile.sub, 'Google profile missing', 401);
-      const mapping = await registry(env, '/google', { sub: profile.sub }); await user(env, mapping.uid, '/init', { name: profile.name || 'Friend' });
+      const profile = await profileResponse.json<{ sub: string; name?: string; email?: string; email_verified?: boolean; hd?: string }>(); assert(profile.sub, 'Google profile missing', 401);
+      // Google is authoritative only for Gmail or verified Workspace addresses.
+      // Other verified addresses may have changed owners since Google verified them.
+      const verifiedEmail = profile.email_verified === true && profile.email ? normalizeEmail(profile.email) : undefined;
+      const authoritativeEmail = verifiedEmail && (verifiedEmail.endsWith('@gmail.com') || (profile.hd && verifiedEmail.endsWith('@' + profile.hd.toLowerCase())));
+      const mapping = await registry(env, '/google', { sub: profile.sub, ...(authoritativeEmail ? { emailKey: await emailKey(env, verifiedEmail!) } : {}) }); await user(env, mapping.uid, '/init', { name: profile.name || 'Friend' });
       const login = await issue(env, mapping.uid, origin);
-      if (mapping.created) await user(env, mapping.uid, '/recovery/pending', { needed: true });
       return new Response(null, { status: 302, headers: { Location: '/?signedIn=1', 'Set-Cookie': login.headers.get('Set-Cookie')!, 'Cache-Control': 'no-store' } });
     }
     throw new ApiError(404, 'Route not found');
@@ -176,7 +214,7 @@ async function api(request: Request, env: Env): Promise<Response> {
   let session: Session;
   try { session = await signedIn(request, env); } catch (error) { if (path === '/api/me' && request.method === 'GET' && error instanceof ApiError && error.status === 401) return json({ user: null, ...(error.message === 'Session expired' ? { signedOutEverywhere: true } : {}) }); throw error; }
   const uid = session.uid;
-  if (path === '/api/me' && request.method === 'GET') { const me = await user(env, uid, '/me', { takeRecovery: true }); return json({ user: me.user, ...(me.needsRecovery ? { recoveryCode: await recoveryCode(env, uid) } : {}) }); }
+  if (path === '/api/me' && request.method === 'GET') { const me = await user(env, uid, '/me', { takeRecovery: true }), flags = await identityFlags(env, uid); return json({ user: { ...me.user, ...flags }, ...(me.needsRecovery && !flags.hasEmail && !flags.hasGoogle ? { recoveryCode: await recoveryCode(env, uid) } : {}) }); }
   if (path === '/api/sync' && request.method === 'POST') { const input = await body(request); const result = await user(env, uid, '/sync', input); await registry(env, '/schedule/set', { uid }); return json(result); }
   if (path === '/api/export' && request.method === 'GET') return json(await user(env, uid, '/export'), 200, { 'Content-Disposition': 'attachment; filename="incord.json"' });
   if (path === '/api/account' && request.method === 'DELETE') { await user(env, uid, '/delete'); await registry(env, '/delete', { uid }); return json({ ok: true }, 200, { 'Set-Cookie': cookie(cookieName, '', 0, origin) }); }
@@ -254,6 +292,8 @@ export class RegistryDO {
     this.sql.exec('CREATE INDEX IF NOT EXISTS mapping_user ON mapping(uid)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS challenges(id TEXT PRIMARY KEY,value TEXT NOT NULL,expires INTEGER NOT NULL)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS limits(id TEXT PRIMARY KEY,count INTEGER NOT NULL,expires INTEGER NOT NULL)');
+    this.sql.exec('CREATE TABLE IF NOT EXISTS email_codes(id TEXT PRIMARY KEY,hash TEXT NOT NULL,expires INTEGER NOT NULL,attempts INTEGER NOT NULL,uid TEXT)');
+    this.sql.exec('CREATE TABLE IF NOT EXISTS email_test(id TEXT PRIMARY KEY,code TEXT NOT NULL,expires INTEGER NOT NULL)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS schedule(uid TEXT PRIMARY KEY,next_at INTEGER NOT NULL)');
   }
   private rows(query: string, ...args: (string | number)[]) { return [...this.sql.exec<Row>(query, ...args)]; }
@@ -267,10 +307,40 @@ export class RegistryDO {
     if (path === '/credential/get') return json(this.rows('SELECT uid FROM mapping WHERE kind=? AND id=?', 'credential', data.id)[0] || {});
     if (path === '/recovery/set') { this.ctx.storage.transactionSync(() => { this.sql.exec('DELETE FROM mapping WHERE kind=? AND uid=?', 'recovery', data.uid); this.sql.exec('INSERT INTO mapping VALUES(?,?,?)', 'recovery', data.hash, data.uid); }); return json({ ok: true }); }
     if (path === '/recovery/take') { const row = this.rows('SELECT uid FROM mapping WHERE kind=? AND id=?', 'recovery', data.hash)[0]; this.sql.exec('DELETE FROM mapping WHERE kind=? AND id=?', 'recovery', data.hash); return json(row || {}); }
-    if (path === '/google') { const old = this.rows('SELECT uid FROM mapping WHERE kind=? AND id=?', 'google', data.sub)[0]; if (old) return json(old); const uid = crypto.randomUUID(); this.sql.exec('INSERT INTO mapping VALUES(?,?,?)', 'google', data.sub, uid); return json({ uid, created: true }); }
+    if (path === '/identity') { const kinds = this.rows('SELECT DISTINCT kind FROM mapping WHERE uid=?', data.uid).map(r => r.kind); return json({ hasEmail: kinds.includes('email'), hasGoogle: kinds.includes('google') }); }
+    if (path === '/email/test-get') return json(this.rows('SELECT code FROM email_test WHERE id=? AND expires>?', data.key, now)[0] || {});
+    if (path === '/email/start') {
+      this.sql.exec('DELETE FROM email_codes WHERE expires<=?', now); this.sql.exec('DELETE FROM email_test WHERE expires<=?', now);
+      // Both counters and replacement are one synchronous transaction.
+      this.ctx.storage.transactionSync(() => {
+        for (const [id, limit] of [['email:' + data.key, 3], ['email-ip:' + data.ip, 10]] as const) { const row = this.rows('SELECT count FROM limits WHERE id=?', id)[0]; assert(!row || Number(row.count) < limit, 'Too many codes requested. Please try again in 15 minutes.', 429); }
+        for (const id of ['email:' + data.key, 'email-ip:' + data.ip]) this.sql.exec('INSERT INTO limits VALUES(?,1,?) ON CONFLICT(id) DO UPDATE SET count=count+1', id, now + 900_000);
+        this.sql.exec('INSERT OR REPLACE INTO email_codes VALUES(?,?,?,0,?)', data.key, data.hash, now + 600_000, data.uid || null);
+        if (data.testCode) this.sql.exec('INSERT OR REPLACE INTO email_test VALUES(?,?,?)', data.key, data.testCode, now + 600_000);
+      }); return json({ ok: true });
+    }
+    if (path === '/email/verify') {
+      const row = this.rows('SELECT * FROM email_codes WHERE id=?', data.key)[0];
+      assert(row && Number(row.expires) > now && Number(row.attempts) < 5, 'That code is invalid or expired. Request a new code.', 401);
+      const valid = constantTimeEqual(String(row.hash), data.hash) && (row.uid || undefined) === data.uid;
+      if (!valid) { this.sql.exec('UPDATE email_codes SET attempts=attempts+1 WHERE id=?', data.key); if (Number(row.attempts) >= 4) this.sql.exec('DELETE FROM email_codes WHERE id=?', data.key); throw new ApiError(401, 'That code is invalid or expired. Request a new code.'); }
+      this.sql.exec('DELETE FROM email_codes WHERE id=?', data.key); this.sql.exec('DELETE FROM email_test WHERE id=?', data.key);
+      const old = this.rows('SELECT uid FROM mapping WHERE kind=? AND id=?', 'email', data.key)[0];
+      assert(!data.uid || !old || old.uid === data.uid, 'That email already belongs to another account.', 409);
+      const uid = data.uid || old?.uid || crypto.randomUUID(); this.sql.exec('INSERT OR IGNORE INTO mapping VALUES(?,?,?)', 'email', data.key, uid); return json({ uid });
+    }
+    if (path === '/google') {
+      const old = this.rows('SELECT uid FROM mapping WHERE kind=? AND id=?', 'google', data.sub)[0];
+      const email = data.emailKey ? this.rows('SELECT uid FROM mapping WHERE kind=? AND id=?', 'email', data.emailKey)[0] : undefined;
+      const uid = old?.uid || email?.uid || crypto.randomUUID();
+      this.sql.exec('INSERT OR IGNORE INTO mapping VALUES(?,?,?)', 'google', data.sub, uid);
+      // An existing Google identity wins; never steal another account's email.
+      if (data.emailKey) this.sql.exec('INSERT OR IGNORE INTO mapping VALUES(?,?,?)', 'email', data.emailKey, uid);
+      return json({ uid });
+    }
     if (path === '/schedule/set') { this.sql.exec('INSERT OR IGNORE INTO schedule VALUES(?,0)', data.uid); return json({ ok: true }); }
     if (path === '/schedule/due') { const users = this.rows('SELECT uid FROM schedule WHERE next_at<=? ORDER BY next_at LIMIT 200', now).map(row => row.uid); for (const uid of users) this.sql.exec('UPDATE schedule SET next_at=? WHERE uid=?', now + 15 * 60_000, uid); return json({ users }); }
-    if (path === '/delete') { this.sql.exec('DELETE FROM mapping WHERE uid=?', data.uid); this.sql.exec("DELETE FROM challenges WHERE json_extract(value,'$.uid')=?", data.uid); this.sql.exec('DELETE FROM schedule WHERE uid=?', data.uid); return json({ ok: true }); }
+    if (path === '/delete') { this.sql.exec('DELETE FROM mapping WHERE uid=?', data.uid); this.sql.exec("DELETE FROM challenges WHERE json_extract(value,'$.uid')=?", data.uid); this.sql.exec('DELETE FROM email_codes WHERE uid=?', data.uid); this.sql.exec('DELETE FROM schedule WHERE uid=?', data.uid); return json({ ok: true }); }
     return json({ error: 'Not found' }, 404);
   } catch (e) { if (e instanceof ApiError) return json({ error: e.message }, e.status); throw e; } }); }
 }

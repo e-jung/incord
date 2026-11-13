@@ -31,17 +31,18 @@
   <p>Everything you add and practice stays on your device, in your browser's storage.</p>
 
   <h2>With an account</h2>
+  <p>Email sign-in sends a short-lived, six-digit code through our email delivery provider. Your email address is used only to send sign-in codes, never for marketing. Incord stores only a one-way keyed hash of the address, not the address itself. Codes are stored as hashes, expire after 10 minutes, and can be used only once.</p>
   <p>If you create an account, Incord stores what it needs to sync your library across devices:</p>
   <ul>
     <li>the display name you choose and your app settings;</li>
     <li>your library (passage references and text you added yourself) and your practice history;</li>
-    <li>passkey public keys, which are not secrets, and a hashed recovery code;</li>
+    <li>a one-way keyed hash of your email address if you choose email or Google sign-in, and legacy passkey public keys and hashed recovery codes for older accounts;</li>
     <li>if you turn on reminders, your reminder time, time zone and the push address your browser provides.</li>
   </ul>
   <p>ESV text is fetched on demand and kept only on your device. It is never stored on Incord's servers.</p>
 
   <h2>Sign in with Google</h2>
-  <p>If you choose Google sign-in, Incord receives your Google account ID and your name. It uses them only to sign you in. Incord does not read your email, contacts, files or any other Google data, and never shares your Google information with anyone.</p>
+  <p>If you choose Google sign-in, Incord receives your Google account ID, your name, and your verified email address. It uses them only to sign you in, including recognizing the same verified email used for email sign-in. Your email is stored only as the same one-way keyed hash, not as a readable address. Incord does not read your inbox, contacts, or files, and does not sell your Google information or use it for advertising.</p>
 
   <h2>Anonymous usage counts</h2>
   <p>Incord keeps daily totals, such as how many people practiced today or how many steps were passed, so the app can be improved. These totals contain no account identity, passage references or text. You can turn them off in Settings → Privacy. They are off automatically if your browser sends Global Privacy Control or Do Not Track.</p>

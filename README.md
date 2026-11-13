@@ -1,7 +1,7 @@
 # Incord
 A little practice. A lasting word.
 
-An offline-first mobile PWA for Scripture, catechisms, and creeds. Light/dark tactile UI, automatic first-letter learning ladder, FSRS review, local practice without an account, optional passkey sync and gentle Web Push.
+An offline-first mobile PWA for Scripture, catechisms, and creeds. Light/dark tactile UI, automatic first-letter learning ladder, FSRS review, local practice without an account, optional email-code/Google account sync and gentle Web Push.
 
 ## Run locally
 Node 24 required.
@@ -31,7 +31,7 @@ Screenshots are written to test-results/screens/. Tests use disposable localhost
 Normal builds use committed generated public-domain JSON. Bible books download into the offline cache only when first opened; starter paths and full documents are in the offline shell. See content/SOURCES.md and scripts/build-content.py --help for the reproducible source pipeline.
 
 ## Production (after review)
-Build assets, configure SESSION_SECRET (32+ random bytes), APP_ORIGIN, optional VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY/VAPID_SUBJECT, optional GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET. Configure Google's callback to /api/auth/google/callback. VAPID private key is the base64url P-256 scalar. Use the same stable session secret and VAPID key across releases. Wrangler config includes the 15-minute reminder cron and SQLite Durable Object migrations. Use `scripts/deploy.sh` only after review; it supplies `APP_ORIGIN=https://incord.jesklabs.com`. Wrangler’s configured build hook rebuilds assets immediately before local serve or deployment, including direct `wrangler deploy` calls. Vite stamps About/telemetry with `git rev-parse --short HEAD` at build time; commit release changes before deploying so pre-commit assets cannot carry an older SHA. This change has not been deployed or pushed.
+Build assets, configure SESSION_SECRET (32+ random bytes), APP_ORIGIN, optional VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY/VAPID_SUBJECT, optional GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET. Email sign-in requires RESEND_API_KEY. EMAIL_FROM optionally overrides the default Incord <signin@incord.jesklabs.com>; verify that sender domain in Resend. Every code email sets reply_to to incord-support@googlegroups.com. Google requests email scope to link verified Gmail/Workspace addresses with email-code identities; other Google accounts can explicitly add email sign-in. No new passkeys are offered; legacy passkeys/recovery remain available for migration. Configure Google's callback to /api/auth/google/callback. VAPID private key is the base64url P-256 scalar. Use the same stable session secret and VAPID key across releases. Wrangler config includes the 15-minute reminder cron and SQLite Durable Object migrations. Use `scripts/deploy.sh` only after review; it supplies `APP_ORIGIN=https://incord.jesklabs.com`. Wrangler’s configured build hook rebuilds assets immediately before local serve or deployment, including direct `wrangler deploy` calls. Vite stamps About/telemetry with `git rev-parse --short HEAD` at build time; commit release changes before deploying so pre-commit assets cannot carry an older SHA. This change has not been deployed or pushed.
 
 
 ## Live-stack smoke
@@ -50,7 +50,7 @@ Local Wrangler commands disable route-based origin inference so WebAuthn sees `l
 
 The canonical origin is **https://incord.jesklabs.com**. Keep both custom-domain routes in `wrangler.jsonc`. The Worker script remains **byheart**, with the existing UserDO/RegistryDO bindings, migration history and internal storage keys intact: renaming them would strand production accounts. The repository directory need not change.
 
-The old origin redirects pages to the same path/query on Incord (301). Old `/api/*` calls return a 410 JSON update message; old `/sw.js` unregisters and moves open windows to Incord. `/.well-known/webauthn` on the old origin advertises Incord as a related origin. Existing passkeys remain bound to their old RP ID: supporting browsers can use the related-origin flow, otherwise use a recovery code and add a new Incord passkey. Browser IndexedDB and push subscriptions cannot transfer across origins. Re-enable reminders on the new origin; account sync recovers saved public-domain items and practice history. Unsynced device-only material remains on the old origin and is not automatically migrated.
+The old origin redirects pages to the same path/query on Incord (301). Old `/api/*` calls return a 410 JSON update message; old `/sw.js` unregisters and moves open windows to Incord. `/.well-known/webauthn` on the old origin advertises Incord as a related origin. Existing passkeys remain bound to their old RP ID: supporting browsers can use the related-origin flow, otherwise use a recovery code, then add email sign-in from Account. Browser IndexedDB and push subscriptions cannot transfer across origins. Re-enable reminders on the new origin; account sync recovers saved public-domain items and practice history. Unsynced device-only material remains on the old origin and is not automatically migrated.
 
 ### Reviewed production deployment
 
@@ -85,3 +85,7 @@ It calls `/api/esv` exactly once, makes no retries and prints no verse text or c
 ## Privacy and private statistics
 
 Incord counts anonymous totals (like how many people practiced today) to improve the app. No ads, no third-party trackers. Account → Privacy can turn counts off; Global Privacy Control and Do Not Track also turn them off. Categorical events carry no account ID, IP, user agent, verse text, own text or references. Random device tokens rotate each local day. StatsDO deletes daily token sets after rolling them into counts. Weekly activity is the sum of daily active-device counts, **not deduplicated weekly people**. `/stats` uses `STATS_TOKEN` and a signed HttpOnly cookie; never put that token in a URL. Operational failure logs remain separate from anonymous usage counts.
+
+## Email-code local testing
+
+Use `--var EMAIL_TEST_SINK:1` with local Wrangler to intercept codes without contacting an email provider; GET `/api/test/last-code?email=person%40example.com` returns the last unexpired code on localhost/127.0.0.1 only. The sink and test delivery cannot activate on public hosts, even with the flag. Do not set this flag in production. Email mappings use a one-way keyed hash; keep SESSION_SECRET stable.

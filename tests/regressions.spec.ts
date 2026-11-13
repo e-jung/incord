@@ -41,20 +41,24 @@ async function account(page: Page) {
   await tab(page, 'Today');
   await page.getByRole('button', { name: 'Account settings', exact: true }).click();
 }
+async function emailSignin(page: Page, email: string) {
+  await page.getByLabel('Email address', { exact: true }).fill(email);
+  await page.getByRole('button', { name: 'Email me a code', exact: true }).click();
+  await expect(page.getByLabel('Six-digit code')).toBeVisible();
+  const response = await page.request.get('/api/test/last-code?email=' + encodeURIComponent(email));
+  expect(response.ok()).toBe(true);
+  const { code } = await response.json();
+  expect(code).toMatch(/^\d{6}$/);
+  await page.getByLabel('Six-digit code').fill(code);
+  await expect(page.getByText('Signed in.',{exact:true})).toBeVisible();
+}
 async function signup(page: Page) {
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send('WebAuthn.enable');
-  await cdp.send('WebAuthn.addVirtualAuthenticator', { options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true } });
-  await page.getByRole('button', { name: 'Create account with a passkey', exact: true }).click();
-  await expect(page.getByTestId('recovery-code')).toBeVisible();
-  // Registration with local items also requires explicit ownership confirmation.
-  await expect(page.getByRole('dialog')).toHaveCount(1);
-  await page.getByRole('button', { name: 'I saved my code', exact: true }).click();
+  const email=`regression-${crypto.randomUUID()}@example.com`;
+  await emailSignin(page,email);
   const merge = page.getByRole('dialog').filter({ hasText: /items? on this device/ });
   if (await merge.count()) await merge.getByRole('button', { name: 'Add', exact: true }).click();
-
   await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
-  return cdp;
+  return email;
 }
 
 test.beforeEach(async ({ page, context }) => {
@@ -186,14 +190,14 @@ for (const mode of ['passage', 'separate', 'chunks', 'large batch']) {
 
 test('P0-3 cached account survives offline reload, queues practice and syncs on reconnect without reload', async ({ page, context }) => {
   await account(page);
-  const cdp = await signup(page);
+  const email = await signup(page);
   await own(page, 'Offline account text');
   await expect.poll(async () => JSON.stringify(await (await page.request.get('/api/export')).json())).toContain('Offline account text');
   await page.evaluate(async () => { await navigator.serviceWorker.ready; if (!navigator.serviceWorker.controller) await new Promise<void>(resolve => navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), { once: true })); });
   await context.setOffline(true);
   await page.reload();
   await account(page);
-  await expect(page.getByRole('button', { name: 'Create account with a passkey', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Email me a code', exact: true })).toHaveCount(0);
   await expect(page.getByText('Offline · changes will sync', { exact: true })).toBeVisible();
   await openOwn(page, 'Offline account text');
   await type(page);
@@ -206,13 +210,13 @@ test('P0-3 cached account survives offline reload, queues practice and syncs on 
     return exported.items.find((i: any) => i.title === 'Offline account text')?.step;
   }).toBe(2);
   await expect.poll(async () => (await state(page)).queue.length).toBe(0);
-  await cdp.detach();
+
 });
 
 for (const choice of ['Add', 'Keep separate']) {
   test(`P1-19 sign-out clears device data; sign-in local ownership: ${choice}`, async ({ page }) => {
     await account(page);
-    const cdp = await signup(page);
+    const email = await signup(page);
     await own(page, 'Account-only text');
     await expect.poll(async () => JSON.stringify(await (await page.request.get('/api/export')).json())).toContain('Account-only text');
     await tab(page, 'Today');
@@ -224,13 +228,13 @@ for (const choice of ['Add', 'Keep separate']) {
     expect((await state(page)).items.some((i: any) => i.title === 'Account-only text')).toBe(true);
     await page.getByRole('button', { name: 'Sign out', exact: true }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Sign out', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Sign in with a passkey', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Email me a code', exact: true })).toBeVisible();
     expect((await state(page)).items).toHaveLength(0);
     expect((await state(page)).events).toHaveLength(0);
     await own(page, 'Unclaimed device text');
     await tab(page, 'Today');
     await account(page);
-    await page.getByRole('button', { name: 'Sign in with a passkey', exact: true }).click();
+    await emailSignin(page,email);
     const merge = page.getByRole('dialog').filter({ hasText: /items? on this device/ });
     await expect(merge).toBeVisible();
     expect(JSON.stringify(await (await page.request.get('/api/export')).json())).not.toContain('Unclaimed device text');
@@ -248,7 +252,7 @@ for (const choice of ['Add', 'Keep separate']) {
       return exported.items.some((i: any) => i.title === 'Unclaimed device text' && !i.deleted);
     }).toBe(choice === 'Add');
     await expect.poll(async () => (await state(page)).items.some((i: any) => i.title === 'Account-only text' && !i.deleted)).toBe(true);
-    await cdp.detach();
+
   });
 }
 
