@@ -18,7 +18,7 @@ describe('QA store regressions',()=>{
  it('P1-18 concurrent settings edits merge per field and converge',()=>{const before={...defaults,updatedAt:10};const a=stampSettings({...before,name:' Grace '},before,20),b=stampSettings({...before,theme:'dark'},before,30);expect(a.name).toBe('Grace');expect(a.fieldUpdatedAt?.name).toBe(20);expect(mergeSettings(a,b)).toMatchObject({name:'Grace',theme:'dark'});expect(mergeSettings(b,a)).toEqual(mergeSettings(a,b))});
  it('P1-18 preserves incoming remote clocks on persistence',()=>{const before={...defaults,updatedAt:10};const next={...before,name:'Grace',updatedAt:20,fieldUpdatedAt:{name:20}};expect(stampSettings(next,before,100).fieldUpdatedAt?.name).toBe(20)});
  it('P1-19 fresh account state contains no previous identity or practice',()=>{expect(emptyState()).toMatchObject({items:[],events:[],queue:[],account:null});const a=emptyState();a.settings.days.push('test');expect(emptyState().settings.days).toEqual([])});
- it('P2-20 sorts scripture canonically and document questions numerically',()=>{const items=['Romans 3:23','John 3:16','Psalm 23:2','Psalm 23:1','Q12','Q2'].map((title,n)=>item(String(n),1,title));expect(sortItems(items).map(x=>x.title)).toEqual(['Psalm 23:1','Psalm 23:2','John 3:16','Romans 3:23','Q2','Q12'])});
+ it('P2-20 sorts scripture canonically and document questions numerically',()=>{const items=['Romans 3:23','John 3:16','Psalm 23:2','Psalm 23:1','Q12','Q2'].map((title,n)=>({...item(String(n),1,title),collection:'bible',number:n===4?12:n===5?2:undefined}));expect(sortItems(items).map(x=>x.title)).toEqual(['Psalm 23:1','Psalm 23:2','John 3:16','Romans 3:23','Q2','Q12'])});
  it('P0-3 retries on reconnect/focus/visibility even without initial config',()=>{const win=new EventTarget(),doc=Object.assign(new EventTarget(),{visibilityState:'hidden'});vi.stubGlobal('window',win);vi.stubGlobal('document',doc);const sync=vi.fn(),cleanup=installReconnectSync(sync);win.dispatchEvent(new Event('online'));win.dispatchEvent(new Event('focus'));doc.dispatchEvent(new Event('visibilitychange'));expect(sync).toHaveBeenCalledTimes(2);doc.visibilityState='visible';doc.dispatchEvent(new Event('visibilitychange'));expect(sync).toHaveBeenCalledTimes(3);cleanup();win.dispatchEvent(new Event('online'));expect(sync).toHaveBeenCalledTimes(3)});
 });
 
@@ -33,5 +33,24 @@ describe('P0-3 / P1-19 IndexedDB account boundary',()=>{
   const offline=await openStore();expect(offline.account?.id).toBe('account-a');expect(offline.items).toHaveLength(1);expect(offline.settings.fieldUpdatedAt?.name).toBeGreaterThan(0);
   const cleared=await clearStore();expect(cleared).toMatchObject({items:[],events:[],queue:[],account:null});expect(await openStore()).toEqual(cleared);
   const local=await openStore();local.settings.name='Local';const settings=await persist(local);expect(settings.fieldUpdatedAt?.name).toBeGreaterThan(0);
+ });
+});
+
+import {documents} from './content';
+import {dailyPlan} from './daily';
+import {installQueueRetry} from './store';
+describe('QA2 canonical source order and queue backoff',()=>{
+ for(const id of ['wsc','heidelberg'])it(`${id} starts with Q1, Q2, Q3 regardless of insertion/title`,()=>{
+  const source=documents.find(d=>d.id===id)!;
+  const input=addItems([],source.items.slice(0,12).reverse(),id,1);
+  expect(sortItems(input).slice(0,3).map(i=>i.id)).toEqual([`${id}-1`,`${id}-2`,`${id}-3`]);
+  expect(dailyPlan(input,[],'2026-11-13').map(i=>i.id)).toEqual([`${id}-1`,`${id}-2`,`${id}-3`]);
+ });
+ it('own text uses creation time even when its title looks like Scripture',()=>{const a={...item('a',1,'John 3:16'),createdAt:'2026-11-13T01:00:00Z'},b={...item('b',1,'Genesis 1:1'),createdAt:'2026-11-13T02:00:00Z'};expect(sortItems([b,a]).map(i=>i.id)).toEqual(['a','b'])});
+ it('orders reviews by due time then canonical source key',()=>{const input=addItems([],documents[0].items.slice(0,3),undefined,1).map((i,n)=>({...i,learned:true,due:n===0?'2026-01-02':'2026-01-01'}));expect(dailyPlan(input,[],'2026-11-13').map(i=>i.id)).toEqual(['wsc-2','wsc-3','wsc-1'])});
+ it('retries after 5s, 15s, 60s then every five minutes without browser events and stops when empty',async()=>{
+  vi.useFakeTimers();let pending=true;const sync=vi.fn(async()=>{});const retry=installQueueRetry(()=>pending,sync);retry.update();
+  for(const delay of [5000,15000,60000,300000,300000]){const count=sync.mock.calls.length;await vi.advanceTimersByTimeAsync(delay-1);expect(sync).toHaveBeenCalledTimes(count);await vi.advanceTimersByTimeAsync(1);expect(sync).toHaveBeenCalledTimes(count+1)}
+  pending=false;retry.update();await vi.advanceTimersByTimeAsync(600000);expect(sync).toHaveBeenCalledTimes(5);retry.stop();vi.useRealTimers();
  });
 });

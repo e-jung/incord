@@ -10,7 +10,7 @@ export function sourceLabel(item: SourceItem): string {
   const doc = documents.find(d => d.items.some(i => i.id === item.id));
   if (doc) {
     const entry = doc.items.find(i => i.id === item.id)!;
-    return doc.title + (entry.number ? ` · Q${entry.number}` : '');
+    return doc.title + (entry.number ? ` · ${['apostles','nicene'].includes(doc.id)?'Article ':'Q'}${entry.number}` : '');
   }
   return 'Your text';
 }
@@ -29,7 +29,7 @@ export const copy = {
  weekOption:(n:number)=>`${plural(n,'day')} a week`,
 
  mergeHistoryDetail:"This includes saved practice history and removed items.",
-  passkeyCanceled:"Passkey request canceled. Try again when you’re ready.",
+  passkeyCanceled:"Cancelled",
   myVerses: "My verses",
   myTexts: "My texts",
   alreadyAdded: "Already in your library.",
@@ -299,7 +299,14 @@ export const copy = {
   "wednesdayInitial": "W",
   "fridayInitial": "F",
   "saturdayInitial": "S",
-  "dateLocale": "en-CA"
+  "dateLocale": "en-CA",
+  passkeyAlready:'This device already has a passkey.',reviewDeviceItems:'Review items on this device',addFirstArticles:'Add articles 1–12',addNextArticles:'Add next 12 articles',
+  onePassage:'One passage', separateVerses:'Separate verses', chunks:'Chunks of ~4 verses', passageMode:'Passage format',
+ addDevicePasskey:'Add a passkey to this device', recoveryPasskeyPrompt:"Add a passkey so you won't need the code next time.", later:'Later',
+ signoutEverywhereTitle:'Sign out everywhere?', signoutEverywhereDetail:'All devices will need to sign in again. Make sure you have a passkey or your recovery code.',
+ revokedNotice:'You were signed out on all devices.', relearnNow:'Relearn now', relearnDetail:'Starting again with a few words showing',
+ passkeyUnsupported:"This browser can't use passkeys here. Try Safari or Chrome on your phone.", passkeyFailed:'Unable to use that passkey. Try again or use your recovery code.',
+ articleTitle:(number:number,text:string)=>`Article ${number} · ${text.split(/\s+/).slice(0,10).join(' ')}…`,
 } as const;
 export const ui = copy;
 export const COPY = copy;

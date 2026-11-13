@@ -120,3 +120,31 @@ Added `scripts/prod-smoke.mjs`, a real Chromium/iPhone 15 UI/API journey with a 
 Verification: static checks pass with zero errors/warnings; 158 tests pass in eight files, with 100% engine coverage; content verification passes (198 packs, 93,302 verses, 268 document items and five starters). Local smoke against the E2E suite's real `wrangler dev` at `http://localhost:8793` passes all 14 checks in 8.2 seconds, including cleanup and zero console/CSP errors. All 86 mobile E2E journeys pass (43 per appearance, no skips, 3.4 minutes), including both welcome choices and inline touch-target/header/primary-button geometry. Production smoke was not run against the live site.
 
 Viewport review captures are refreshed in `/home/ubuntu/.openclaw/workspace/reports/bible-memory-20261113/fix-3-screens/`. No push or deployment performed; the QA worktree was not touched.
+
+## Production QA2 fix batch 4 — 2026-11-13
+
+Applied every N1–N21 finding and the P1-10 partial in FIX-4-qa2.md. The full finding-to-implementation/test mapping is [QA-FIX-4-MAP.md](QA-FIX-4-MAP.md).
+
+- Source-derived canonical keys now migrate/persist for all items. WSC/Heidelberg follow question/part order, Bible items follow book/chapter/verse, own texts follow creation time, and due reviews sort by due time then source key.
+- Long lookups default to ~4-verse chunks above 150 words. The exclusive three-way format choice and Add action appear above results; every >500-word lookup confirms its selected item count, even a single passage.
+- Signed-in devices can attach a passkey, with a one-time recovery invitation and friendly cancellation/unsupported/already-registered copy. Recovery and ownership sheets are sequential. Global signout is confirmed; remote revocation gives one notice and resets device data, preference baselines and sheets. An independent Opus integration review found four account/history edge cases; all were fixed, including rejecting stale/wrong-account enrollment and in-flight registration challenges after revocation.
+- Off-band words scroll instantly; pending queues retry at 5s/15s/60s/5min without connectivity events. Practiced-week contrast, Discover target heights, creed article labels, added checks, failed-review copy, tappable backdrops and collapsible short-screen practice titles are corrected. Fix-3's inline collection controls were verified.
+- Worker-first static routing preserves genuine static/dotfile 404s and safe SPA routes. HSTS is one year without includeSubDomains/preload. Only 12 Latin/Latin-ext WOFF2 faces are emitted/precached. HTML preserves cache policy while adding no-transform; enforcing CSP remains unchanged.
+
+### Final verification
+
+| Check | Result |
+| --- | --- |
+| `npm run check` | PASS — zero errors/warnings |
+| `npm test` | PASS — 182 tests in 10 files; 123 engine tests, 100% engine statement/branch/function/line coverage |
+| `npm run e2e -- --workers=2` | PASS — 100 journeys, 50 per appearance, no skips, 3.3 minutes |
+| Production build | PASS — rebuilt by the complete E2E suite |
+| `npm run content:verify` | PASS — 198 packs, 93,302 verses, 268 document items and five starters |
+| `SMOKE_URL=http://localhost:8793 node scripts/prod-smoke.mjs` | PASS — 14/14 checks in 9.5s; real local passkey/recovery/sync/ladder, enforcing CSP, no console/CSP errors and successful account cleanup |
+| Viewport review captures | 26 PNGs, equal light/dark coverage, in `fix-4-screens/` |
+
+The production smoke helper follows the new recovery-before-merge sequence and isolates localhost QA rate-limit callers. Browser tests block service workers specifically when emulating an offline/404 network failure; real service-worker caching/offline navigation has separate assertions.
+
+**N5 finding:** Cloudflare's [official Web Analytics FAQ](https://developers.cloudflare.com/web-analytics/faq/#my-website-is-proxied-through-cloudflare-but-web-analytics-automatic-setup-is-not-working) explicitly documents `Cache-Control: public, no-transform` as preventing automatic beacon injection. Adding the no-transform directive therefore suppresses automatic RUM/beacon injection without allowing the beacon through CSP. Local headers and console checks pass; live edge suppression remains unverified because no deployment or production smoke was performed. No zone/NEL settings were changed.
+
+Review captures: `/home/ubuntu/.openclaw/workspace/reports/bible-memory-20261113/fix-4-screens/`. Complete HTML report/traces remain in `playwright-report/` and `test-results/`. No push or deployment performed; the QA worktree was not touched. Existing live-provider/iOS/Safari verification gaps remain unchanged.

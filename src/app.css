@@ -40,3 +40,14 @@ main.practicing{height:100dvh;min-height:0;overflow:hidden}.practice>header,.pra
 .document-row .document-add{width:44px;height:44px;flex:none;margin:12px 0;background:var(--fill);color:var(--acc)}
 .document-add:disabled{opacity:1;color:var(--ink3)}
 .added-toast{position:fixed;bottom:110px;left:50%;transform:translateX(-50%);z-index:9;max-width:calc(100% - 32px);background:var(--bar);border:1px solid var(--line);border-radius:16px;box-shadow:var(--sh);padding:14px 20px;text-align:center}
+
+.week-dots .done.today{color:var(--bg)}
+.bulk-actions button,.toggle,.segment{min-height:44px}.toggle{padding-block:6px}
+.sheet-backdrop{position:absolute;inset:0;width:100%;height:100%;background:transparent!important;border-radius:0!important;box-shadow:none!important;padding:0!important}.sheet{position:relative}
+.passage-actions{display:flex;flex-direction:column;gap:12px}.passage-segments{flex-wrap:wrap}.passage-segments .segment{white-space:normal}
+.prompt-title{display:block;width:100%;text-align:left;font:inherit!important;background:none!important;color:inherit!important;padding:0!important;box-shadow:none!important;border-radius:0!important}
+.prompt.collapsed .prompt-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.prompt.collapsed{padding-top:12px}
+@media(max-height:699px){.prompt h1{font-size:22px}}
+
+.text-button,.prompt-title{min-height:44px}
+.sheet-backdrop{transform:none!important}

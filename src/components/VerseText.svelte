@@ -17,7 +17,7 @@ $effect(()=>{
     if(!word)return;
     const view=viewport.getBoundingClientRect(),rect=word.getBoundingClientRect();
     const top=viewport.scrollTop+rect.top-view.top-viewport.clientHeight/3;
-    viewport.scrollTo({top:Math.max(0,top),behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
+    viewport.scrollTo({top:Math.max(0,top),behavior:rect.top<view.top||rect.bottom>view.bottom||matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
   });
   return()=>{cancelled=true};
 });

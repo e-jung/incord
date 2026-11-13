@@ -16,7 +16,7 @@ export interface Env {
 type ObjectData = Record<string, unknown>;
 type Row = Record<string, string | number | null>;
 type Session = { uid: string; version: number; exp: number };
-type Challenge = { challenge: string; kind: string; uid?: string; verifier?: string; name?: string };
+type Challenge = { challenge: string; kind: string; uid?: string; verifier?: string; name?: string; sessionVersion?: number };
 const encoder = new TextEncoder();
 const SESSION_AGE = 30 * 86400;
 const cookieName = 'bh_session';
@@ -53,7 +53,24 @@ function stub(env: Env, uid: string) { return env.USERS.get(env.USERS.idFromName
 async function call(target: DurableObjectStub, path: string, data: unknown = {}) { const response = await target.fetch('https://internal' + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); if (!response.ok) { const problem = await response.json<{ error: string }>(); throw new ApiError(response.status, problem.error); } return response.json<any>(); }
 const registry = (env: Env, path: string, data: unknown = {}) => call(env.REGISTRY.get(env.REGISTRY.idFromName('registry')), path, data);
 const user = (env: Env, uid: string, path: string, data: unknown = {}) => call(stub(env, uid), path, data);
-function secure(response: Response) { const headers = new Headers(response.headers); headers.set('X-Content-Type-Options', 'nosniff'); headers.set('Referrer-Policy', 'no-referrer'); headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()'); headers.set('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"); return new Response(response.body, { status: response.status, headers }); }
+function secure(response: Response) {
+  const headers = new Headers(response.headers);
+  headers.set('Strict-Transport-Security', 'max-age=31536000');
+  // Cloudflare Web Analytics documents no-transform as disabling automatic
+  // beacon injection: https://developers.cloudflare.com/web-analytics/faq/
+  // Preserve existing cache policy; the static shell is never personalized.
+  if (headers.get('Content-Type')?.split(';')[0].trim().toLowerCase() === 'text/html') {
+    const cache = headers.get('Cache-Control');
+    if (!cache?.split(',').some(value => value.trim().toLowerCase() === 'no-transform')) {
+      headers.set('Cache-Control', [cache, 'no-transform'].filter(Boolean).join(', '));
+    }
+  }
+  headers.set('X-Content-Type-Options', 'nosniff');
+  headers.set('Referrer-Policy', 'no-referrer');
+  headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  headers.set('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
+  return new Response(response.body, { status: response.status, headers });
+}
 async function issue(env: Env, uid: string, origin: string, extra: ObjectData = {}) { const me = await user(env, uid, '/me'); const token = await signSession({ uid, version: me.version, exp: Math.floor(Date.now() / 1000) + SESSION_AGE }, env.SESSION_SECRET); return json({ user: me.user, ...extra }, 200, { 'Set-Cookie': cookie(cookieName, token, SESSION_AGE, origin) }); }
 async function signedIn(request: Request, env: Env) { const s = await readSession(cookies(request)[cookieName], env.SESSION_SECRET); assert(s, 'Sign in required', 401); const me = await user(env, s.uid, '/me'); assert(me.version === s.version, 'Session expired', 401); return s; }
 function originFor(request: Request, env: Env) { const origin = new URL(request.url).origin; if (env.APP_ORIGIN) assert(origin === new URL(env.APP_ORIGIN).origin, 'Wrong host', 403); return origin; }
@@ -71,12 +88,16 @@ async function api(request: Request, env: Env): Promise<Response> {
     if (path === '/api/auth/register/options' && request.method === 'POST') {
       const input = await body(request), name = typeof (input.displayName ?? input.name) === 'string' ? String(input.displayName ?? input.name).trim().slice(0, 80) : 'Friend';
       const old = await readSession(cookies(request)[cookieName], env.SESSION_SECRET); let uid = crypto.randomUUID(); let credentials: any[] = [];
-      if (old) { const me = await user(env, old.uid, '/me'); if (me.version === old.version) { uid = old.uid; credentials = (await user(env, uid, '/credentials')).credentials; } }
+      if (cookies(request)[cookieName]) assert(old, 'Session expired. Sign in again before adding a passkey.', 401);
+      if (input.attachTo) assert(old, 'Session expired. Sign in again before adding a passkey.', 401);
+      if (old) { const me = await user(env, old.uid, '/me'); assert(me.version === old.version && (!input.attachTo || me.user.id === input.attachTo), 'Session expired. Sign in again before adding a passkey.', 401); uid = old.uid; credentials = (await user(env, uid, '/credentials')).credentials; }
       const options = await generateRegistrationOptions({ rpName: 'By Heart', rpID, userName: uid, userDisplayName: name || 'Friend', userID: new Uint8Array(encoder.encode(uid)), attestationType: 'none', authenticatorSelection: { residentKey: 'required', userVerification: 'required' }, excludeCredentials: credentials.map(c => ({ id: c.id, transports: c.transports })) });
-      const id = random(); await registry(env, '/challenge/set', { id, value: { challenge: options.challenge, kind: 'register', uid, name } }); return json(options, 200, { 'Set-Cookie': cookie('bh_flow', id, 300, origin) });
+      const id = random(); await registry(env, '/challenge/set', { id, value: { challenge: options.challenge, kind: 'register', uid, name, ...(old ? { sessionVersion: old.version } : {}) } }); return json(options, 200, { 'Set-Cookie': cookie('bh_flow', id, 300, origin) });
     }
     if (path === '/api/auth/register/verify' && request.method === 'POST') {
-      const input = await body(request), flow = await authChallenge(env, request, 'register'); const response = (input.response || input) as unknown as RegistrationResponseJSON;
+      const input = await body(request), flow = await authChallenge(env, request, 'register');
+      if (flow.sessionVersion !== undefined) assert((await user(env, flow.uid!, '/me')).version === flow.sessionVersion, 'Session expired. Sign in again before adding a passkey.', 401);
+      const response = (input.response || input) as unknown as RegistrationResponseJSON;
       let verification; try { verification = await verifyRegistrationResponse({ response, expectedChallenge: flow.challenge, expectedOrigin: origin, expectedRPID: rpID, requireUserVerification: true }); } catch { throw new ApiError(400, 'Passkey verification failed'); }
       assert(verification.verified && verification.registrationInfo, 'Passkey verification failed'); const credential = verification.registrationInfo.credential;
       await registry(env, '/credential/set', { id: credential.id, uid: flow.uid });
@@ -120,7 +141,7 @@ async function api(request: Request, env: Env): Promise<Response> {
     throw new ApiError(404, 'Route not found');
   }
   let session: Session;
-  try { session = await signedIn(request, env); } catch (error) { if (path === '/api/me' && request.method === 'GET' && error instanceof ApiError && error.status === 401) return json({ user: null }); throw error; }
+  try { session = await signedIn(request, env); } catch (error) { if (path === '/api/me' && request.method === 'GET' && error instanceof ApiError && error.status === 401) return json({ user: null, ...(error.message === 'Session expired' ? { signedOutEverywhere: true } : {}) }); throw error; }
   const uid = session.uid;
   if (path === '/api/me' && request.method === 'GET') { const me = await user(env, uid, '/me', { takeRecovery: true }); return json({ user: me.user, ...(me.needsRecovery ? { recoveryCode: await recoveryCode(env, uid) } : {}) }); }
   if (path === '/api/sync' && request.method === 'POST') { const input = await body(request); const result = await user(env, uid, '/sync', input); await registry(env, '/schedule/set', { uid }); return json(result); }
@@ -132,7 +153,19 @@ async function api(request: Request, env: Env): Promise<Response> {
 }
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    try { if (new URL(request.url).pathname.startsWith('/api/')) return secure(await api(request, env)); return secure(await env.ASSETS.fetch(request)); }
+    try {
+      const path = new URL(request.url).pathname;
+      if (path.startsWith('/api/')) return secure(await api(request, env));
+      let response = await env.ASSETS.fetch(request);
+      // ASSETS has no automatic SPA fallback: missing books/scripts must stay 404,
+      // even on direct navigation. Only extensionless app routes get the shell.
+      if (response.status === 404 && ['GET', 'HEAD'].includes(request.method)
+        && !/^\/(content|assets)(?:\/|$)/.test(path) && !path.split('/').some(part => part.includes('.'))
+        && request.headers.get('Accept')?.includes('text/html')) {
+        response = await env.ASSETS.fetch(new Request(new URL('/', request.url), request));
+      }
+      return secure(response);
+    }
     catch (error) { if (error instanceof ApiError) return secure(json({ error: error.message }, error.status)); console.error('By Heart API error', error instanceof Error ? error.name : 'unknown'); return secure(json({ error: 'Something went wrong. Please try again.' }, 500)); }
   },
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext) { ctx.waitUntil((async () => { const { users } = await registry(env, '/schedule/due'); const results = await Promise.allSettled(users.map((uid: string) => user(env, uid, '/push/remind'))); if (results.some(r => r.status === 'rejected')) throw new Error('One or more reminder checks failed'); })()); },

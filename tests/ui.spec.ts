@@ -69,10 +69,12 @@ async function register(page: Page, info?: TestInfo) {
   await expect(page.getByRole('dialog', { name: 'Your one-time recovery code' })).toBeVisible();
   const code = (await page.getByTestId('recovery-code').innerText()).trim();
   expect(code.length).toBeGreaterThanOrEqual(24);
+  await expect(page.getByRole('dialog')).toHaveCount(1);
+  await page.getByRole('button', { name: 'I saved my code', exact: true }).click();
   const merge = page.getByRole('dialog').filter({ hasText: /items? on this device/ });
   if (await merge.count()) await merge.getByRole('button', { name: 'Add', exact: true }).click();
   if (info) await screen(page, info, 'account-passkey-created');
-  await page.getByRole('button', { name: 'I saved my code', exact: true }).click();
+
   await expect(page.getByText('Signed in.')).toBeVisible();
   return { code, cdp };
 }
@@ -293,7 +295,7 @@ test('shortcut success and failed blank review returns to step 3', async ({ page
   await typePassage(page, { wrong: true });
   await expect(page.getByRole('dialog')).toHaveAccessibleName("Let's relearn this");
   await screen(page, info, 'review-again');
-  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await page.getByRole('button', { name: 'Relearn now', exact: true }).click();
   await step(page, 3);
 });
 
@@ -320,6 +322,7 @@ test('passkey signup, sync, signout, signin, recovery rotation, export and accou
   await expect(page.getByTestId('recovery-code')).not.toHaveText(code);
   await screen(page, info, 'account-recovery-code');
   await page.getByRole('button', { name: 'I saved my code', exact: true }).click();
+  await page.getByRole('button', {name:'Later',exact:true}).click();
   await signout(page);
   await page.getByLabel('One-time recovery code').fill(code);
   await page.getByRole('button', { name: 'Use recovery code', exact: true }).click();

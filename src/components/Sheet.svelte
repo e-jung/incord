@@ -11,4 +11,4 @@ function keyboard(event:KeyboardEvent){
 }
 </script>
 <svelte:window onkeydown={keyboard}/>
-<div class="scrim"><div bind:this={node} class="sheet" role="dialog" tabindex="-1" aria-modal="true" aria-label={title}><header><h2>{title}</h2>{#if close}<button class="icon" onclick={close} aria-label={ui.closeDialog}>×</button>{/if}</header>{@render children()}</div></div>
+<div class="scrim">{#if close}<button class="sheet-backdrop" tabindex="-1" aria-label="Dismiss dialog" onclick={close}></button>{/if}<div bind:this={node} class="sheet" role="dialog" tabindex="-1" aria-modal="true" aria-label={title}><header><h2>{title}</h2>{#if close}<button class="icon" onclick={close} aria-label={ui.closeDialog}>×</button>{/if}</header>{@render children()}</div></div>

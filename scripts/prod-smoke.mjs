@@ -51,6 +51,8 @@ async function device(label) {
     ...devices['iPhone 13'], // iPhone 15 CSS viewport; Chromium enables CDP WebAuthn.
     viewport: { width: 393, height: 852 },
     colorScheme: 'light', reducedMotion: 'reduce', serviceWorkers: 'allow',
+    // Local Wrangler accepts this edge-owned header; isolate concurrent QA callers.
+    ...(target.hostname==='localhost'?{extraHTTPHeaders:{'CF-Connecting-IP':'smoke-'+crypto.randomUUID()}}:{}),
   });
   contexts.push(context); // Retain immediately so finally can clean up partial flows.
   context.setDefaultTimeout(15_000);
@@ -190,6 +192,7 @@ try {
   });
   await check('Explicit Add ownership choice uploads learned item and history', async () => {
     const { page, context } = first;
+    await page.getByRole('button', { name: 'I saved my code', exact: true }).click();
     const merge = page.getByRole('dialog', { name: 'Add the 10 items on this device to your account?', exact: true });
     await expect(merge).toBeVisible();
     expect((await api(context, '/export')).items).toHaveLength(0);
@@ -199,7 +202,6 @@ try {
     ]);
     expect(response.ok(), 'UI sync succeeded').toBe(true);
     expect(learned(await response.json())).toBe(true);
-    await page.getByRole('button', { name: 'I saved my code', exact: true }).click();
     await expect(page.getByText('Signed in.', { exact: true })).toBeVisible();
     await expect.poll(async () => learned(await api(context, '/export')), { timeout: 30_000 }).toBe(true);
     const exported = await api(context, '/export');
@@ -224,6 +226,7 @@ try {
     expect(rotated.length >= 24 && rotated !== recoveryCode, 'Recovery code rotates').toBe(true);
     expect(response.ok(), 'Recovery triggers real sync').toBe(true);
     await page.getByRole('button', { name: 'I saved my code', exact: true }).click();
+    await page.getByRole('button', {name:'Later',exact:true}).click();
     expect((await api(context, '/me')).user?.id).toBe(userId);
     await expect.poll(async () => learned(await state(page)), { timeout: 30_000 }).toBe(true);
     const recovered = await state(page);

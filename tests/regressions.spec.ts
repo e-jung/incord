@@ -48,9 +48,11 @@ async function signup(page: Page) {
   await page.getByRole('button', { name: 'Create account with a passkey', exact: true }).click();
   await expect(page.getByTestId('recovery-code')).toBeVisible();
   // Registration with local items also requires explicit ownership confirmation.
+  await expect(page.getByRole('dialog')).toHaveCount(1);
+  await page.getByRole('button', { name: 'I saved my code', exact: true }).click();
   const merge = page.getByRole('dialog').filter({ hasText: /items? on this device/ });
   if (await merge.count()) await merge.getByRole('button', { name: 'Add', exact: true }).click();
-  await page.getByRole('button', { name: 'I saved my code', exact: true }).click();
+
   await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
   return cdp;
 }
@@ -162,9 +164,9 @@ for (const mode of ['passage', 'separate', 'chunks', 'large batch']) {
     await page.getByLabel('Bible reference').fill(mode === 'passage' || mode === 'separate' ? 'Romans 8:28-30' : 'Psalm 119:1-24');
     await page.getByRole('button', { name: 'Find verses', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Add to library', exact: true })).toBeVisible();
-    await expect(page.getByLabel('Add as separate verses')).not.toBeChecked();
-    if (mode === 'separate' || mode === 'large batch') await page.getByLabel('Add as separate verses').check();
-    if (mode === 'chunks') await page.getByLabel('Split this long passage into chunks of about 4 verses').check();
+    await expect(page.getByRole('button', {name:'Separate verses',exact:true})).toHaveAttribute('aria-pressed','false');
+    if (mode === 'separate' || mode === 'large batch') await page.getByRole('button',{name:'Separate verses',exact:true}).click();
+    if (mode === 'chunks') await page.getByRole('button',{name:'Chunks of ~4 verses',exact:true}).click();
     await page.getByRole('button', { name: 'Add to library', exact: true }).click();
     if (mode === 'large batch') {
       await expect(page.getByRole('dialog', { name: 'Add 24 items?' })).toBeVisible();
@@ -250,14 +252,12 @@ for (const choice of ['Add', 'Keep separate']) {
   });
 }
 
-test('P1-15 uncached offline book explains how to download it', async ({ page, context }) => {
-  await context.route('**/content/bible/**', route => route.abort());
-  await tab(page, 'Discover');
-  await page.getByLabel('Bible reference').fill('Isaiah 1:1');
-  await context.setOffline(true);
-  await page.getByRole('button', { name: 'Find verses', exact: true }).click();
-  await expect(page.getByRole('alert')).toHaveText("This book isn't saved on this device yet. Connect once to download it.");
-  await context.setOffline(false);
+test('P1-15 uncached offline book explains how to download it', async ({ browser,baseURL }) => {
+  // A blocked service worker makes the browser's offline emulation deterministic;
+  // Chromium otherwise lets worker requests bypass context.setOffline.
+  const context=await browser.newContext({serviceWorkers:'block',baseURL});const page=await context.newPage();
+  try{await page.goto('/');await tab(page,'Discover');await page.getByLabel('Bible reference').fill('Isaiah 1:1');await context.setOffline(true);
+  await page.getByRole('button',{name:'Find verses',exact:true}).click();await expect(page.getByRole('alert')).toHaveText("This book isn't saved on this device yet. Connect once to download it.");}finally{await context.close()}
 });
 
 test('P1-23 long absence without learned items never opens an empty welcome-back test', async ({ page }) => {
@@ -287,10 +287,10 @@ for (const [mistakes, title] of [[0, 'Solid'], [1, 'Remembered'], [3, 'Got there
     for (let i = 0; i < 20; i++) await page.keyboard.press(i < mistakes ? 'z' : 'g');
     const result = page.getByRole('dialog', { name: title, exact: true });
     await expect(result).toBeVisible();
-    await expect(result).toContainText(/Back (?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)/);
+    await expect(result).toContainText(mistakes===10?'Starting again with a few words showing':/Back (?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)/);
     await expect(result).not.toContainText(/^(?:Again|Hard|Good|Easy)$/);
     await expect.poll(async () => (await state(page)).events.length).toBe(2);
-    await result.getByRole('button', { name: 'Close practice', exact: true }).click();
+    await result.getByRole('button', { name: mistakes===10?'Later':'Close practice', exact: true }).click();
     await page.reload();
     const saved = await state(page);
     expect(saved.items[0].learned).toBe(mistakes < 10);
