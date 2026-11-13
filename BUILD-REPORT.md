@@ -80,3 +80,32 @@ Verification: `npm run check` passes with zero errors/warnings; `npm test` passe
 Screenshots now default to viewport captures, with seven `-full.png` scrolling companions per theme. Refreshed review selections (Today, step 2, Learned, Discover and Account in both themes) are copied to `/home/ubuntu/.openclaw/workspace/reports/bible-memory-20261113/fix-1-screens/`; all captures remain in `test-results/screens/` and the browser report in `playwright-report/`.
 
 No push or deployment. The separate `/home/ubuntu/projects/byheart-qa` worktree was not touched.
+
+## Independent QA fix batch 2 — 2026-11-13
+
+Addressed all 53 findings (3 P0, 23 P1, 27 P2), following the architect decisions. The complete id-to-commit/test mapping is [QA-FIX-2-MAP.md](QA-FIX-2-MAP.md). No requested finding was deferred or disagreed with.
+
+- Current-word scrolling is independently checked for Heidelberg Q1 and a 120-word own text, in both appearances and reduced/normal motion. Visible mistakes receive amber/shake feedback without changing hidden-only memory scoring.
+- Attempts are detached; shortcuts are temporary, completed attempts save before the result sheet, and blank rehearsals never alter history, learned state or schedule. FSRS short-term steps are disabled.
+- Daily new/learning allowance defaults to 3 (1/2/3/5), reserves completed slots using the local calendar day, and offers Library Start early. Estimates use word count and remaining ladder steps. Review titles and dates are factual.
+- Re-add revives a unique tombstone with a newer revision/reset progress. Canonical ordering and named real collections survive synchronization. Removal is confirmed and undoable for five seconds.
+- Ranges default to a single passage, with separate-verse/four-verse-chunk choices and large-batch confirmation. Documents have collapsed numbered answers, Lord's Days and bulk actions. Starters preview before addition. Apostles has 12 articles, Nicene 17 clauses; long catechism answers split at 150 words. Generated documents now total 268 items; 198 Bible packs still contain 93,302 verse records. Psalm superscriptions are optional headings, never typed verse text.
+- IndexedDB caches identity. Config failure cannot block identity/reconnect, and online/focus/visibility events retry the queue. All newly acquired identities, including OAuth returns, require explicit ownership consent for existing device records (including removed text/history). Signout clears account data after saving; recovery preserves other device sessions, and Sign out everywhere explicitly revokes them.
+- Settings use changed-field clocks and per-field merges. Account names are trimmed and exported consistently. Time zones use a searchable supported-zone select and server validation.
+- Semantic copy and plural helpers live in copy.ts; the numeric generated UI map is removed. SVG tabs, stronger contrast, 44px controls, guarded browser history, scroll reset, hidden production gallery and non-inlined self-hosted fonts complete the polish pass.
+
+### Final verification
+
+| Check | Result |
+| --- | --- |
+| `npm run check` | PASS — zero errors/warnings |
+| `npm test` | PASS — 157 tests in 8 files; 123 engine tests, 100% engine coverage across statements/branches/functions/lines |
+| `npm run e2e -- --workers=2` | PASS — 84 journeys (42 light, 42 dark), no skips, 2.4 minutes |
+| Production build | PASS — built by the E2E web server |
+| `npm run content:verify` | PASS — all generated packs, lookups/ranges, headings, articles and integrity |
+| Independent integration review | Completed; OAuth ownership, removed-record consent, local-day accounting and consumed-sheet history findings fixed and regression-tested |
+| Viewport review set | 74 PNGs, equal light/dark coverage, copied to fix-2-screens |
+
+Viewport review images are in `/home/ubuntu/.openclaw/workspace/reports/bible-memory-20261113/fix-2-screens/`; the complete local Playwright report and traces remain in `playwright-report/` and `test-results/`.
+
+No push or deployment performed. `/home/ubuntu/projects/byheart-qa` was not modified. Existing production-only gaps remain unchanged: live Google credentials/provider push and real iOS/Safari delivery require deployment/device verification.

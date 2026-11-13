@@ -32,3 +32,12 @@ See README.md for local secrets. Never commit .dev.vars or production credential
 Parameterized SQL; never render user HTML. Same-origin checks on all writes, signed HttpOnly cookies, auth throttling, WebAuthn verification, one-use hashed recovery codes. Use Secure cookies on HTTPS; localhost HTTP omits Secure for development only. Push endpoints allowlisted and redirects refused.
 Preserve migration history; additive migrations only. Never log text, recovery codes or secrets.
 No deployment or GitHub push is authorized in the initial build. Architect reviews first. Do not add a remote or publish.
+
+## QA-fixed lifecycle contracts (2026-11-13)
+- Practice uses a detached attempt. Shortcut/rehearsal never mutate stored progress on opening. Save completed attempts before the result sheet; result buttons only navigate. Rehearsals are blank, no-stakes and append no review event.
+- `dailyPlan` reserves the new/learning allowance (default 3, options 1/2/3/5); completing today's new learning must not free another slot. Reviews do not consume new slots. Estimate from remaining ladder steps and token count.
+- Use `addItems`/`findLiveItem`; ids are unique even across tombstones. Re-add revives with strictly newer revision and reset progress. Sort collections canonically, not by sync arrival.
+- IndexedDB stores cached account identity. Config fetch is independent; reconnect/focus/visibility retries identity and queue. Never sync unclaimed device items until explicit Add/Keep separate choice. Signout confirms and clears account data from this device after sync.
+- Settings use per-field timestamps; ordinary item saves must not advance preference clocks. Assign the `persist()` result back before syncing. Recovery adds a device session; only logout-everywhere revokes other devices.
+- Copy and plural helpers live in `src/config/copy.ts` with semantic keys (compatibility modules only re-export). Gallery requires DEV or device `localStorage.debug = '1'`.
+- `displayTokens` preserves punctuation and original whitespace. VerseText owns current-word scrolling, including reduced motion. Bible superscriptions live in optional headings, not practice text; creed articles and >150-word answers are generated in the content pipeline.
