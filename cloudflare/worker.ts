@@ -158,7 +158,7 @@ async function api(request: Request, env: Env): Promise<Response> {
     if (path === '/api/auth/google' && request.method === 'GET') {
       assert(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET, 'Google sign-in is not enabled', 404); const state = random(), verifier = random(48);
       await registry(env, '/challenge/set', { id: state, value: { kind: 'google', challenge: state, verifier } });
-      const target = new URL('https://accounts.google.com/o/oauth2/v2/auth'); target.search = new URLSearchParams({ client_id: env.GOOGLE_CLIENT_ID, redirect_uri: origin + '/api/auth/google/callback', response_type: 'code', scope: 'openid profile email', state, code_challenge: await digest(verifier), code_challenge_method: 'S256' }).toString();
+      const target = new URL('https://accounts.google.com/o/oauth2/v2/auth'); target.search = new URLSearchParams({ client_id: env.GOOGLE_CLIENT_ID, redirect_uri: origin + '/api/auth/google/callback', response_type: 'code', scope: 'openid profile', state, code_challenge: await digest(verifier), code_challenge_method: 'S256' }).toString();
       return new Response(null, { status: 302, headers: { Location: target.href, 'Set-Cookie': cookie('bh_flow', state, 300, origin), 'Cache-Control': 'no-store' } });
     }
     if (path === '/api/auth/google/callback' && request.method === 'GET') {

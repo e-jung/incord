@@ -365,4 +365,5 @@ export const incordCopy = {
  countsDetail: 'Daily totals only; no account identity, passage references, or text. You can turn this off on this device.',
  privacySignal: 'Your browser’s privacy preference has turned anonymous usage counts off.',
  privacyAbout: 'Incord counts anonymous totals (like how many people practiced today) to improve the app. No ads, no third-party trackers.',
+ privacyPolicy: 'Privacy policy',
 };
