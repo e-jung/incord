@@ -4,7 +4,7 @@ Source snapshot: 2026-11-13. Only the 66-book Protestant canon is published in B
 
 ## Build / refresh
 
-Run `python3 scripts/build-content.py` from the repository. Python 3 standard library only; no network, npm package, API key, or external command is needed. All source bytes live in `content/raw/`; all generated JSON lives in `public/content/`. `content/source-lock.json` records exact download URLs and SHA-256 hashes. Output is deterministic UTF-8 JSON without timestamps. Commit source and generated output together.
+Run `python3 scripts/build-content.py` from the repository; verify with `node scripts/verify-content.mjs`. Python 3 standard library only; no network, npm package, API key, or external command is needed. All source bytes live in `content/raw/`; all generated JSON lives in `public/content/`. `content/source-lock.json` records exact download URLs and SHA-256 hashes. Output is deterministic UTF-8 JSON without timestamps. Commit source and generated output together.
 
 `python3 scripts/build-content.py --download` downloads and verifies the locked snapshots. It deliberately refuses changed upstream bytes. For a content update, review the publisher's edition/license, replace only the affected lock entry and raw snapshot deliberately, regenerate, compare, and commit. The upstream source is mutable; the committed raw snapshot and hash, not the URL's current contents, define our version.
 
