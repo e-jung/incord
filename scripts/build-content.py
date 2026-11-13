@@ -55,12 +55,37 @@ def usfm_text(s):
  s=re.sub(r'\\\+?w\s+([^|\\]+)\|.*?\\\+?w\*',r'\1',s,flags=re.S)
  s=re.sub(r'\\[+\w]+\*?\s*',' ',s)
  return compact(s.replace('¶',''))
+# BSB's pinned plain-text edition inlines Psalm titles in verse 1. Match only
+# known superscription clauses at the beginning; never strip Scripture prose.
+BSB_HEADING = re.compile(r'^(?:For the choirmaster:|For the choirmaster[^.:]*\.|With stringed instruments[^.]*\.|According to [^.]*\.|For Jeduthun\.|To the tune of “[^”]+”\.?|A (?:Psalm|Maskil|Miktam|Shiggaion|prayer)[^.]*\.|A song[^.]*\.|A love song\.|Of (?:David|Solomon|Asaph|the sons of Korah)[^.]*\.|When Nathan[^.]*\.|After Doeg.*?Ahimelech\.”|When the Ziphites.*?us\?”|When he fought[^.]*\.|To bring remembrance\.|He said:)\s+')
+def strip_psalm_heading(text):
+ heading=[]
+ while (m:=BSB_HEADING.match(text)):
+  heading.append(m[0].strip());text=text[m.end():]
+ return text,' '.join(heading)
+
+def split_answer(entry):
+ words=entry['text'].split()
+ if len(words)<=150:return [entry]
+ # Balanced contiguous parts, each at most 150 words; no content is discarded.
+ total=(len(words)+149)//150;parts=[];start=0
+ for part in range(1,total+1):
+  end=round(part*len(words)/total)
+  parts.append(entry|{'id':f"{entry['id']}-part-{part}",'title':f"Q{entry['number']} ({part}/{total}) · {entry['title']}",'text':' '.join(words[start:end]),'part':part,'parts':total})
+  start=end
+ assert ' '.join(p['text'] for p in parts)==entry['text'], f"{entry['id']}: split changed source text"
+ return parts
+
 def bibles():
  bsb={b['id']:{} for b in BOOKS};byname={b['name']:b['id'] for b in BOOKS};byname['Psalm']='psa';byname['Song of Songs']='sng'
  for line in (RAW/'bsb.txt').read_text(encoding='utf-8-sig').splitlines():
   m=re.match(r'(.+?) (\d+):(\d+)\t(.*)',line)
   if m:
    name,ch,v,text=m.groups();bsb[byname[name]].setdefault(ch,{})[v]=compact(text)
+ bsb_headings={}
+ for ch,verses in bsb['psa'].items():
+  verses['1'],heading=strip_psalm_heading(verses['1'])
+  if heading:bsb_headings[ch]=heading
  translations={'BSB':bsb}
  for tr in ('KJV','WEB'):
   data={}
@@ -85,7 +110,7 @@ def bibles():
  for tr,data in translations.items():
   for b in BOOKS:
    assert data[b['id']],(tr,b)
-   emit(OUT/tr.lower()/(b['id']+'.json'),dict(book=b['name'],translation=tr,chapters=data[b['id']]))
+   emit(OUT/tr.lower()/(b['id']+'.json'),dict(book=b['name'],translation=tr,chapters=data[b['id']]) | ({'headings':bsb_headings} if tr=='BSB' and b['id']=='psa' else {}))
  return translations
 def documents():
  docs=[]
@@ -121,8 +146,17 @@ def documents():
   # Omit Schaff's inline editorial glosses; include bracketed Western additions.
   for gloss in (' [Hades, spirit-world]',' [flesh]',' [essence]'):text=text.replace(gloss,'')
   text=text.replace('(begotten) ','').replace('worlds [God of God]', 'worlds, [God of God]').replace('[','').replace(']','')
-  docs.append(dict(id=id,title=title,subtitle='Traditional English · Schaff',color='ink',items=[item(id,title,text,id)]))
+  if id=='apostles':
+   # The twelve traditional articles (the church and communion form article 9).
+   starts=['I believe in God', 'And in Jesus Christ', 'who was conceived', 'suffered under', 'he descended', 'he ascended', 'from thence', 'I believe in the Holy Ghost', 'the holy catholic Church', 'the forgiveness', 'the resurrection', 'and the life everlasting']
+   boundaries=[text.index(start) for start in starts]+[len(text)]
+   clauses=[text[boundaries[i]:boundaries[i+1]].strip() for i in range(12)]
+  else:
+   clauses=[clause.strip() for clause in re.split(r'(?<=;)\s+|(?<=\.)\s+(?=And I |I acknowledge)',text) if clause.strip()]
+  assert ' '.join(clauses)==text, f'{id}: article split changed source text'
+  docs.append(dict(id=id,title=title,subtitle='Traditional English · Schaff',color='ink',items=[item(f'{id}-{n}',f'{title} · {n}',clause,id)|{'number':n} for n,clause in enumerate(clauses,1)]))
  assert len(hitems)==129 and len(docs)==4
+ for doc in docs[:2]:doc['items']=[part for entry in doc['items'] for part in split_answer(entry)]
  emit(OUT/'documents.json',docs)
  return docs
 
@@ -144,11 +178,11 @@ def main():
  translations=bibles();docs=documents()
  def verse(ref):
   m=re.match(r'(.+) (\d+):(\d+)',ref);name,ch,v=m.groups();b=next(b for b in BOOKS if b['name']==name)
-  return item(f'bsb-{b["id"]}-{ch}-{v}',ref,translations['BSB'][b['id']][ch][v],'bible','BSB')
+  return item(f'bsb-{b["id"]}-{ch}-{v}',ref.replace('Psalms ', 'Psalm '),translations['BSB'][b['id']][ch][v],'bible','BSB')
  gospel=['John 3:16','Romans 3:23','Romans 6:23','Romans 5:8','Ephesians 2:8','Ephesians 2:9','John 14:6','Romans 10:9','Romans 10:13','1 John 1:9']
  starters=[dict(id='gospel',title='The Gospel in 10 verses',subtitle='Grace, received by faith',color='clay',items=[verse(r) for r in gospel]),dict(id='wsc-start',title='Westminster Shorter Catechism',subtitle='Questions 1–12',color='sage',items=docs[0]['items'][:12]),dict(id='heidelberg-start',title='Heidelberg · Lord’s Day 1',subtitle='Our only comfort',color='ochre',items=docs[1]['items'][:2]),dict(id='apostles-start',title='The Apostles’ Creed',subtitle='The faith we confess',color='ink',items=docs[2]['items']),dict(id='psalm23',title='Psalm 23',subtitle='The Lord is my shepherd',color='sage',items=[verse(f'Psalms 23:{n}') for n in range(1,7)])]
  emit(OUT/'starters.json',starters);emit(OUT/'books.json',BOOKS)
  counts={tr:sum(len(vs) for chs in data.values() for vs in chs.values()) for tr,data in translations.items()}
- emit(OUT/'manifest.json',{'version':1,'translations':['BSB','KJV','WEB'],'books':BOOKS,'verseCounts':counts,'documentCounts':{'wsc':107,'heidelberg':129,'apostles':1,'nicene':1}})
+ emit(OUT/'manifest.json',{'version':1,'translations':['BSB','KJV','WEB'],'books':BOOKS,'verseCounts':counts,'documentCounts':{d['id']:len(d['items']) for d in docs}})
  print(json.dumps(counts));print('Built 198 book packs, 4 documents, 5 starters (offline).')
 if __name__=='__main__':main()

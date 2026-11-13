@@ -1,4 +1,4 @@
-import {contentCopy} from './config/content-copy';
+import {contentCopy} from './config/copy';
 /** Public-domain content. Bible books load only on demand; documents/starters are available offline in the shell. */
 import documentData from '../public/content/documents.json';
 import starterData from '../public/content/starters.json';
@@ -13,6 +13,9 @@ export interface ContentItem {
   translation: string;
   number?: number;
   lordsDay?: number;
+  part?: number;
+  parts?: number;
+  heading?: string;
 }
 export interface ContentCollection {
   id: string;
@@ -25,7 +28,7 @@ export const starters: ContentCollection[] = starterData;
 export const documents: ContentCollection[] = documentData;
 export const books = bookData;
 export const translations: Translation[] = ['BSB', 'KJV', 'WEB'];
-interface BookPack { book: string; translation: Translation; chapters: Record<string, Record<string, string>> }
+interface BookPack { book: string; translation: Translation; chapters: Record<string, Record<string, string>>; headings?: Record<string, string> }
 const cache = new Map<string, Promise<BookPack>>();
 const normalize = (s: string) => s.toLowerCase().replace(/\./g, '').replace(/\s/g, '');
 const aliases = new Map<string, string>();
@@ -55,7 +58,7 @@ async function loadBook(id: string, translation: Translation): Promise<BookPack>
     promise = fetch(`${import.meta.env.BASE_URL}content/${key}.json`).then(async response => {
       if (!response.ok) throw Error(contentCopy.offline);
       return response.json() as Promise<BookPack>;
-    }).catch(error => { cache.delete(key); throw error; });
+    }).catch(() => { cache.delete(key); throw Error(contentCopy.offline); });
     cache.set(key, promise);
   }
   return promise;
@@ -66,11 +69,15 @@ export async function lookupReference(reference: string, translation: string = '
   const tr = translation.toUpperCase();
   if (!translations.includes(tr as Translation)) throw Error(contentCopy.translation);
   const input = reference.trim().replace(/[–—]/g, '-').replace(/^(III|II|I)\s+/i, (_, roman: string) => `${roman.length} `);
-  const match = /^(.+?)\s*(\d+)(?::(\d+))?(?:\s*-\s*(\d+)(?::(\d+))?)?$/.exec(input);
+  const match = /^(.+?)\s*(\d+)(?:[:.\s](\d+))?(?:\s*-\s*(\d+)(?:[:.\s](\d+))?)?$/.exec(input);
   if (!match) throw Error(contentCopy.reference);
-  const [, bookName, first, verse, end, endVerse] = match;
+  let [, bookName, first, verse, end, endVerse] = match;
   const id = aliases.get(normalize(bookName));
   if (!id) throw Error(contentCopy.book);
+  if (['oba', 'phm', '2jn', '3jn', 'jud'].includes(id) && !verse) {
+    verse = first;
+    first = '1';
+  }
   const pack = await loadBook(id, tr as Translation);
   const firstChapter = Number(first);
   const lastChapter = endVerse ? Number(end) : (verse ? firstChapter : Number(end ?? first));
@@ -87,7 +94,7 @@ export async function lookupReference(reference: string, translation: string = '
       const n = Number(v);
       if ((c === firstChapter && n < firstVerse) || (c === lastChapter && n > lastVerse)) continue;
       if (!text) continue; // The source retains a few text-critical omissions as empty verse slots.
-      result.push({ id: `${tr.toLowerCase()}-${id}-${c}-${v}`, title: `${pack.book} ${c}:${v}`, text, collection: 'bible', translation: tr });
+      result.push({ id: `${tr.toLowerCase()}-${id}-${c}-${v}`, title: `${id === 'psa' ? 'Psalm' : pack.book} ${c}:${v}`, text, collection: 'bible', translation: tr, ...(n === 1 && pack.headings?.[c] ? { heading: pack.headings[c] } : {}) });
     }
   }
   if (!result.length) throw Error(contentCopy.empty);
