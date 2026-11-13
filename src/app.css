@@ -94,3 +94,12 @@ main.practicing{position:fixed;inset:0;width:100%;height:100dvh;min-height:0;ove
 .scripture-card{position:relative;min-width:0}.scripture-card .cover{padding-top:42px}.card-badge{position:absolute;top:10px;left:18px;color:white;pointer-events:none;z-index:1}
 
 .source-row .esv-attribution a,.prompt .esv-attribution a,.keepsake .esv-attribution a{display:inline-block;width:fit-content;font-size:11px;font-weight:700;letter-spacing:.04em;border:1px solid currentColor;border-radius:5px;padding:0 5px;margin:4px 0}
+
+/* Settings feedback stays local to its form, including the submit outcome. */
+.feedback-form textarea{background:var(--bg)}
+.feedback-form .toggle{align-items:flex-start;line-height:1.5}
+.feedback-form .toggle input{margin:0;margin-top:1px;height:22px}
+.feedback-form .feedback-sending{transform:translateY(2px);box-shadow:none;opacity:.75}
+.feedback-form .feedback-result{margin:0;overflow-wrap:anywhere;scroll-margin-block:24px}
+.feedback-form .feedback-failed{color:var(--slip)}
+.feedback-result:focus-visible{outline:2px solid var(--acc);outline-offset:4px;border-radius:4px}

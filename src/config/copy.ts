@@ -20,6 +20,15 @@ export function collectionColor(item: SourceItem): string {
 }
 
 export const copy = {
+ feedbackTitle:'Send feedback',feedbackDetail:'An idea, a problem, or something else — Eric would love to hear it.',
+ feedbackKind:'Kind',feedbackKinds:['Idea','Problem','Other'] as const,feedbackMessage:'Message',
+ feedbackMessageHelp:'10–4000 characters.',
+ feedbackContact:'Email me back (optional)',feedbackContactHelp:'Leave blank if you don’t need a reply.',
+ feedbackIncludeMeta:'Include app version and device type',feedbackMetaHelp:'Only app version, device and browser type, screen size, and whether you’re signed in. No account details or library.',
+ feedbackSend:'Send feedback',feedbackSending:'Sending…',feedbackThanks:'Thanks — Eric reads every one.',
+ feedbackLengthError:'Please write between 10 and 4000 characters.',feedbackContactError:'Please enter a valid email address, or leave it blank.',
+ feedbackSendError:'Your feedback couldn’t be sent. Please try again when you’re online.',
+
  mcpConsentTitle:'Connect to Incord',
  mcpConsentIntro:(name:string)=>`${name} would like access to your Incord account.`,
  mcpUnverified:'This app registered itself. Incord has not verified who operates it. Only connect apps you trust.',

@@ -12,7 +12,7 @@ export class SqliteOAuthKV {
   async delete(name:string) { this.sql.exec('DELETE FROM oauth_kv WHERE name=?',name); }
   async list(options:{prefix?:string;limit?:number;cursor?:string}={}) { this.clean();const prefix=options.prefix||'',limit=Math.min(1000,Math.max(1,options.limit||1000)),cursor=options.cursor?decodeURIComponent(options.cursor):''; const rows=[...this.sql.exec<{name:string;metadata:string|null;expiration:number|null}>('SELECT name,metadata,expiration FROM oauth_kv WHERE substr(name,1,?)=? AND name>? ORDER BY name LIMIT ?',prefix.length,prefix,cursor,limit+1)];const complete=rows.length<=limit,keys=rows.slice(0,limit).map(row=>({name:row.name,...(row.expiration===null?{}:{expiration:row.expiration}),...(row.metadata===null?{}:{metadata:JSON.parse(row.metadata)})}));return {keys,list_complete:complete,cursor:complete?'':encodeURIComponent(keys.at(-1)!.name),cacheStatus:null}; }
 }
-export type McpIdentity={uid:string;version:number;connectionId:string;statsEnabled:boolean};
+export type McpIdentity={uid:string;version:number;connectionId:string;statsEnabled:boolean;clientName?:string};
 export class OAuthStorageDO {
   private kv:SqliteOAuthKV;
   constructor(private ctx:DurableObjectState) { this.kv=new SqliteOAuthKV(ctx.storage.sql);ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS oauth_activity(id TEXT PRIMARY KEY,last_used INTEGER NOT NULL)'); }
@@ -49,7 +49,7 @@ export class OAuthStorageDO {
       }
       if(path==='/validate') {
         const token=await server.validateToken(origin+'/mcp',data.token,env);
-        if(token){const props=token.props as McpIdentity;this.ctx.storage.sql.exec('INSERT INTO oauth_activity VALUES(?,?) ON CONFLICT(id) DO UPDATE SET last_used=excluded.last_used',props.connectionId,Date.now());}
+        if(token){const props=token.props as McpIdentity;const client=await oauth.lookupClient(token.clientId);token.props={...props,clientName:client?.clientName||'Connected app'};this.ctx.storage.sql.exec('INSERT INTO oauth_activity VALUES(?,?) ON CONFLICT(id) DO UPDATE SET last_used=excluded.last_used',props.connectionId,Date.now());}
         return Response.json(token);
       }
       if(path==='/apps'||path==='/revoke'||path==='/revoke-all') {

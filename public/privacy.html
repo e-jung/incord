@@ -28,7 +28,7 @@
   <p>Incord is a free, non-commercial app for memorizing Scripture, catechisms and creeds. It has no ads, sells nothing, and uses no third-party trackers.</p>
 
   <h2>Without an account</h2>
-  <p>Everything you add and practice stays on your device, in your browser's storage.</p>
+  <p>Your library and practice stay on your device, in your browser's storage. Feedback you choose to send is handled separately as described below.</p>
 
   <h2>With an account</h2>
   <p>Email sign-in sends a short-lived, six-digit code through our email delivery provider. Your email address is used only to send sign-in codes, never for marketing. Incord stores only a one-way keyed hash of the address, not the address itself. Codes are stored as hashes, expire after 10 minutes, and can be used only once.</p>
@@ -48,6 +48,12 @@
   <h2>Connected apps</h2>
   <p>You can choose to connect an AI assistant or another MCP client to your account. Before it connects, Incord asks you to approve read and/or write permissions. Read access can expose your library and practice information to that app; write access lets it add memory items, not edit or delete existing ones. ESV text is never sent through the connector.</p>
   <p>Incord stores the authorization records needed to keep the connection working, with tokens hashed and authorization properties encrypted; app names, permission scopes, connection dates and account identifiers remain in the authorization records. The connected app handles any information it receives under its own privacy policy. You can stop future access at any time in Settings → Connected apps; revocation does not erase information the app has already received. See <a href="/connect.html">how to connect an app</a>.</p>
+
+  <h2>Feedback you choose to send</h2>
+  <p>Send feedback from Settings or ask a connected app to send it. Incord stores the kind (idea, problem or other), your message, the date, and any reply email you explicitly provide. The reply field starts blank: your sign-in email is never copied into it. Unlike hashed sign-in addresses, a reply address you provide in feedback is stored as readable text so Eric can respond.</p>
+  <p>Settings offers an optional, initially enabled checkbox to include the app version, device/platform and browser family, viewport size, and whether you are signed in. It does not include library contents, your account ID, or your full browser user-agent string. MCP feedback records the connected app’s name instead; it sends no device metadata.</p>
+  <p>Eric reads feedback through a private admin page and the Incord support mailbox at incord-support@googlegroups.com. Email is delivered through Resend to that Google Groups mailbox; a reply address is used as the reply-to address. A daily email cap means some messages are stored without an email notification. Short keyed references and temporary hashed IP/account rate-limit keys help prevent spam; raw IP addresses and account IDs are not included in feedback emails.</p>
+  <p>Feedback is kept separately from your synced library for review and follow-up. Deleting an Incord account does not remove feedback already received by the support mailbox. Avoid including secrets or anything you do not want the support team to read.</p>
 
   <h2>Anonymous usage counts</h2>
   <p>Incord keeps daily totals, such as how many people practiced today or how many steps were passed, so the app can be improved. These totals contain no account identity, passage references or text. You can turn them off in Settings → Privacy. They are off automatically if your browser sends Global Privacy Control or Do Not Track.</p>

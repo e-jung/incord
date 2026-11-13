@@ -6,7 +6,7 @@ import {
 
 // Real local Worker + the official 2.4 SDK: no mocked MCP, OAuth, or sync endpoints.
 const callback = 'http://localhost:19876/callback';
-const toolNames = ['add_passages', 'get_due_today', 'get_progress', 'list_collections', 'list_library', 'lookup_passage'];
+const toolNames = ['add_passages', 'get_due_today', 'get_progress', 'list_collections', 'list_library', 'lookup_passage', 'send_feedback'];
 
 async function flow(baseURL: string, scope?: string) {
   const origin = new URL(baseURL).origin;
@@ -75,9 +75,11 @@ async function exchange(f: Flow, returned: URL) {
 }
 async function connect(resource: string, token: string) {
   const client = new Client({ name: 'incord-playwright', version: '1.0.0' });
+  const ip='mcp-sdk-'+crypto.randomUUID();
   try {
     await client.connect(new StreamableHTTPClientTransport(new URL(resource), {
       authProvider: { token: async () => token },
+      fetch:async(input,init)=>{const headers=new Headers(input instanceof Request?input.headers:undefined);new Headers(init?.headers).forEach((value,key)=>headers.set(key,value));headers.set('CF-Connecting-IP',ip);return fetch(input,{...init,headers})},
     }));
     return client;
   } catch (error) { await client.close(); throw error; }
@@ -236,6 +238,12 @@ test('read-only approval allows SDK reads but rejects writes with HTTP 403', asy
   const client = await connect(f.resource, tokens.access_token);
   try {
     expect(await call(client, 'list_library')).toMatchObject({ total: 0 });
+    // Feedback is available even to read-only clients and cannot read the library.
+    const message='Please add a dark-mode schedule '+crypto.randomUUID();
+    expect(await call(client,'send_feedback',{kind:'Idea',message,contact:'reply@example.com'})).toMatchObject({ok:true,message:'Thanks — Eric reads every one.'});
+    const invalid=await client.callTool({name:'send_feedback',arguments:{kind:'Idea',message:'short'}});expect(invalid.isError).toBe(true);
+    const stats=await page.context().newPage();
+    try{await stats.goto('/stats');await stats.getByLabel('Stats token').fill('incord-playwright-local-stats-token-32chars');await stats.getByRole('button',{name:'View counts',exact:true}).click();const feedback=stats.getByRole('region',{name:'Feedback',exact:true});await expect(feedback).toContainText(message);await expect(feedback).toContainText(f.clientName);await expect(feedback).toContainText('mcp');await expect(feedback).toContainText('reply@example.com');}finally{await stats.close()}
     // Keep the SDK on the wire for the denied call and inspect its HTTP result.
     let writeStatus = 0, writeChallenge = '';
     const restricted = new Client({ name: 'incord-readonly-test', version: '1.0.0' });
@@ -300,7 +308,7 @@ for (const action of ['logout-everywhere', 'delete-account'] as const) {
     const tokens = await approveSignedIn(page, f);
     const client = await connect(f.resource, tokens.access_token);
     try {
-      expect((await client.listTools()).tools).toHaveLength(6);
+      expect((await client.listTools()).tools).toHaveLength(7);
       const response = action === 'logout-everywhere'
         ? await page.request.post('/api/auth/logout-everywhere', { headers: { Origin: f.origin }, data: {} })
         : await page.request.delete('/api/account', { headers: { Origin: f.origin } });
@@ -320,5 +328,5 @@ test('MCP request limits apply per bearer and across a user’s connections',asy
   // A second token is not exhausted yet, but shares the account's 60/min budget.
   const second=await flow(baseURL!),secondTokens=await approveSignedIn(page,second);
   const next=await create(second.resource,secondTokens.access_token);
-  try{expect((await next.listTools()).tools).toHaveLength(6);for(let n=0;n<35;n++){try{await next.listTools()}catch{break}}expect(status).toBe(429);}finally{await next.close()}
+  try{expect((await next.listTools()).tools).toHaveLength(7);for(let n=0;n<35;n++){try{await next.listTools()}catch{break}}expect(status).toBe(429);}finally{await next.close()}
 });

@@ -1,3 +1,4 @@
+import type { FeedbackRow } from './feedback';
 /** First-party aggregate counts only. Never pass account, request, text or exception data here. */
 export const STATS_EVENTS = [
   'app_open','practice_start','peek','learned','own_text_added','welcome_back_shown','reminders_enabled','account_created','client_error',
@@ -56,7 +57,7 @@ export class StatsDO {
     }
     if(path==='/aggregate'&&request.method==='POST') {
       const input=await request.json<{event?:string}>();
-      if(!['lookup_passage','add_passages','list_library','get_due_today','get_progress','list_collections'].some(name=>input.event==='mcp_tool:'+name))return reply({error:'Invalid event'},400);
+      if(!['lookup_passage','add_passages','list_library','get_due_today','get_progress','list_collections','send_feedback'].some(name=>input.event==='mcp_tool:'+name))return reply({error:'Invalid event'},400);
       await this.state.storage.transaction(async tx=>{await this.rollup(tx,now);const row=await tx.get<StatsDay>('day:'+day)||{day,activeDevices:0,counters:{}};row.counters[input.event!]=(row.counters[input.event!]||0)+1;await tx.put('day:'+day,row)});
       await this.state.storage.setAlarm((Math.floor(now/DAY)+1)*DAY);return reply({ok:true});
     }
@@ -88,7 +89,7 @@ export class StatsDO {
     return reply({error:'Not found'},404);
   }
 }
-export interface StatsEnv { STATS:DurableObjectNamespace; STATS_TOKEN?:string; APP_ORIGIN?:string }
+export interface StatsEnv { STATS:DurableObjectNamespace; STATS_TOKEN?:string; APP_ORIGIN?:string; REGISTRY?:DurableObjectNamespace }
 const stub=(env:StatsEnv)=>env.STATS.get(env.STATS.idFromName('stats'));
 const encoder=new TextEncoder();
 const hex=(bytes:ArrayBuffer)=>Array.from(new Uint8Array(bytes),x=>x.toString(16).padStart(2,'0')).join('');
@@ -108,14 +109,17 @@ async function readLimited(request:Request,max:number) {
 }
 const escape=(s:string)=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
 const html=(content:string,status=200)=>new Response(`<!doctype html><html lang="en" data-theme="system"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Incord · Private counts</title><link rel="stylesheet" href="/assets/stats.css"><main>${content}</main></html>`,{status,headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store, no-transform','Referrer-Policy':'same-origin','X-Robots-Tag':'noindex, nofollow','Content-Security-Policy':"default-src 'none'; style-src 'self'; font-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"}});
-export function renderStats(days:StatsDay[]) {
+export function renderFeedback(feedback:FeedbackRow[]) {
+  return `<section class="feedback" aria-label="Feedback"><h2>Latest feedback</h2><p>Voluntarily submitted messages and optional contact details. Separate from the anonymous usage counts above; visible only to the stats administrator. Latest 100, newest first.</p>${feedback.length ? feedback.map(r=>`<article><h3>${escape(r.kind)} · ${escape(r.source)} · ${escape(new Date(Number(r.at)).toISOString())}</h3>${r.contact?`<p>Contact: ${escape(r.contact)}</p>`:''}${r.clientName?`<p>Client: ${escape(r.clientName)}</p>`:''}<p class="feedback-message">${escape(r.message)}</p><pre>${escape(JSON.stringify(r.meta||{}))}</pre></article>`).join('') : '<p>No feedback yet.</p>'}</section>`;
+}
+export function renderStats(days:StatsDay[],feedback?:FeedbackRow[]) {
   days=[...days].sort((a,b)=>a.day.localeCompare(b.day));
   const today=days.at(-1);
   const total=(event:string)=>days.reduce((n,d)=>n+(d.counters[event]||0),0);
   const group=(title:string,prefix:string)=>`<section><h2>${title}</h2><div class="table-scroll" tabindex="0" role="region" aria-label="${title}"><table><tr><th>Category</th><th>Count</th></tr>${STATS_EVENTS.filter(x=>x.startsWith(prefix)).sort((a,b)=>prefix==='starter_added:'?total(b)-total(a):0).map(event=>`<tr><td>${escape(event.slice(prefix.length))}</td><td>${total(event)}</td></tr>`).join('')}</table></div></section>`;
   const max=Math.max(1,...days.map(d=>d.activeDevices));const points=days.map((d,i)=>`${i*100/Math.max(1,days.length-1)},${60-d.activeDevices/max*55}`).join(' ');
   const sent=total('push_test:sent'),failed=total('push_test:failed');
-  return `<section class="summary"><h1>Incord · Private counts</h1><p>Last 30 UTC days · anonymous aggregate counts only.</p><dl class="today"><div><dt>Devices today</dt><dd>${today?.activeDevices||0}</dd></div><div><dt>Practice starts</dt><dd>${today?.counters.practice_start||0}</dd></div><div><dt>Learned</dt><dd>${today?.counters.learned||0}</dd></div></dl><svg viewBox="0 0 100 65" preserveAspectRatio="none" role="img" aria-label="Daily active devices, oldest to newest over 30 days"><polyline points="${points}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"/></svg></section><section><h2>Daily activity</h2><div class="table-scroll" tabindex="0" role="region" aria-label="Daily activity"><table><tr><th>Date (UTC)</th><th>Devices</th><th>Practice starts</th><th>Learned</th><th>Client errors</th></tr>${[...days].reverse().map(d=>`<tr><td>${escape(d.day)}</td><td>${d.activeDevices}</td><td>${d.counters.practice_start||0}</td><td>${d.counters.learned||0}</td><td>${d.counters.client_error||0}</td></tr>`).join('')}</table></div></section>${group('Ladder passes','step_pass:')}${group('Ladder failures','step_fail:')}${group('Review grades','review:')}${group('Starters','starter_added:')}${group('Translation mix','translation_added:')}<section><h2>Reminders & push tests</h2><p>Reminders enabled: ${total('reminders_enabled')}</p><p>Push tests: ${sent} sent / ${failed} failed · success ${sent+failed?Math.round(sent/(sent+failed)*100)+'%':'—'}</p></section><p>Last 7 days: ${days.slice(-7).reduce((n,d)=>n+d.activeDevices,0)} active device-days (sum of daily devices; not deduplicated weekly people). Local-day token rotation makes daily devices approximate.</p><form method="post" action="/stats/logout"><button>Sign out of stats</button></form>`;
+  return `<section class="summary"><h1>Incord · Private counts</h1><p>Last 30 UTC days · anonymous aggregate counts only.</p><dl class="today"><div><dt>Devices today</dt><dd>${today?.activeDevices||0}</dd></div><div><dt>Practice starts</dt><dd>${today?.counters.practice_start||0}</dd></div><div><dt>Learned</dt><dd>${today?.counters.learned||0}</dd></div></dl><svg viewBox="0 0 100 65" preserveAspectRatio="none" role="img" aria-label="Daily active devices, oldest to newest over 30 days"><polyline points="${points}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"/></svg></section><section><h2>Daily activity</h2><div class="table-scroll" tabindex="0" role="region" aria-label="Daily activity"><table><tr><th>Date (UTC)</th><th>Devices</th><th>Practice starts</th><th>Learned</th><th>Client errors</th></tr>${[...days].reverse().map(d=>`<tr><td>${escape(d.day)}</td><td>${d.activeDevices}</td><td>${d.counters.practice_start||0}</td><td>${d.counters.learned||0}</td><td>${d.counters.client_error||0}</td></tr>`).join('')}</table></div></section>${group('Ladder passes','step_pass:')}${group('Ladder failures','step_fail:')}${group('Review grades','review:')}${group('Starters','starter_added:')}${group('Translation mix','translation_added:')}<section><h2>Reminders & push tests</h2><p>Reminders enabled: ${total('reminders_enabled')}</p><p>Push tests: ${sent} sent / ${failed} failed · success ${sent+failed?Math.round(sent/(sent+failed)*100)+'%':'—'}</p></section><p>Last 7 days: ${days.slice(-7).reduce((n,d)=>n+d.activeDevices,0)} active device-days (sum of daily devices; not deduplicated weekly people). Local-day token rotation makes daily devices approximate.</p>${feedback ? renderFeedback(feedback) : ''}<form method="post" action="/stats/logout"><button>Sign out of stats</button></form>`;
 }
 /** Route /api/stats and /stats[/logout] before SPA fallback. Apply worker security headers.
  * No session or account is consulted. Never forward the original request into StatsDO.
@@ -146,5 +150,12 @@ export async function handleStatsRequest(request:Request,env:StatsEnv):Promise<R
   const value=request.headers.get('Cookie')?.split(';').map(x=>x.trim()).find(x=>x.startsWith('incord_stats='))?.slice(13);
   if(!await verifyStatsCookie(value,env.STATS_TOKEN))return form();
   const response=await stub(env).fetch('https://stats/report');if(!response.ok)return html('<h1>Counts unavailable</h1>',503);
-  const report=await response.json<{days:StatsDay[]}>();return html(renderStats(report.days));
+  const report=await response.json<{days:StatsDay[]}>();
+  let feedback:FeedbackRow[]|undefined;
+  if(env.REGISTRY){
+    const result=await env.REGISTRY.get(env.REGISTRY.idFromName('registry')).fetch('https://registry/feedback/list',{method:'POST',body:'{}'});
+    if(!result.ok)return html('<h1>Feedback unavailable</h1>',503);
+    feedback=(await result.json<{feedback:FeedbackRow[]}>()).feedback;
+  }
+  return html(renderStats(report.days,feedback));
 }

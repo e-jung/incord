@@ -1,5 +1,6 @@
 import { handleEsv, assertEsvLimit, stripEsvText } from './esv';
 import { handleStatsRequest } from './stats';
+import { submitFeedback, FeedbackError, initializeFeedbackStorage, handleFeedbackRegistry } from './feedback';
 export { StatsDO } from './stats';
 export { OAuthStorageDO } from './oauth-storage';
 import { oauthCall } from './oauth-storage';
@@ -124,6 +125,13 @@ async function api(request: Request, env: Env): Promise<Response> {
   if (path === '/api/test/last-code') assert(emailTestMode(env, request) && request.method === 'GET', 'Not found', 404);
   assert(env.SESSION_SECRET?.length >= 32, 'Service secrets are not configured', 503);
   if (path === '/api/test/last-code') { assert(emailTestMode(env, request) && request.method === 'GET', 'Not found', 404); return json(await registry(env, '/email/test-get', { key: await emailKey(env, normalizeEmail(url.searchParams.get('email'))) })); }
+  if (path === '/api/feedback') {
+    assert(request.method === 'POST', 'Method not allowed', 405);
+    const input = await body(request, 24000);
+    let identity: {uid:string} | undefined;
+    try { identity = await signedIn(request, env); } catch(error) { if (!(error instanceof ApiError && error.status === 401)) throw error; }
+    return json(await submitFeedback(request, env, input, identity));
+  }
   if (path === '/api/log' && request.method === 'POST') {
     await registry(env, '/limit', { key: 'log:' + await digest(env.SESSION_SECRET + ':' + (request.headers.get('CF-Connecting-IP') || 'local')), limit: 10, window: 60_000 });
     const input = await body(request, 2048);
@@ -236,7 +244,7 @@ export default {
       }
       return await finish(response);
     } catch (error) {
-      if (error instanceof ApiError) return finish(json({ error: error.message }, error.status));
+      if (error instanceof ApiError || error instanceof FeedbackError) return finish(json({ error: error.message }, error.status));
       return finish(json({ error: 'Something went wrong. Please try again.' }, 500), true,
         error instanceof Error && ['Error', 'TypeError', 'RangeError', 'SyntaxError', 'ReferenceError'].includes(error.name) ? error.name : 'Error');
     }
@@ -260,6 +268,7 @@ export class RegistryDO {
   private sql: SqlStorage;
   constructor(private ctx: DurableObjectState) {
     this.sql = ctx.storage.sql;
+    initializeFeedbackStorage(this.sql);
     this.sql.exec('CREATE TABLE IF NOT EXISTS mapping(kind TEXT NOT NULL,id TEXT NOT NULL,uid TEXT NOT NULL,PRIMARY KEY(kind,id))');
     this.sql.exec('CREATE INDEX IF NOT EXISTS mapping_user ON mapping(uid)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS challenges(id TEXT PRIMARY KEY,value TEXT NOT NULL,expires INTEGER NOT NULL)');
@@ -271,6 +280,8 @@ export class RegistryDO {
   private rows(query: string, ...args: (string | number)[]) { return [...this.sql.exec<Row>(query, ...args)]; }
   async fetch(request: Request) { return this.ctx.blockConcurrencyWhile(async () => { try {
     const data = await request.json<any>(), path = new URL(request.url).pathname, now = Date.now();
+    const feedback = handleFeedbackRegistry(this.sql, this.ctx.storage, path, data, now);
+    if (feedback) return feedback;
     this.sql.exec('DELETE FROM challenges WHERE expires < ?', now); this.sql.exec('DELETE FROM limits WHERE expires < ?', now);
     if (path === '/limit') { const row = this.rows('SELECT count FROM limits WHERE id=?', data.key)[0]; assert(!row || Number(row.count) < data.limit, 'Too many requests. Try again later.', 429); this.sql.exec('INSERT INTO limits VALUES(?,1,?) ON CONFLICT(id) DO UPDATE SET count=count+1', data.key, now + data.window); return json({ ok: true }); }
     if (path === '/challenge/set') { this.sql.exec('INSERT INTO challenges VALUES(?,?,?)', data.id, JSON.stringify(data.value), now + 300_000); return json({ ok: true }); }

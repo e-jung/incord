@@ -180,7 +180,24 @@ describe('library, daily plan, progress, and collection discovery',()=>{
   const out=await run('list_collections');expect(out.starters.length).toBeGreaterThan(0);expect(out.passages.itemCount).toBe(17);
   expect(out.documents.map((d:any)=>d.id)).toEqual(['wsc','heidelberg','apostles','nicene','wlc','baptist','spurgeon','young-children']);
   expect(out.documents[0].items[0]).toMatchObject({id:'wsc-1',number:1});
-  expect(Object.keys(MCP_TOOL_SCHEMAS)).toHaveLength(6);
+  expect(Object.keys(MCP_TOOL_SCHEMAS)).toHaveLength(7);
   await expect(run('delete_everything')).rejects.toThrow('Unknown');
+ });
+});
+
+
+describe('MCP feedback',()=>{
+ it('submits only explicit feedback fields without reading the library',async()=>{
+  const f=fixture(),feedback=vi.fn(async()=>({ok:true,message:'Thanks — Eric reads every one.'}));
+  f.deps.feedback=feedback;f.deps.read=vi.fn();
+  expect(await run('send_feedback',{kind:'Idea',message:'  Add a dark-mode schedule please.  ',contact:'reply@example.com'},f)).toMatchObject({ok:true});
+  expect(feedback).toHaveBeenCalledWith({kind:'Idea',message:'Add a dark-mode schedule please.',contact:'reply@example.com'});expect(f.deps.read).not.toHaveBeenCalled();expect(f.fetch).not.toHaveBeenCalled();
+ });
+ it.each([{kind:'Bug',message:'A useful description'}, {kind:'Idea',message:'short'}, {kind:'Other',message:'x'.repeat(4001)}, {kind:'Problem',message:'Something went wrong',contact:'not-an-email'}, {kind:'Idea',message:'A useful description',meta:{secret:'never'}}])('rejects invalid feedback without a side effect: %j',async input=>{
+  const f=fixture(),feedback=vi.fn();f.deps.feedback=feedback;await expect(run('send_feedback',input,f)).rejects.toThrow();expect(feedback).not.toHaveBeenCalled();
+ });
+ it('keeps feedback rate-limit failures visible to the transport',async()=>{
+  const f=fixture();f.deps.feedback=async()=>{throw Object.assign(Error('Too many feedback messages. Try again later.'),{status:429})};
+  await expect(run('send_feedback',{kind:'Other',message:'A useful description'},f)).rejects.toMatchObject({status:429});
  });
 });

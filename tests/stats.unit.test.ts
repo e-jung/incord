@@ -1,5 +1,5 @@
 import {afterEach,describe,expect,it,vi} from 'vitest';
-import {StatsDO,STATS_EVENTS,validateStatsBatch,handleStatsRequest,signStatsCookie,verifyStatsCookie,type StatsEnv} from '../cloudflare/stats';
+import {StatsDO,STATS_EVENTS,validateStatsBatch,handleStatsRequest,signStatsCookie,verifyStatsCookie,renderFeedback,type StatsEnv} from '../cloudflare/stats';
 import {STATS_EVENTS as CLIENT_EVENTS} from '../src/stats';
 function fixture() {
   const data=new Map<string,unknown>();let alarm=0;
@@ -30,8 +30,8 @@ describe('Anonymous stats boundary',()=>{
  });
  it('counts MCP tools without inventing a device token or active user',async()=>{
   const f=fixture();const aggregate=(event:string)=>f.object.fetch(new Request('https://internal/aggregate',{method:'POST',body:JSON.stringify({event})}));
-  expect((await aggregate('mcp_tool:add_passages')).status).toBe(200);expect((await aggregate('mcp_tool:add_passages')).status).toBe(200);expect((await aggregate('private text')).status).toBe(400);
-  const rows=[...f.data.values()] as any[];expect(rows.find(row=>row?.counters)).toMatchObject({activeDevices:0,counters:{'mcp_tool:add_passages':2}});expect([...f.data.keys()].some(key=>key.startsWith('token:'))).toBe(false);
+  expect((await aggregate('mcp_tool:add_passages')).status).toBe(200);expect((await aggregate('mcp_tool:add_passages')).status).toBe(200);expect((await aggregate('mcp_tool:send_feedback')).status).toBe(200);expect((await aggregate('private text')).status).toBe(400);
+  const rows=[...f.data.values()] as any[];expect(rows.find(row=>row?.counters)).toMatchObject({activeDevices:0,counters:{'mcp_tool:add_passages':2,'mcp_tool:send_feedback':1}});expect([...f.data.keys()].some(key=>key.startsWith('token:'))).toBe(false);
  });
  it('limits batches per token and resets the limit each minute without storing IP or UA',async()=>{
   vi.useFakeTimers();vi.setSystemTime(new Date('2026-11-13T12:00:00Z'));const f=fixture();for(let i=0;i<20;i++)expect((await f.record()).status).toBe(200);
@@ -64,5 +64,23 @@ describe('Anonymous stats boundary',()=>{
   const f=fixture();for(let i=0;i<10;i++)expect((await handleStatsRequest(request('/stats','token=wrong'),f.env))?.status).toBe(401);
   expect((await handleStatsRequest(request('/stats','token=wrong'),f.env))?.status).toBe(429);
   expect((await handleStatsRequest(request('/stats'),{...f.env,STATS_TOKEN:undefined}))?.status).toBe(503);
+ });
+});
+
+describe('Private feedback stats',()=>{
+ it('escapes every feedback field and keeps voluntary content distinct from anonymous counts',async()=>{
+  const dangerous='<script>alert("secret")</script>';
+  const rendered=renderFeedback([{id:'one',at:Date.now(),kind:dangerous as any,source:dangerous as any,message:dangerous,contact:dangerous,clientName:dangerous,meta:{version:dangerous}}]);
+  expect(rendered).not.toContain('<script>');expect(rendered).toContain('&lt;script&gt;');expect(rendered).toContain('Separate from the anonymous usage counts');
+  const f=fixture(),fetch=vi.fn().mockResolvedValue(Response.json({feedback:[{id:'one',at:Date.now(),kind:'Idea',source:'app',message:dangerous}]}));
+  f.env.REGISTRY={idFromName:()=>'',get:()=>({fetch})} as unknown as DurableObjectNamespace;
+  await handleStatsRequest(request('/stats'),f.env);expect(fetch).not.toHaveBeenCalled();
+  const cookie='incord_stats='+await signStatsCookie(f.env.STATS_TOKEN!);
+  const page=await handleStatsRequest(request('/stats',undefined,cookie),f.env);expect(await page!.text()).toContain('Latest feedback');expect(fetch).toHaveBeenCalledOnce();
+ });
+ it('fails closed if the real Registry report is unavailable',async()=>{
+  const f=fixture();f.env.REGISTRY={idFromName:()=>'',get:()=>({fetch:async()=>new Response('',{status:503})})} as unknown as DurableObjectNamespace;
+  const cookie='incord_stats='+await signStatsCookie(f.env.STATS_TOKEN!);
+  expect((await handleStatsRequest(request('/stats',undefined,cookie),f.env))?.status).toBe(503);
  });
 });
