@@ -72,7 +72,8 @@ function secure(response: Response) {
     }
   }
   headers.set('X-Content-Type-Options', 'nosniff');
-  headers.set('Referrer-Policy', 'no-referrer');
+  // Same-origin form POSTs need an Origin header; no-referrer makes Chromium send null.
+  headers.set('Referrer-Policy', headers.get('Referrer-Policy') === 'same-origin' ? 'same-origin' : 'no-referrer');
   headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   headers.set('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
   return new Response(response.body, { status: response.status, headers });
@@ -189,8 +190,8 @@ async function api(request: Request, env: Env): Promise<Response> {
   throw new ApiError(404, 'Route not found');
 }
 const legacyServiceWorker = `self.addEventListener('install',()=>self.skipWaiting());
-self.addEventListener('activate',event=>event.waitUntil((async()=>{await self.registration.unregister();for(const client of await self.clients.matchAll({type:'window',includeUncontrolled:true})){const url=new URL(client.url);url.hostname='incord.jesklabs.com';await client.navigate(url.href)}})()));
-self.addEventListener('fetch',event=>{const url=new URL(event.request.url);if(event.request.mode==='navigate'){url.hostname='incord.jesklabs.com';event.respondWith(Response.redirect(url.href,301))}});`;
+self.addEventListener('activate',event=>event.waitUntil((async()=>{await self.registration.unregister();for(const client of await self.clients.matchAll({type:'window',includeUncontrolled:true})){const url=new URL(client.url);url.hostname='incord.jesklabs.com';url.protocol='https:';url.port='';await client.navigate(url.href)}})()));
+self.addEventListener('fetch',event=>{const url=new URL(event.request.url);if(event.request.mode==='navigate'){url.hostname='incord.jesklabs.com';url.protocol='https:';url.port='';event.respondWith(Response.redirect(url.href,301))}});`;
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const requestId = request.headers.get('cf-ray')?.replace(/[^a-zA-Z0-9-]/g, '').slice(0, 100) || crypto.randomUUID();
@@ -211,7 +212,7 @@ export default {
         if (path === '/.well-known/webauthn') return finish(json({ origins: ['https://incord.jesklabs.com'] }));
         if (path === '/sw.js') return finish(new Response(legacyServiceWorker, { headers: { 'Content-Type': 'application/javascript', 'Cache-Control': 'no-store', 'Service-Worker-Allowed': '/' } }));
         if (path.startsWith('/api/')) return finish(json({ error: 'Incord has moved. Update this app at https://incord.jesklabs.com.' }, 410));
-        url.hostname = 'incord.jesklabs.com'; return finish(Response.redirect(url.href, 301));
+        url.hostname = 'incord.jesklabs.com'; url.protocol = 'https:'; url.port = ''; return finish(Response.redirect(url.href, 301));
       }
       const statsResponse = await handleStatsRequest(request, env);
       if (statsResponse) return await finish(statsResponse);

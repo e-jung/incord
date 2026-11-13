@@ -1,4 +1,4 @@
-# By Heart — build report
+# Incord — build report
 
 Completed locally on 2026-11-13. No GitHub remote, push, or Cloudflare deployment.
 

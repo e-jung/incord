@@ -20,6 +20,7 @@ describe('FIX-7 migration responses',()=>{
   const {env,assets}=fixture();const response=await worker.fetch(new Request(oldOrigin+path),env);
   expect(response.status).toBe(301);expect(response.headers.get('Location')).toBe(newOrigin+path);expect(assets).not.toHaveBeenCalled();expect(response.headers.get('Strict-Transport-Security')).toBeTruthy();
  });
+ it('upgrades old HTTP requests to canonical HTTPS',async()=>{const {env}=fixture();const response=await worker.fetch(new Request('http://byheart.jesklabs.com/library?q=1'),env);expect(response.status).toBe(301);expect(response.headers.get('Location')).toBe(newOrigin+'/library?q=1')});
  it.each(['GET','POST','DELETE'])('retires old API with 410, not a cross-origin write redirect (%s)',async method=>{
   const {env,assets}=fixture();const response=await worker.fetch(new Request(oldOrigin+'/api/sync',{method}),env);
   expect(response.status).toBe(410);expect(response.headers.get('Location')).toBeNull();expect(await response.json()).toMatchObject({error:expect.stringContaining(newOrigin)});expect(assets).not.toHaveBeenCalled();

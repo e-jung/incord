@@ -1,5 +1,7 @@
 # Copy to ../.dev.vars locally; never commit actual credentials.
 SESSION_SECRET="replace-with-at-least-32-random-characters"
+STATS_TOKEN="replace-with-a-separate-random-stats-access-token"
+# ESV_API_KEY="your-crossway-api-key"
 # APP_ORIGIN="http://localhost:8793"
 # GOOGLE_CLIENT_ID=""
 # GOOGLE_CLIENT_SECRET=""

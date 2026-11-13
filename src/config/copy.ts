@@ -23,7 +23,7 @@ export const copy = {
  practiceRegionLabel:'Practice',aboutLabel:'About',textSize:'Text size',textSizes:[['small','Small'],['default','Default'],['large','Large'],['extra-large','Extra large']],
  reminderOn:'Reminders on this device: on',reminderMissing:'Permission granted but not subscribed. Turn on again.',
  reminderOff:'Reminders on this device: off',reminderDenied:'Permission denied. Enable notifications in iOS Settings → Notifications → Incord, then return here.',
- turnOnAgain:'Turn on again',deliveryLog:'Delivery log',deliveryEmpty:'No delivery attempts yet.',
+ turnOnAgain:'Turn on reminders again on this device',deliveryLog:'Delivery log',deliveryEmpty:'No delivery attempts yet.',
  deliveryUnavailable:'Delivery status unavailable. Reconnect to check this device.',
  noPushDevices:'No subscribed devices. Turn on reminders on this device first.',
  pushProvider:(host:string)=>host.endsWith('push.apple.com')?'Apple':host==='fcm.googleapis.com'?'Google':host==='updates.push.services.mozilla.com'?'Mozilla':'the notification service',
@@ -353,3 +353,16 @@ export const contentCopy={
  empty:'No verses found for that reference.',
  retry:'Please try again.'
 } as const;
+
+export const incordCopy = {
+ esv: 'ESV',
+ esvOffline: 'Connect once to load this ESV passage.',
+ legacySignin: 'Use a By Heart passkey',
+ incordPasskey: 'Add a passkey for incord.jesklabs.com',
+ incordPasskeyDetail: 'Your By Heart passkey still works in supported browsers. Add a new passkey for this address to make future sign-ins easier.',
+ privacy: 'Privacy',
+ shareCounts: 'Share anonymous usage counts',
+ countsDetail: 'Daily totals only; no account identity, passage references, or text. You can turn this off on this device.',
+ privacySignal: 'Your browser’s privacy preference has turned anonymous usage counts off.',
+ privacyAbout: 'Incord counts anonymous totals (like how many people practiced today) to improve the app. No ads, no third-party trackers.',
+};

@@ -139,7 +139,7 @@ test('empty Today, every tab, settings persistence, local export, and own-text v
   await screen(page, info, 'account-settings');
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Export your data', exact: true }).click();
-  expect((await download).suggestedFilename()).toBe('by-heart.json');
+  expect((await download).suggestedFilename()).toBe('incord.json');
   await expect(page.getByRole('status')).toHaveText('Your export is ready.');
   await tab(page, 'Today');
   await expect(page.getByText('0 of 5 this week')).toBeVisible();
@@ -336,7 +336,7 @@ test('passkey signup, sync, signout, signin, recovery rotation, export and accou
   await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Export your data', exact: true }).click();
-  expect((await download).suggestedFilename()).toBe('by-heart.json');
+  expect((await download).suggestedFilename()).toBe('incord.json');
   await page.getByRole('button', { name: 'Delete account', exact: true }).click();
   await screen(page, info, 'account-delete-confirm');
   await page.getByRole('button', { name: 'Close dialog', exact: true }).click();
@@ -389,7 +389,7 @@ test('push permission, mock subscription, test notification and disable', async 
   expect(subscriptions).toEqual([{ subscription: { endpoint: 'https://push.example.invalid/byheart-test', keys: { p256dh: 'mock-p256dh', auth: 'mock-auth' } } }]);
   await screen(page, info, 'account-push-enabled');
   await page.getByRole('button', { name: 'Send test notification', exact: true }).click();
-  await expect(page.getByRole('status')).toHaveText("Sent to Apple. If it didn't appear, check Settings → Notifications → By Heart.");
+  await expect(page.getByRole('status')).toHaveText("Sent to Apple. If it didn't appear, check Settings → Notifications → Incord.");
   expect(notificationTests).toBe(1);
   await page.getByRole('button', { name: 'Disable reminders', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Enable reminders', exact: true })).toBeVisible();
@@ -500,6 +500,6 @@ test('375px segments fit and recovery input clears floating navigation', async (
   const nav=await page.getByRole('navigation').boundingBox();
   expect(input!.y+input!.height).toBeLessThan(nav!.y);
   await page.evaluate(()=>window.scrollTo(0,document.documentElement.scrollHeight));
-  const last=await page.getByText('By Heart · no ads', {exact:false}).boundingBox();
+  const last=await page.getByText('Incord (from Latin', {exact:false}).boundingBox();
   expect(last!.y+last!.height).toBeLessThan(nav!.y);
 });

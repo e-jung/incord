@@ -8,7 +8,7 @@ Node 24 required.
 
 ```sh
 npm ci
-npx playwright install chromium
+npx playwright install chromium webkit
 node scripts/local-secrets.mjs
 npm run build
 npm run serve

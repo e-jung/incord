@@ -121,22 +121,24 @@ console.log(`Incord smoke: ${origin} (Chromium, iPhone 15 393×852)`);
 try {
   browser = await chromium.launch({ headless: true });
   let first, second, recoveryCode;
-  const legacyOrigin = process.env.SMOKE_LEGACY_URL || (origin === 'https://incord.jesklabs.com' ? 'https://byheart.jesklabs.com' : '');
+  const localLegacy = ['localhost','127.0.0.1'].includes(target.hostname) && !process.env.SMOKE_LEGACY_URL;
+  const canonicalOrigin = localLegacy ? 'https://incord.jesklabs.com' : origin;
+  const legacyOrigin = process.env.SMOKE_LEGACY_URL || (localLegacy ? origin : origin === 'https://incord.jesklabs.com' ? 'https://byheart.jesklabs.com' : '');
   if (legacyOrigin) await check('Legacy origin redirects paths, retires APIs and preserves passkey metadata', async () => {
     const legacy = new URL(legacyOrigin);
     expect(['http:', 'https:'].includes(legacy.protocol) && !legacy.username && !legacy.password && !legacy.search && !legacy.hash, 'Valid legacy origin').toBe(true);
-    const context = await browser.newContext();
+    const context = await browser.newContext({ extraHTTPHeaders: localLegacy ? { Host: 'byheart.jesklabs.com' } : {} });
     contexts.push(context);
     const redirect = await context.request.get(legacy.origin + '/account?migration=smoke', { maxRedirects: 0 });
     expect(redirect.status()).toBe(301);
-    expect(redirect.headers().location).toBe(origin + '/account?migration=smoke');
+    expect(redirect.headers().location).toBe(canonicalOrigin + '/account?migration=smoke');
     const retired = await context.request.get(legacy.origin + '/api/config', { maxRedirects: 0 });
     expect(retired.status()).toBe(410);
     expect(retired.headers()['content-type']).toContain('application/json');
     expect(JSON.stringify(await retired.json())).toMatch(/update|incord/i);
     const metadata = await context.request.get(legacy.origin + '/.well-known/webauthn', { maxRedirects: 0 });
     expect(metadata.status()).toBe(200);
-    expect(await metadata.json()).toEqual({ origins: [origin] });
+    expect(await metadata.json()).toEqual({ origins: [canonicalOrigin] });
     const sw = await context.request.get(legacy.origin + '/sw.js', { maxRedirects: 0 });
     expect(sw.status()).toBe(200);
     expect(sw.headers()['content-type']).toMatch(/javascript/);

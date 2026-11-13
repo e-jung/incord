@@ -23,7 +23,7 @@ describe('Anonymous stats boundary',()=>{
   expect(f.alarm()).toBe(Date.parse('2026-11-14T00:00:00Z'));
   expect(f.data.get('day:2026-11-13')).toEqual({day:'2026-11-13',activeDevices:2,counters:{app_open:1,practice_start:2,'step_pass:1':1,learned:1}});
   vi.setSystemTime(new Date('2026-11-14T00:00:00Z'));await f.object.alarm();
-  expect([...f.data.keys()].filter(key=>key.startsWith('token:'))).toEqual([]);expect(f.data.has('open:2026-11-13')).toBe(false);
+  expect([...f.data.keys()].filter(key=>key.startsWith('tokens:'))).toEqual([]);expect(f.data.has('tokens:2026-11-13')).toBe(false);
   expect(f.data.get('day:2026-11-13')).toMatchObject({activeDevices:2});
   await f.record();const report=await (await f.object.fetch(new Request('https://internal/report'))).json<any>();expect(report.days).toHaveLength(30);expect(report.days.at(-1).activeDevices).toBe(1);
   vi.setSystemTime(new Date('2026-12-14T00:00:00Z'));await f.object.alarm();expect([...f.data.keys()].filter(key=>key.startsWith('day:'))).toEqual([]);

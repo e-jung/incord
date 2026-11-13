@@ -1,4 +1,4 @@
-# By Heart content packs
+# Incord content packs
 
 Source snapshot: 2026-11-13. Only the 66-book Protestant canon is published in Bible packs. Bible text is fetched **per book**, never the complete Bible at startup. Practice masking is a view over these words.
 
