@@ -170,7 +170,7 @@ describe('library, daily plan, progress, and collection discovery',()=>{
  });
  it('discovers starters, 17 Passages and all document metadata',async()=>{
   const out=await run('list_collections');expect(out.starters.length).toBeGreaterThan(0);expect(out.passages.itemCount).toBe(17);
-  expect(out.documents.map((d:any)=>d.id)).toEqual(['wsc','heidelberg','apostles','nicene']);
+  expect(out.documents.map((d:any)=>d.id)).toEqual(['wsc','heidelberg','apostles','nicene','wlc','baptist','spurgeon','young-children']);
   expect(out.documents[0].items[0]).toMatchObject({id:'wsc-1',number:1});
   expect(Object.keys(MCP_TOOL_SCHEMAS)).toHaveLength(6);
   await expect(run('delete_everything')).rejects.toThrow('Unknown');

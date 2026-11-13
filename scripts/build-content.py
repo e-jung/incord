@@ -11,6 +11,10 @@ SOURCES = {
  'kjv.zip': 'https://ebible.org/Scriptures/eng-kjv_usfm.zip?download=1',
  'web.zip': 'https://ebible.org/Scriptures/eng-web_usfm.zip?download=1',
  'westminster_shorter_catechism.json': 'https://raw.githubusercontent.com/NonlinearFruit/Creeds.json/master/creeds/westminster_shorter_catechism.json',
+ 'wlc-opc.html': 'https://opc.org/lc.html',
+ '1695_baptist_catechism.json': 'https://raw.githubusercontent.com/NonlinearFruit/Creeds.json/master/creeds/1695_baptist_catechism.json',
+ 'puritan_catechism.json': 'https://raw.githubusercontent.com/NonlinearFruit/Creeds.json/master/creeds/puritan_catechism.json',
+ 'catechism_for_young_children.json': 'https://raw.githubusercontent.com/NonlinearFruit/Creeds.json/master/creeds/catechism_for_young_children.json',
  'heidelberg-schaff.html': 'https://ccel.org/ccel/schaff/creeds3.iv.vi.html',
  'apostles-schaff.html': 'https://ccel.org/ccel/schaff/creeds2.iv.i.i.i.html',
  'nicene-schaff.html': 'https://ccel.org/ccel/schaff/creeds2.iv.i.ii.ii.html',
@@ -156,7 +160,36 @@ def documents():
   assert ' '.join(clauses)==text, f'{id}: article split changed source text'
   docs.append(dict(id=id,title=title,subtitle='Traditional English · Schaff',color='ink',items=[item(f'{id}-{n}',f'{title} · {n}',clause,id)|{'number':n} for n,clause in enumerate(clauses,1)]))
  assert len(hitems)==129 and len(docs)==4
- for doc in docs[:2]:doc['items']=[part for entry in doc['items'] for part in split_answer(entry)]
+ # OPC's received American text, NOT the 2025 modern-English study version.
+ # A complete Q&A is contained in each paragraph; ignore navigation/headings.
+ larger=[]
+ for paragraph in tree('wlc-opc.html').all('p'):
+  match=re.fullmatch(r'Q\. (\d+)\. (.*?)\s*A\. (.*)',compact(paragraph.text()))
+  if match:
+   n,question,answer=match.groups();n=int(n)
+   larger.append(item(f'wlc-{n}',question,answer,'wlc')|{'number':n})
+ assert [q['number'] for q in larger]==list(range(1,197))
+ assert 'tolerating a false religion' not in larger[108]['text']
+ docs.append(dict(id='wlc',title='Westminster Larger Catechism',subtitle='196 questions · 1648 · American historic English (OPC/PCA)',color='sage',questionCount=196,description='An extended exposition of Christian belief, the Ten Commandments, and the Lord’s Prayer in the received American edition.',items=larger))
+ for id,title,filename,count,subtitle,description,color in [
+  ('baptist','Baptist Catechism (Keach’s)','1695_baptist_catechism.json',114,'114 questions · 1693 tradition · 1695 printed edition','Historic Particular Baptist instruction in Christian faith, duty, prayer, and the ordinances.','clay'),
+  ('spurgeon','Spurgeon’s Puritan Catechism','puritan_catechism.json',82,'82 questions · 1855 historic English','Spurgeon’s concise Baptist adaptation of the Westminster and Baptist catechisms.','ochre'),
+  ('young-children','Catechism for Young Children','catechism_for_young_children.json',145,'145 questions · Joseph P. Engles · 1840 original','Simple questions and answers introducing children to the faith of the Westminster Shorter Catechism.','sage'),
+ ]:
+  questions=json.loads((RAW/filename).read_text())['Data']
+  assert [q['Number'] for q in questions]==list(range(1,count+1)),filename
+  if id=='baptist':
+   # Documented Creeds.json transcription erratum; both independent witnesses
+   # read 'or dipping', not the nonsensical 'wore dipping' (see SOURCES.md).
+   assert 'Immersion, wore dipping' in questions[99]['Answer']
+   questions[99]['Answer']=questions[99]['Answer'].replace('Immersion, wore dipping','Immersion, or dipping')
+  # Use unannotated Answer, as for WSC; no inline proof markers or Bible text.
+  entries=[item(f'{id}-{q["Number"]}',compact(q['Question']),q['Answer'],id)|{'number':q['Number']} for q in questions]
+  docs.append(dict(id=id,title=title,subtitle=subtitle,color=color,questionCount=count,description=description,items=entries))
+ assert docs[-1]['items'][0]['title']=='Who made you?' and docs[-1]['items'][0]['text']=='God.'
+ for doc in docs:
+  if doc['id'] not in ('apostles','nicene'):
+   doc['items']=[part for entry in doc['items'] for part in split_answer(entry)]
  emit(OUT/'documents.json',docs)
  return docs
 
@@ -184,5 +217,5 @@ def main():
  emit(OUT/'starters.json',starters);emit(OUT/'books.json',BOOKS)
  counts={tr:sum(len(vs) for chs in data.values() for vs in chs.values()) for tr,data in translations.items()}
  emit(OUT/'manifest.json',{'version':1,'translations':['BSB','KJV','WEB'],'books':BOOKS,'verseCounts':counts,'documentCounts':{d['id']:len(d['items']) for d in docs}})
- print(json.dumps(counts));print('Built 198 book packs, 4 documents, 5 starters (offline).')
+ print(json.dumps(counts));print(f'Built 198 book packs, {len(docs)} documents, 5 starters (offline).')
 if __name__=='__main__':main()

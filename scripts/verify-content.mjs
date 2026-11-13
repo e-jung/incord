@@ -64,7 +64,7 @@ for (const [short, explicit] of [['Jude 3','Jude 1:3'], ['Jude 24–25','Jude 1:
 assert.equal(documents[2].items.length, 12);
 assert.equal(documents[3].items.length, 17);
 assert.equal(starters[3].items.length, 12);
-for (const doc of documents.slice(0,2)) {
+for (const doc of documents.filter(d => !['apostles','nicene'].includes(d.id))) {
   for (const entry of doc.items) assert.ok(entry.text.split(/\s+/).length <= 150, entry.id);
 }
 for (const [number, wordCount, parts] of [[77,170,2],[92,345,3]]) {
@@ -120,8 +120,47 @@ for (const translation of ['bsb','kjv','web']) {
 assert.deepEqual(counts, { bsb: 31102, kjv: 31102, web: 31098 });
 const ids = documents.flatMap(d => d.items.map(i => i.id));
 assert.equal(new Set(ids).size, ids.length);
-assert.equal(ids.length, 268);
+assert.equal(ids.length, 815);
 assert.ok(documents[1].items.find(i => i.number === 80).text.includes('accursed idolatry'));
 assert.ok(documents[2].items.map(i => i.text).join(' ').includes('resurrection of the body'));
 assert.ok(documents[3].items.map(i => i.text).join(' ').includes('proceedeth from the Father and the Son'));
-console.log('Content verified: 198 book packs / 93,302 verse records; 268 document items; five starters; lazy fetching, alias/range parsing, invalid-reference rejection, and pack integrity.');
+console.log('Content verified: 198 book packs / 93,302 verse records; 815 document items; five starters; lazy fetching, alias/range parsing, invalid-reference rejection, and pack integrity.');
+
+// Historic additions: complete question sequences and lossless long-answer splits.
+const compact = text => text.replace(/\s+/g, ' ').trim();
+for (const [id, file, count] of [
+  ['baptist','1695_baptist_catechism.json',114],
+  ['spurgeon','puritan_catechism.json',82],
+  ['young-children','catechism_for_young_children.json',145],
+]) {
+  const doc = documents.find(d => d.id === id);
+  assert.equal(doc.questionCount,count);
+  assert.ok(doc.description);
+  const raw = JSON.parse(await fs.readFile(path.join(root,'content/raw',file),'utf8')).Data;
+  assert.deepEqual([...new Set(doc.items.map(i => i.number))],Array.from({length:count},(_,i)=>i+1));
+  for (const qa of raw) {
+    const parts = doc.items.filter(i=>i.number===qa.Number);
+    const expected = id==='baptist' && qa.Number===100 ? qa.Answer.replace('Immersion, wore dipping','Immersion, or dipping') : qa.Answer;
+    assert.equal(parts.map(i=>i.text).join(' '),compact(expected),`${id} Q${qa.Number}: all source words retained`);
+    assert.ok(parts.every(i=>!/[\[\]]/.test(i.text)),`${id}: proof marker leakage`);
+    if(parts.length===1) assert.equal(parts[0].title,compact(qa.Question));
+  }
+}
+const wlc=documents.find(d=>d.id==='wlc');
+assert.equal(wlc.questionCount,196);
+assert.equal(wlc.items.length,206);
+assert.deepEqual([...new Set(wlc.items.map(i=>i.number))],Array.from({length:196},(_,i)=>i+1));
+const wlcSource=await fs.readFile(path.join(root,'content/raw/wlc-opc.html'),'utf8');
+const decode=text=>compact(text.replace(/<[^>]*>/g,'').replaceAll('&rsquo;','’').replaceAll('&ldquo;','“').replaceAll('&rdquo;','”').replaceAll('&amp;','&'));
+let verifiedWlc=0;
+for(const match of wlcSource.matchAll(/<p>Q\. (\d+)\. ([\s\S]*?)<br \/>\s*A\. ([\s\S]*?)(?:<\/p>|<\/div>)/g)){
+ verifiedWlc++;
+ const number=Number(match[1]);
+ assert.ok(wlc.items.filter(i=>i.number===number).every(i=>i.title.endsWith(decode(match[2]))),`WLC Q${number}: question retained`);
+ assert.equal(wlc.items.filter(i=>i.number===number).map(i=>i.text).join(' '),decode(match[3]),`WLC Q${number}: source and split seams`);
+}
+assert.equal(verifiedWlc,196,'every WLC answer source-checked, including unclosed final HTML paragraph');
+assert.ok(!wlc.items.filter(i=>i.number===109).map(i=>i.text).join(' ').includes('tolerating a false religion'),'American revision, not original Scottish Q109');
+assert.equal(documents.find(d=>d.id==='young-children').items[0].title,'Who made you?');
+assert.equal(documents.find(d=>d.id==='young-children').items[0].text,'God.');
+console.log('Historic additions verified: 196 / 114 / 82 / 145 Q&A, original answer fidelity, American WLC Q109, and Engles Q1.');

@@ -5,7 +5,7 @@ export const STATS_EVENTS = [
   'i_know_this:pass','i_know_this:fail',...['again','hard','good','easy'].map(x=>`review:${x}`),
   ...['gospel','wsc-start','heidelberg-start','apostles-start','psalm23'].map(x=>`starter_added:${x}`),
   ...['bsb','kjv','web','esv'].map(x=>`translation_added:${x}`),
-  ...['wsc','heidelberg','apostles','nicene'].map(x=>`doc_items_added:${x}`),
+  ...['wsc','heidelberg','apostles','nicene','wlc','baptist','spurgeon','young-children'].map(x=>`doc_items_added:${x}`),
   'push_test:sent','push_test:failed',...['small','default','large','extra-large'].map(x=>`text_size:${x}`),
   ...['system','light','dark'].map(x=>`theme:${x}`),
 ] as const;

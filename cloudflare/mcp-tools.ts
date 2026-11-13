@@ -170,7 +170,7 @@ function canonicalCompare(a:any,b:any):number {
   const m=/^(.+?) (\d+)(?::(\d+))?/.exec(i.title||'');
   const book=m?books.findIndex(b=>b.name.toLowerCase().replace(/s$/,'')===m[1].toLowerCase().replace(/s$/,'')):-1;
   if(book>=0&&(i.translation||i.collection==='bible'))return [0,book,Number(m![2]),Number(m![3]||0)];
-  if(i.number)return [1,['wsc','heidelberg','apostles','nicene'].indexOf(i.collection),i.number,i.part||0];
+  if(i.number){const order=['wsc','heidelberg','apostles','nicene','wlc','baptist','spurgeon','young-children'].indexOf(i.collection);return [1,order<0?99:order,i.number,i.part||0];}
   return [2,i.createdAt||new Date(i.updatedAt||0).toISOString(),i.order||0];
  };
  const x=key(a),y=key(b);for(let n=0;n<Math.max(x.length,y.length);n++)if(x[n]!==y[n])return typeof x[n]==='number'&&typeof y[n]==='number'?Number(x[n])-Number(y[n]):String(x[n]).localeCompare(String(y[n]));
