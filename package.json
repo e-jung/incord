@@ -17,8 +17,6 @@
   "dependencies": {
     "@fontsource/figtree": "5.2.8",
     "@fontsource/literata": "5.2.8",
-    "@simplewebauthn/browser": "13.2.2",
-    "@simplewebauthn/server": "13.3.3",
     "svelte": "5.57.3",
     "ts-fsrs": "5.2.3"
   },

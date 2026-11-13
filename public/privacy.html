@@ -32,11 +32,12 @@
 
   <h2>With an account</h2>
   <p>Email sign-in sends a short-lived, six-digit code through our email delivery provider. Your email address is used only to send sign-in codes, never for marketing. Incord stores only a one-way keyed hash of the address, not the address itself. Codes are stored as hashes, expire after 10 minutes, and can be used only once.</p>
+  <p>Passkey and recovery-code sign-in have been retired. Dormant public keys or hashed recovery records from earlier versions may remain until account deletion; they are no longer used for authentication.</p>
   <p>If you create an account, Incord stores what it needs to sync your library across devices:</p>
   <ul>
     <li>the display name you choose and your app settings;</li>
     <li>your library (passage references and text you added yourself) and your practice history;</li>
-    <li>a one-way keyed hash of your email address if you choose email or Google sign-in, and legacy passkey public keys and hashed recovery codes for older accounts;</li>
+    <li>a one-way keyed hash of your email address if you choose email or Google sign-in;</li>
     <li>if you turn on reminders, your reminder time, time zone and the push address your browser provides.</li>
   </ul>
   <p>ESV text is fetched on demand and kept only on your device. It is never stored on Incord's servers.</p>

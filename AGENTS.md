@@ -6,7 +6,7 @@ A private, offline-first Scripture/catechism memory PWA. Svelte 5 + Vite + TypeS
 - Automatic four-step first-letter ladder. Score only hidden words; wrong letter or peek advances the word and records a slip.
 - Pure engine in src/engine, rules/copy in src/config. FSRS review. IndexedDB is authoritative while offline; sync uses LWW items, append-only idempotent review events.
 - Bundled BSB/KJV/WEB and historic public-domain catechisms/creeds. ESV is fetched through the Crossway API under its published conditions; never bundle it or persist its text server-side. Never introduce other copyrighted translations without publisher authorization. See content/SOURCES.md.
-- All local functionality works signed out. Passkeys, recovery, Google OAuth conditional on credentials. No passwords.
+- All local functionality works signed out. Google OAuth and email codes conditional on credentials. No passwords.
 - Gentle-return backlog is capped, not presented as overdue debt.
 - Screens compose reusable components; keep visual styling in app.css/tokens.css.
 
@@ -29,7 +29,7 @@ npm run e2e — starts disposable localhost Worker when needed.
 See README.md for local secrets. Never commit .dev.vars or production credentials.
 
 ## Security
-Parameterized SQL; never render user HTML. Same-origin checks on all writes, signed HttpOnly cookies, auth throttling, WebAuthn verification, one-use hashed recovery codes. Use Secure cookies on HTTPS; localhost HTTP omits Secure for development only. Push endpoints allowlisted and redirects refused with `redirect: 'manual'` (3xx is failure; Workers reject the `error` redirect mode).
+Parameterized SQL; never render user HTML. Same-origin checks on all writes, signed HttpOnly cookies, auth throttling, single-use keyed-hash email codes. Use Secure cookies on HTTPS; localhost HTTP omits Secure for development only. Push endpoints allowlisted and redirects refused with `redirect: 'manual'` (3xx is failure; Workers reject the `error` redirect mode).
 Preserve migration history; additive migrations only. Never log text, recovery codes or secrets.
 No deployment or GitHub push is authorized in the initial build. Architect reviews first. Do not add a remote or publish.
 
@@ -38,12 +38,11 @@ No deployment or GitHub push is authorized in the initial build. Architect revie
 - `dailyPlan` reserves the new/learning allowance (default 3, options 1/2/3/5); completing today's new learning must not free another slot. Reviews do not consume new slots. Estimate from remaining ladder steps and token count.
 - Use `addItems`/`findLiveItem`; ids are unique even across tombstones. Re-add revives with strictly newer revision and reset progress. Sort collections canonically, not by sync arrival.
 - IndexedDB stores cached account identity. Config fetch is independent; reconnect/focus/visibility retries identity and queue. Never sync unclaimed device items until explicit Add/Keep separate choice. Signout confirms and clears account data from this device after sync.
-- Settings use per-field timestamps; ordinary item saves must not advance preference clocks. Assign the `persist()` result back before syncing. Recovery adds a device session; only logout-everywhere revokes other devices.
+- Settings use per-field timestamps; ordinary item saves must not advance preference clocks. Assign the `persist()` result back before syncing. Email/Google sign-in adds a device session; only logout-everywhere revokes other devices.
 - Copy and plural helpers live in `src/config/copy.ts` with semantic keys (compatibility modules only re-export). Gallery requires DEV or device `localStorage.debug = '1'`.
 - `displayTokens` preserves punctuation and original whitespace. VerseText owns current-word scrolling, including reduced motion. Bible superscriptions live in optional headings, not practice text; creed articles and >150-word answers are generated in the content pipeline.
 - Canonical item keys derive from the source (Bible coordinates, document number/part, own-text creation time), never from catechism question wording. Persist/migrate the keys; Today reviews sort by due time then that key.
 - Long Bible lookups use one exclusive passage format choice above results. Default >150 words to ~4-verse chunks; >500 words confirms the selected item count, even when it is one item.
-- Device passkey registration attaches to the current public account identity. Reject stale enrollment sessions/challenges; never silently create a replacement account. Recovery code, device ownership and optional passkey invitation are sequenced sheets. Deferred ownership still blocks sync.
 - Pending signed-in sync queues retry at 5s/15s/60s/5min without needing browser connectivity events. Remote revocation clears device data, preference baselines and account sheets, with a one-time notice.
 - Worker-first assets: static misses stay 404; only extensionless HTML app routes receive shell fallback. HTML carries no-transform to suppress Cloudflare automatic RUM injection; all responses carry one-year HSTS without subdomain/preload directives. Keep enforcing CSP and Latin/Latin-ext WOFF2-only fonts.
 
@@ -54,7 +53,7 @@ First-party operational logs only: Cloudflare dashboard → Workers → byheart 
 - Product name is Incord; canonical origin is https://incord.jesklabs.com. Keep both custom-domain routes until the legacy migration is explicitly retired.
 - **Keep Worker script name `byheart`, existing UserDO/RegistryDO classes and bindings, migration history and internal browser/storage keys unchanged.** These are persistent identities, not product copy; renaming them can strand accounts/data. New DOs require additive bindings/migrations.
 - Wrangler’s build hook always rebuilds before serve/deploy; Vite stamps the short HEAD at build time. Commit before deploying; never upload stale prebuilt assets. Stats CSS is a separate stable Vite entry sharing app tokens/fonts.
-- `scripts/deploy.sh` passes production APP_ORIGIN; local dev remains origin-agnostic. Old pages redirect 301 with path/query preserved; old APIs return 410. Serve legacy SW unregister code and related-origin WebAuthn metadata before redirecting.
+- `scripts/deploy.sh` passes production APP_ORIGIN; local dev remains origin-agnostic. Old pages redirect 301 with path/query preserved; old APIs return 410. Serve legacy SW unregister code before redirecting; no WebAuthn metadata remains.
 - Crossway attribution verified 2026-11-13: https://api.esv.org/#copyright and https://api.esv.org/docs/passage-text/. Use exact full notice plus download limit from `copy.esvCopyright` / `copy.esvDownloadNotice` in About and a visible linked ESV label with each quotation. Device-only cache, 500-verse and half-book limits, no ESV text in sync/server storage/logs or SW caches. Never alter quoted words.
 - Anonymous first-party counts are opt-out, honor GPC/DNT, and contain categorical events only. Daily rotating tokens are deleted after rollup. Weekly totals sum daily counts and are not deduplicated people.
 - Live ESV smoke is opt-in (`ESV_LIVE_SMOKE=1 npm run smoke:esv`), one request with no retries. Normal tests mock ESV; do not spend real API requests in CI.

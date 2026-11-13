@@ -21,7 +21,6 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
   },
-  // Chromium mobile emulation also exposes CDP's real virtual WebAuthn device.
   // iPhone 15's CSS viewport is identical to Playwright's iPhone 13 descriptor.
   projects: [...['light', 'dark'].map(colorScheme => ({
     name: `iPhone15-${colorScheme}`,
@@ -32,8 +31,8 @@ export default defineConfig({
       viewport: { width: 393, height: 852 },
       colorScheme: colorScheme as 'light' | 'dark',
     },
-  })),{name:'WebKit-iPhone15',testMatch:['**/device.spec.ts','**/ui.spec.ts'],// Linux Playwright WebKit aborts offline reload even on the unmodified baseline; Chromium retains this coverage.
-    grepInvert:/email signup|legacy recovery|push permission|own words persist offline/,use:{...devices['iPhone 15'],browserName:'webkit',viewport:{width:393,height:852},colorScheme:'light'}}],
+  })),{name:'WebKit-iPhone15',testMatch:['**/device.spec.ts','**/ui.spec.ts','**/product-feedback.spec.ts'],// Linux Playwright WebKit aborts offline reload even on the unmodified baseline; Chromium retains this coverage.
+    grepInvert:/email signup|push permission|own words persist offline/,use:{...devices['iPhone 15'],browserName:'webkit',viewport:{width:393,height:852},colorScheme:'light'}}],
   webServer: {
     command: 'WRANGLER_SEND_METRICS=false npx wrangler dev --local --infer-origin-from-routes=false --port '+new URL(base).port+' --persist-to .wrangler/e2e-'+new URL(base).port+' --var EMAIL_TEST_SINK:1 --var SESSION_SECRET:byheart-playwright-local-only-secret-32chars --var STATS_TOKEN:incord-playwright-local-stats-token-32chars',
     url: base+'/api/config',

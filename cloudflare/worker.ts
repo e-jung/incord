@@ -1,8 +1,6 @@
 import { handleEsv, assertEsvLimit, stripEsvText } from './esv';
 import { handleStatsRequest } from './stats';
 export { StatsDO } from './stats';
-import { generateRegistrationOptions, verifyRegistrationResponse, generateAuthenticationOptions, verifyAuthenticationResponse } from '@simplewebauthn/server';
-import type { RegistrationResponseJSON, AuthenticationResponseJSON, WebAuthnCredential } from '@simplewebauthn/server';
 
 export interface Env {
   ASSETS: Fetcher;
@@ -25,7 +23,7 @@ export interface Env {
 type ObjectData = Record<string, unknown>;
 type Row = Record<string, string | number | null>;
 type Session = { uid: string; version: number; exp: number };
-type Challenge = { challenge: string; kind: string; uid?: string; verifier?: string; name?: string; rpID?: string; sessionVersion?: number };
+type Challenge = { challenge: string; kind: 'google'; verifier: string };
 const encoder = new TextEncoder();
 const SESSION_AGE = 30 * 86400;
 const cookieName = 'bh_session';
@@ -95,11 +93,10 @@ function secure(response: Response) {
   headers.set('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
   return new Response(response.body, { status: response.status, headers });
 }
-async function issue(env: Env, uid: string, origin: string, extra: ObjectData = {}) { const me = await user(env, uid, '/me'); const token = await signSession({ uid, version: me.version, exp: Math.floor(Date.now() / 1000) + SESSION_AGE }, env.SESSION_SECRET); return json({ user: { ...me.user, ...await identityFlags(env, uid) }, ...extra }, 200, { 'Set-Cookie': cookie(cookieName, token, SESSION_AGE, origin) }); }
+async function issue(env: Env, uid: string, origin: string) { const me = await user(env, uid, '/me'); const token = await signSession({ uid, version: me.version, exp: Math.floor(Date.now() / 1000) + SESSION_AGE }, env.SESSION_SECRET); return json({ user: { ...me.user, ...await identityFlags(env, uid) } }, 200, { 'Set-Cookie': cookie(cookieName, token, SESSION_AGE, origin) }); }
 async function signedIn(request: Request, env: Env) { const s = await readSession(cookies(request)[cookieName], env.SESSION_SECRET); assert(s, 'Sign in required', 401); const me = await user(env, s.uid, '/me'); assert(me.version === s.version, 'Session expired', 401); return s; }
 function originFor(request: Request, env: Env) { const origin = new URL(request.url).origin; if (env.APP_ORIGIN) assert(origin === new URL(env.APP_ORIGIN).origin, 'Wrong host', 403); return origin; }
 async function authChallenge(env: Env, request: Request, kind: string) { const id = cookies(request).bh_flow; assert(id, 'Start sign-in again'); const flow = await registry(env, '/challenge/take', { id }); assert(flow && flow.kind === kind, 'Sign-in expired; start again'); return flow as Challenge; }
-async function recoveryCode(env: Env, uid: string) { const flags = await identityFlags(env, uid); if (flags.hasEmail || flags.hasGoogle) return undefined; const code = random(24); await registry(env, '/recovery/set', { uid, hash: await digest(code) }); return code; }
 
 /** Telemetry is deliberately lossy: never forward arbitrary exception text or URLs. */
 export function clientErrorRecord(input: ObjectData, origin: string) {
@@ -120,7 +117,7 @@ export function clientErrorRecord(input: ObjectData, origin: string) {
 async function api(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url), path = url.pathname, origin = originFor(request, env);
   if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method)) assert(request.headers.get('Origin') === origin, 'Cross-origin write denied', 403);
-  if (path === '/api/config' && request.method === 'GET') return json({ email: emailEnabled(env, request), passkeys: true, google: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET), googleEnabled: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET), push: !!(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY), vapidPublicKey: env.VAPID_PUBLIC_KEY || null });
+  if (path === '/api/config' && request.method === 'GET') return json({ email: emailEnabled(env, request), google: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET), googleEnabled: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET), push: !!(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY), vapidPublicKey: env.VAPID_PUBLIC_KEY || null });
   if (path === '/api/test/last-code') assert(emailTestMode(env, request) && request.method === 'GET', 'Not found', 404);
   assert(env.SESSION_SECRET?.length >= 32, 'Service secrets are not configured', 503);
   if (path === '/api/test/last-code') { assert(emailTestMode(env, request) && request.method === 'GET', 'Not found', 404); return json(await registry(env, '/email/test-get', { key: await emailKey(env, normalizeEmail(url.searchParams.get('email'))) })); }
@@ -136,7 +133,6 @@ async function api(request: Request, env: Env): Promise<Response> {
   });
   if (path.startsWith('/api/auth/')) {
     await registry(env, '/limit', { key: await digest(env.SESSION_SECRET + ':' + (request.headers.get('CF-Connecting-IP') || 'local')), limit: 60, window: 900_000 });
-    const rpID = url.hostname;
     if ((path === '/api/auth/email/start' || path === '/api/auth/email/verify') && request.method === 'POST') {
       assert(emailEnabled(env, request), 'Email sign-in is not enabled.', 404);
       const input = await body(request, 2048), email = normalizeEmail(input.email), key = await emailKey(env, email);
@@ -153,41 +149,6 @@ async function api(request: Request, env: Env): Promise<Response> {
       return issue(env, result.uid, origin);
     }
 
-    if (path === '/api/auth/register/options' && request.method === 'POST') {
-      const input = await body(request), name = typeof (input.displayName ?? input.name) === 'string' ? String(input.displayName ?? input.name).trim().slice(0, 80) : 'Friend';
-      const old = await readSession(cookies(request)[cookieName], env.SESSION_SECRET); let uid = crypto.randomUUID(); let credentials: any[] = [];
-      if (cookies(request)[cookieName]) assert(old, 'Session expired. Sign in again before adding a passkey.', 401);
-      if (input.attachTo) assert(old, 'Session expired. Sign in again before adding a passkey.', 401);
-      if (old) { const me = await user(env, old.uid, '/me'); assert(me.version === old.version && (!input.attachTo || me.user.id === input.attachTo), 'Session expired. Sign in again before adding a passkey.', 401); uid = old.uid; credentials = (await user(env, uid, '/credentials')).credentials; }
-      const options = await generateRegistrationOptions({ rpName: 'Incord', rpID, userName: uid, userDisplayName: name || 'Friend', userID: new Uint8Array(encoder.encode(uid)), attestationType: 'none', authenticatorSelection: { residentKey: 'required', userVerification: 'required' }, excludeCredentials: credentials.map(c => ({ id: c.id, transports: c.transports })) });
-      const id = random(); await registry(env, '/challenge/set', { id, value: { challenge: options.challenge, kind: 'register', uid, name, rpID, ...(old ? { sessionVersion: old.version } : {}) } }); return json(options, 200, { 'Set-Cookie': cookie('bh_flow', id, 300, origin) });
-    }
-    if (path === '/api/auth/register/verify' && request.method === 'POST') {
-      const input = await body(request), flow = await authChallenge(env, request, 'register');
-      if (flow.sessionVersion !== undefined) assert((await user(env, flow.uid!, '/me')).version === flow.sessionVersion, 'Session expired. Sign in again before adding a passkey.', 401);
-      const response = (input.response || input) as unknown as RegistrationResponseJSON;
-      let verification; try { verification = await verifyRegistrationResponse({ response, expectedChallenge: flow.challenge, expectedOrigin: origin, expectedRPID: rpID, requireUserVerification: true }); } catch { throw new ApiError(400, 'Passkey verification failed'); }
-      assert(verification.verified && verification.registrationInfo, 'Passkey verification failed'); const credential = verification.registrationInfo.credential;
-      await registry(env, '/credential/set', { id: credential.id, uid: flow.uid });
-      await user(env, flow.uid!, '/credential/add', { name: flow.name, credential: { ...credential, rpID, publicKey: b64(credential.publicKey) } });
-      const code = await recoveryCode(env, flow.uid!); return issue(env, flow.uid!, origin, { recoveryCode: code });
-    }
-    if (path === '/api/auth/login/options' && request.method === 'POST') {
-      const input = await body(request); const authenticationRPID = input.legacy === true && url.hostname === 'incord.jesklabs.com' ? 'byheart.jesklabs.com' : rpID; const options = await generateAuthenticationOptions({ rpID: authenticationRPID, userVerification: 'required' }); const id = random();
-      await registry(env, '/challenge/set', { id, value: { challenge: options.challenge, kind: 'login', rpID: authenticationRPID } }); return json(options, 200, { 'Set-Cookie': cookie('bh_flow', id, 300, origin) });
-    }
-    if (path === '/api/auth/login/verify' && request.method === 'POST') {
-      const input = await body(request), flow = await authChallenge(env, request, 'login'), response = (input.response || input) as unknown as AuthenticationResponseJSON;
-      assert(typeof response.id === 'string'); const found = await registry(env, '/credential/get', { id: response.id }); assert(found.uid, "That passkey's account was deleted. Create an account to start again.", 401);
-      const stored = await user(env, found.uid, '/credential/get', { id: response.id }); assert(stored.credential, "That passkey's account was deleted. Create an account to start again.", 401);
-      const credential = { ...stored.credential, publicKey: unb64(stored.credential.publicKey) } as WebAuthnCredential;
-      let verification; try { verification = await verifyAuthenticationResponse({ response, expectedChallenge: flow.challenge, expectedOrigin: origin, expectedRPID: flow.rpID || rpID, credential, requireUserVerification: true }); } catch { throw new ApiError(401, 'Passkey verification failed'); }
-      assert(verification.verified, 'Passkey verification failed', 401); await user(env, found.uid, '/credential/counter', { id: response.id, counter: verification.authenticationInfo.newCounter }); return issue(env, found.uid, origin, { legacyPasskey: flow.rpID === 'byheart.jesklabs.com' });
-    }
-    if (path === '/api/auth/recover' && request.method === 'POST') {
-      const { code } = await body(request); assert(typeof code === 'string' && code.length <= 200); const result = await registry(env, '/recovery/take', { hash: await digest(code.trim()) }); assert(result.uid, 'Invalid or already used recovery code', 401);
-      return issue(env, result.uid, origin, { recoveryCode: await recoveryCode(env, result.uid) });
-    }
     if (path === '/api/auth/logout-everywhere' && request.method === 'POST') { const session = await signedIn(request, env); await user(env, session.uid, '/revoke'); return json({ ok: true }, 200, { 'Set-Cookie': cookie(cookieName, '', 0, origin) }); }
     if (path === '/api/auth/logout' && request.method === 'POST') return json({ ok: true }, 200, { 'Set-Cookie': cookie(cookieName, '', 0, origin) });
     if (path === '/api/auth/google' && request.method === 'GET') {
@@ -214,7 +175,7 @@ async function api(request: Request, env: Env): Promise<Response> {
   let session: Session;
   try { session = await signedIn(request, env); } catch (error) { if (path === '/api/me' && request.method === 'GET' && error instanceof ApiError && error.status === 401) return json({ user: null, ...(error.message === 'Session expired' ? { signedOutEverywhere: true } : {}) }); throw error; }
   const uid = session.uid;
-  if (path === '/api/me' && request.method === 'GET') { const me = await user(env, uid, '/me', { takeRecovery: true }), flags = await identityFlags(env, uid); return json({ user: { ...me.user, ...flags }, ...(me.needsRecovery && !flags.hasEmail && !flags.hasGoogle ? { recoveryCode: await recoveryCode(env, uid) } : {}) }); }
+  if (path === '/api/me' && request.method === 'GET') { const me = await user(env, uid, '/me'), flags = await identityFlags(env, uid); return json({ user: { ...me.user, ...flags } }); }
   if (path === '/api/sync' && request.method === 'POST') { const input = await body(request); const result = await user(env, uid, '/sync', input); await registry(env, '/schedule/set', { uid }); return json(result); }
   if (path === '/api/export' && request.method === 'GET') return json(await user(env, uid, '/export'), 200, { 'Content-Disposition': 'attachment; filename="incord.json"' });
   if (path === '/api/account' && request.method === 'DELETE') { await user(env, uid, '/delete'); await registry(env, '/delete', { uid }); return json({ ok: true }, 200, { 'Set-Cookie': cookie(cookieName, '', 0, origin) }); }
@@ -247,7 +208,6 @@ export default {
     try {
       const url = new URL(request.url), path = url.pathname;
       if (url.hostname === 'byheart.jesklabs.com') {
-        if (path === '/.well-known/webauthn') return finish(json({ origins: ['https://incord.jesklabs.com'] }));
         if (path === '/sw.js') return finish(new Response(legacyServiceWorker, { headers: { 'Content-Type': 'application/javascript', 'Cache-Control': 'no-store', 'Service-Worker-Allowed': '/' } }));
         if (path.startsWith('/api/')) return finish(json({ error: 'Incord has moved. Update this app at https://incord.jesklabs.com.' }, 410));
         url.hostname = 'incord.jesklabs.com'; url.protocol = 'https:'; url.port = ''; return finish(Response.redirect(url.href, 301));
@@ -303,10 +263,6 @@ export class RegistryDO {
     if (path === '/limit') { const row = this.rows('SELECT count FROM limits WHERE id=?', data.key)[0]; assert(!row || Number(row.count) < data.limit, 'Too many requests. Try again later.', 429); this.sql.exec('INSERT INTO limits VALUES(?,1,?) ON CONFLICT(id) DO UPDATE SET count=count+1', data.key, now + data.window); return json({ ok: true }); }
     if (path === '/challenge/set') { this.sql.exec('INSERT INTO challenges VALUES(?,?,?)', data.id, JSON.stringify(data.value), now + 300_000); return json({ ok: true }); }
     if (path === '/challenge/take') { const row = this.rows('SELECT value FROM challenges WHERE id=?', data.id)[0]; this.sql.exec('DELETE FROM challenges WHERE id=?', data.id); return json(row ? JSON.parse(String(row.value)) : null); }
-    if (path === '/credential/set') { const old = this.rows('SELECT uid FROM mapping WHERE kind=? AND id=?', 'credential', data.id)[0]; assert(!old || old.uid === data.uid, 'Passkey already registered', 409); this.sql.exec('INSERT OR IGNORE INTO mapping VALUES(?,?,?)', 'credential', data.id, data.uid); return json({ ok: true }); }
-    if (path === '/credential/get') return json(this.rows('SELECT uid FROM mapping WHERE kind=? AND id=?', 'credential', data.id)[0] || {});
-    if (path === '/recovery/set') { this.ctx.storage.transactionSync(() => { this.sql.exec('DELETE FROM mapping WHERE kind=? AND uid=?', 'recovery', data.uid); this.sql.exec('INSERT INTO mapping VALUES(?,?,?)', 'recovery', data.hash, data.uid); }); return json({ ok: true }); }
-    if (path === '/recovery/take') { const row = this.rows('SELECT uid FROM mapping WHERE kind=? AND id=?', 'recovery', data.hash)[0]; this.sql.exec('DELETE FROM mapping WHERE kind=? AND id=?', 'recovery', data.hash); return json(row || {}); }
     if (path === '/identity') { const kinds = this.rows('SELECT DISTINCT kind FROM mapping WHERE uid=?', data.uid).map(r => r.kind); return json({ hasEmail: kinds.includes('email'), hasGoogle: kinds.includes('google') }); }
     if (path === '/email/test-get') return json(this.rows('SELECT code FROM email_test WHERE id=? AND expires>?', data.key, now)[0] || {});
     if (path === '/email/start') {
@@ -354,6 +310,7 @@ const settingAliases:Record<string,string>={name:'displayName',theme:'appearance
 export function mergeServerSettings(old:any,incoming:any){const result={...old,fieldUpdatedAt:{...old.fieldUpdatedAt}};for(const key of Object.keys(old))if(key!=='updatedAt'&&key!=='fieldUpdatedAt'&&result.fieldUpdatedAt[key]===undefined)result.fieldUpdatedAt[key]=old.fieldUpdatedAt?0:old.updatedAt??0;for(const key of Object.keys(incoming)){if(key==='updatedAt'||key==='fieldUpdatedAt')continue;const before=old.fieldUpdatedAt?.[key]??(old.fieldUpdatedAt?0:old.updatedAt??0),after=incoming.fieldUpdatedAt?.[key]??(incoming.fieldUpdatedAt?0:incoming.updatedAt??0);if(after>before||(after===before&&JSON.stringify(incoming[key])>JSON.stringify(old[key]))){result[key]=incoming[key];result.fieldUpdatedAt[key]=after}}result.updatedAt=Math.max(old.updatedAt||0,incoming.updatedAt||0);return result}
 export function settingsRecord(input: unknown): ObjectData { assert(input && typeof input === 'object' && !Array.isArray(input), 'Invalid settings'); const s = { ...(input as ObjectData) }; timestamp(s.updatedAt);
   if (s.name !== undefined) s.displayName = s.name; if (s.theme !== undefined) s.appearance = s.theme; if (s.goal !== undefined) s.weeklyGoal = s.goal; if (s.timeZone !== undefined) s.timezone = s.timeZone; if (s.pushEnabled !== undefined) s.remindersEnabled = s.pushEnabled;
+  for (const key of ['keySounds', 'haptics']) if (s[key] !== undefined) assert(typeof s[key] === 'boolean', 'Invalid keyboard feedback setting');
   if (s.remindersEnabled !== undefined) assert(typeof s.remindersEnabled === 'boolean', 'Invalid reminder setting');
   if (s.displayName !== undefined) { assert(typeof s.displayName === 'string' && s.displayName.length <= 80, 'Invalid display name'); s.name = s.displayName = s.displayName.trim(); }
   if (s.weeklyGoal !== undefined) assert([3, 4, 5, 7].includes(Number(s.weeklyGoal)), 'Invalid weekly goal');
@@ -370,6 +327,7 @@ export class UserDO {
   constructor(private ctx: DurableObjectState, private env: Env) {
     this.sql = ctx.storage.sql;
     this.sql.exec('CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY,value TEXT NOT NULL)');
+    // Retained for existing DO schema compatibility only; authentication never reads/writes it.
     this.sql.exec('CREATE TABLE IF NOT EXISTS credentials(id TEXT PRIMARY KEY,value TEXT NOT NULL)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS items(id TEXT PRIMARY KEY,value TEXT NOT NULL,updated INTEGER NOT NULL)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY,value TEXT NOT NULL)');
@@ -378,24 +336,19 @@ export class UserDO {
   private rows(query: string, ...args: (string | number)[]) { return [...this.sql.exec<Row>(query, ...args)]; }
   private get(key: string): any { const row = this.rows('SELECT value FROM meta WHERE key=?', key)[0]; return row ? JSON.parse(String(row.value)) : null; }
   private set(key: string, value: unknown) { this.sql.exec('INSERT INTO meta VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', key, JSON.stringify(value)); }
-  private list(table: string) { assert(['items', 'events', 'credentials', 'subscriptions'].includes(table)); return this.rows(`SELECT value FROM ${table} ORDER BY ${table === 'subscriptions' ? 'endpoint' : 'id'}`).map(row => JSON.parse(String(row.value))); }
-  private settings() { return this.get('settings') || { appearance: 'system', weeklyGoal: 4, reminderTime: '09:00', timezone: 'UTC', remindersEnabled: false, updatedAt: 0 }; }
+  private list(table: string) { assert(['items', 'events', 'subscriptions'].includes(table)); return this.rows(`SELECT value FROM ${table} ORDER BY ${table === 'subscriptions' ? 'endpoint' : 'id'}`).map(row => JSON.parse(String(row.value))); }
+  private settings() { return this.get('settings') || { appearance: 'system', weeklyGoal: 4, reminderTime: '09:00', timezone: 'UTC', remindersEnabled: false, keySounds: false, haptics: false, updatedAt: 0 }; }
   async fetch(request: Request) { return this.ctx.blockConcurrencyWhile(async () => { try {
     const data = await request.json<any>(), path = new URL(request.url).pathname;
     if (path === '/delete') { await this.ctx.storage.deleteAll(); this.sql.exec('CREATE TABLE meta(key TEXT PRIMARY KEY,value TEXT NOT NULL)'); this.set('deleted', true); return json({ ok: true }); }
     assert(!this.get('deleted'), 'Account no longer exists', 401);
-    if (path === '/init' || path === '/credential/add') {
+    if (path === '/init') {
       if (!this.get('profile')) { this.set('profile', { id: this.ctx.id.toString(), displayName: data.name || 'Friend', createdAt: Date.now() }); this.set('version', 1); }
-      if (path === '/credential/add') { assert(this.rows('SELECT COUNT(*) AS n FROM credentials')[0].n as number < 20, 'Passkey limit reached'); this.sql.exec('INSERT INTO credentials VALUES(?,?)', data.credential.id, JSON.stringify(data.credential)); }
       return json({ ok: true });
     }
     assert(this.get('profile'), 'Account not found', 401);
-    if (path === '/me') { const needsRecovery = data.takeRecovery ? this.get('pendingRecovery') : null; if (needsRecovery) this.sql.exec('DELETE FROM meta WHERE key=?', 'pendingRecovery'); const profile = this.get('profile'); return json({ user: { ...profile, displayName: this.settings().displayName === undefined ? profile.displayName : (this.settings().displayName || 'Friend'), settings: this.settings(), hasPasskey: this.rows('SELECT COUNT(*) AS n FROM credentials')[0].n as number > 0, hasIncordPasskey: this.list('credentials').some(c => c.rpID === 'incord.jesklabs.com') }, version: this.get('version'), ...(needsRecovery ? { needsRecovery: true } : {}) }); }
+    if (path === '/me') { const profile = this.get('profile'); return json({ user: { ...profile, displayName: this.settings().displayName === undefined ? profile.displayName : (this.settings().displayName || 'Friend'), settings: this.settings() }, version: this.get('version') }); }
     if (path === '/revoke') { this.set('version', this.get('version') + 1); return json({ ok: true }); }
-    if (path === '/recovery/pending') { this.set('pendingRecovery', !!data.needed); return json({ ok: true }); }
-    if (path === '/credentials') return json({ credentials: this.list('credentials') });
-    if (path === '/credential/get') return json({ credential: this.list('credentials').find(c => c.id === data.id) || null });
-    if (path === '/credential/counter') { const credential = this.list('credentials').find(c => c.id === data.id); assert(credential, 'Unknown credential'); credential.counter = Math.max(credential.counter, data.counter); this.sql.exec('UPDATE credentials SET value=? WHERE id=?', JSON.stringify(credential), data.id); return json({ ok: true }); }
     if (path === '/sync') {
       const incomingItems = data.items || [], events = data.events || []; assert(Array.isArray(incomingItems), 'Invalid items'); const items = incomingItems.map((item: any) => item && typeof item.id === 'string' ? stripEsvText(item) : item); assert(Array.isArray(items) && items.length <= 1000 && Array.isArray(events) && events.length <= 2000, 'Sync batch too large');
       for (const item of items) record(item);

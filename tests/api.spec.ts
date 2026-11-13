@@ -7,49 +7,38 @@ async function api(page: Page, path: string, data?: unknown, method = data === u
     return { status: response.status, data: await response.json() };
   }, { path, data, method });
 }
-async function authenticator(page: Page) {
-  const client = await page.context().newCDPSession(page);
-  await client.send('WebAuthn.enable');
-  await client.send('WebAuthn.addVirtualAuthenticator', { options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true } });
-  return client;
-}
-async function passkey(page: Page, kind: 'register' | 'login') {
-  const options = await api(page, '/auth/' + kind + '/options', { displayName: 'API test' });
-  expect(options.status).toBe(200);
-  const response = await page.evaluate(async ({ options, kind }) => {
-    const decode = (v: string) => Uint8Array.from(atob(v.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
-    const publicKey = { ...options, challenge: decode(options.challenge) };
-    if (kind === 'register') { publicKey.user = { ...options.user, id: decode(options.user.id) }; publicKey.excludeCredentials = (options.excludeCredentials || []).map((c: any) => ({ ...c, id: decode(c.id) })); }
-    else publicKey.allowCredentials = (options.allowCredentials || []).map((c: any) => ({ ...c, id: decode(c.id) }));
-    const credential = (kind === 'register' ? await navigator.credentials.create({ publicKey }) : await navigator.credentials.get({ publicKey })) as PublicKeyCredential;
-    return (credential as any).toJSON();
-  }, { options: options.data, kind });
-  const result = await api(page, '/auth/' + kind + '/verify', { response });
+async function emailLogin(page: Page, email: string) {
+  expect((await api(page, '/auth/email/start', { email })).status).toBe(200);
+  const code = (await api(page, '/test/last-code?email=' + encodeURIComponent(email))).data.code;
+  const result = await api(page, '/auth/email/verify', { email, code });
   expect(result.status, JSON.stringify(result.data)).toBe(200);
+  expect(result.data.recoveryCode).toBeUndefined();
   return result.data;
 }
 
-test.describe('Worker API (real local SQLite DOs and virtual WebAuthn)', () => {
+test.describe('Worker API (real local SQLite DOs and email sign-in)', () => {
   test.beforeEach(async({context})=>{await context.setExtraHTTPHeaders({'CF-Connecting-IP':'api-'+crypto.randomUUID()})});
   test('auth rate limits isolate and throttle a single caller',async({page})=>{
     await page.goto(base);
-    for(let n=0;n<60;n++)expect((await api(page,'/auth/login/options',{})).status).toBe(200);
-    expect((await api(page,'/auth/login/options',{})).status).toBe(429);
+    for(let n=0;n<60;n++)expect((await api(page,'/auth/logout',{})).status).toBe(200);
+    expect((await api(page,'/auth/logout',{})).status).toBe(429);
   });
   test('origin protection, anonymous access and config', async ({ page, request }) => {
     await page.goto(base);
-    expect((await api(page, '/config')).data).toMatchObject({ passkeys: true });
+    const config = (await api(page, '/config')).data;
+    expect(config).toMatchObject({ email: true }); expect(config).not.toHaveProperty('passkeys');
     expect((await api(page, '/me')).data.user).toBeNull();
-    const bad = await request.post(base + '/api/auth/login/options', { data: {}, headers: { Origin: 'https://other.invalid' } });
+    const bad = await request.post(base + '/api/auth/email/start', { data: {}, headers: { Origin: 'https://other.invalid' } });
     expect(bad.status()).toBe(403);
-    const missing = await request.post(base + '/api/auth/login/options', { data: {} }); expect(missing.status()).toBe(403);
+    const missing = await request.post(base + '/api/auth/email/start', { data: {} }); expect(missing.status()).toBe(403);
   });
 
-  test('passkeys, idempotent LWW sync, recovery rotation, export and deletion', async ({ page }) => {
-    await page.goto(base); await authenticator(page);
-    const registration = await passkey(page, 'register');
-    expect(registration.recoveryCode).toBeTruthy();
-    expect((await api(page, '/me')).data.user.displayName).toBe('API test');
+  test('email sign-in, idempotent LWW sync, session revocation, export and deletion', async ({ page }) => {
+    await page.goto(base);
+    const email = 'api-' + crypto.randomUUID() + '@example.com';
+    const registration = await emailLogin(page, email);
+    expect(registration.user.hasEmail).toBe(true);
+    expect(registration.user).not.toHaveProperty('hasPasskey');
     const now = Date.now();
     const item = { id: 'verse-1', title: 'John 3:16', text: 'For God so loved the world', due: new Date(now - 1000).toISOString(), step: 1, updatedAt: now };
     const event = { id: 'review-1', itemId: item.id, at: new Date(now).toISOString(), grade: 'Good' };
@@ -68,24 +57,23 @@ test.describe('Worker API (real local SQLite DOs and virtual WebAuthn)', () => {
     const exported = await api(page, '/export'); expect(exported.data.format).toBe('by-heart'); expect(exported.data.events).toHaveLength(1); expect(JSON.stringify(exported.data)).not.toContain('publicKey');
     const signedCookie = (await page.context().cookies()).find(c => c.name === 'bh_session')!; expect(signedCookie.httpOnly).toBe(true);
     await api(page, '/auth/logout', {}); expect((await api(page, '/me')).data.user).toBeNull();
-    await passkey(page, 'login');
+    await emailLogin(page, email);
     const activeCookie = (await page.context().cookies()).find(c => c.name === 'bh_session')!;
-    const recovered = await api(page, '/auth/recover', { code: registration.recoveryCode }); expect(recovered.status).toBe(200); expect(recovered.data.recoveryCode).not.toBe(registration.recoveryCode);
-    expect((await api(page, '/auth/recover', { code: registration.recoveryCode })).status).toBe(401);
     const oldContext = await page.context().browser()!.newContext(); await oldContext.addCookies([activeCookie]); const oldPage = await oldContext.newPage(); await oldPage.goto(base); expect((await api(oldPage, '/me')).data.user.displayName).toBe('Grace');
     expect((await api(page, '/auth/logout-everywhere', {})).status).toBe(200);
     expect((await api(oldPage, '/me')).data.user).toBeNull(); await oldContext.close();
-    await passkey(page, 'login');
+    await emailLogin(page, email);
     expect((await api(page, '/account', undefined, 'DELETE')).status).toBe(200);
     expect((await api(page, '/me')).data.user).toBeNull();
-    expect((await api(page, '/auth/recover', { code: recovered.data.recoveryCode })).status).toBe(401);
+    expect((await api(page, '/sync', {})).status).toBe(401);
   });
 
-  test('one-use WebAuthn challenge rejects replay and malformed authenticator', async ({ page }) => {
-    await page.goto(base); await authenticator(page); await passkey(page, 'register');
-    await api(page, '/auth/logout', {});
-    const options = await api(page, '/auth/login/options', {}); expect(options.status).toBe(200);
-    const bad = await api(page, '/auth/login/verify', { response: { id: 'nonexistent' } }); expect(bad.status).toBe(401); expect(bad.data.error).toContain("passkey's account was deleted");
-    const replay = await api(page, '/auth/login/verify', { response: { id: 'nonexistent' } }); expect(replay.status).toBe(400);
+  test('retired passkey and recovery endpoints return 404 without creating a session', async ({ page }) => {
+    await page.goto(base);
+    for (const path of ['/auth/register/options', '/auth/register/verify', '/auth/login/options', '/auth/login/verify', '/auth/recover']) {
+      expect((await api(page, path, { legacy: true, response: { id: 'old-key' }, code: 'old-code' })).status).toBe(404);
+    }
+    expect((await api(page, '/me')).data.user).toBeNull();
+    expect((await page.context().cookies()).find(c => c.name === 'bh_flow')).toBeUndefined();
   });
 });

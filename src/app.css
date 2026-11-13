@@ -74,3 +74,14 @@ main.practicing{position:fixed;inset:0;width:100%;height:100dvh;min-height:0;ove
 @media(max-height:699px){.practice .prompt{padding-top:16px}.practice .verse{padding-top:16px;padding-bottom:16px}}
 
 .esv-attribution{display:block;color:var(--ink2)}.esv-attribution a{color:inherit;text-decoration:underline;text-decoration-color:color-mix(in srgb,currentColor 40%,transparent);text-underline-offset:3px}.source-row .row-title{display:block;background:none;color:inherit;box-shadow:none;border-radius:0;padding:0;text-align:left;min-height:44px}.keepsake .esv-attribution{color:inherit}
+
+/* Safari time controls have an intrinsic content width; constrain every flex ancestor. */
+.settings-group,.settings-group label,.settings-group form{min-width:0;max-width:100%}
+.settings-group input,.settings-group select,.settings-group textarea{min-width:0;max-width:100%;width:100%;box-sizing:border-box}
+.settings-group input[type="time"]{-webkit-appearance:none;appearance:none;display:block;min-inline-size:0;max-inline-size:100%;inline-size:100%}
+.settings-group input[type="time"]::-webkit-date-and-time-value{min-width:0;text-align:left}
+.settings-group .toggle input,.settings-group input[type="checkbox"]{width:22px;flex:none}
+
+.passage-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:16px}
+.passage-cards .cover{min-width:0;width:100%;flex:auto}
+@media(max-width:350px){.passage-cards{grid-template-columns:minmax(0,1fr)}}

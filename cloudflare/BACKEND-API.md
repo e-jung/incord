@@ -1,20 +1,15 @@
 # Backend contract
 
 All writes require `Origin` equal to the app origin and JSON bodies (except DELETE).
-Session and temporary WebAuthn/OAuth flow cookies are HttpOnly, Secure on HTTPS, SameSite=Lax.
+Session and temporary OAuth flow cookies are HttpOnly, Secure on HTTPS, SameSite=Lax.
 Set local `SESSION_SECRET` (32+ characters) using `.dev.vars`; never commit real credentials.
-`wrangler dev --local --port 8793 --var SESSION_SECRET:local-development-only-secret-32chars` is sufficient for development.
+`wrangler dev --local --port 8793 --var SESSION_SECRET:local-development-only-secret-32chars` enables the worker for development; email delivery additionally requires Resend credentials (or the loopback-only EMAIL_TEST_SINK).
 
-- GET `/api/config`: `{passkeys,email,google,googleEnabled,push,vapidPublicKey}`. Hide Google unless googleEnabled. Push false means VAPID secrets missing.
-- GET `/api/me`: `{user:{id,displayName,createdAt,settings,hasPasskey,hasEmail,hasGoogle}, recoveryCode?}` or 401. Email/Google sign-in does not generate recovery codes. Flags expose available sign-in methods, never the address.
+- GET `/api/config`: `{email,google,googleEnabled,push,vapidPublicKey}`. Hide Google unless googleEnabled. Push false means VAPID secrets missing.
+- GET `/api/me`: `{user:{id,displayName,createdAt,settings,hasEmail,hasGoogle}}` or 401. Flags expose available sign-in methods, never the address.
 - POST `/api/auth/email/start` `{email,link?:true}` → `{ok:true,message}`. Trim/lowercase address, 6-digit cryptographically random code valid 10 minutes; same response for known/new addresses. Max 3 sends/email and 10/IP per 15 minutes. Email and code are stored only as domain-separated HMAC-SHA256 hashes with SESSION_SECRET. Delivery uses RESEND_API_KEY; EMAIL_FROM defaults to Incord <signin@incord.jesklabs.com>. All login emails set reply_to to incord-support@googlegroups.com. Disabled without Resend credentials.
 - POST `/api/auth/email/verify` `{email,code,link?:true}` → `{user}` and session cookie. Five attempts, then burned; single use. Creates account if new. Linking requires a valid session both at start and verify, and the same uid; conflicting owners return 409 after verification.
 - GET `/api/test/last-code?email=…` → `{code}` ONLY when EMAIL_TEST_SINK is exactly `1` AND request hostname is localhost/127.0.0.1. In that mode delivery is intercepted locally. Otherwise 404, even if the test flag is set on a public host. Never set this flag in production.
-- POST `/api/auth/register/options` `{displayName?}` (also accepts `name`). Returns SimpleWebAuthn options directly. On an authenticated session adds another passkey to that account; otherwise creates an account.
-- POST `/api/auth/register/verify` `{response: RegistrationResponseJSON}` → `{user,recoveryCode}`. Show replacement recovery code once for passkey-only accounts; email/Google accounts receive none.
-- POST `/api/auth/login/options` `{}` → SimpleWebAuthn options (discoverable credentials).
-- POST `/api/auth/login/verify` `{response: AuthenticationResponseJSON}` → `{user}`.
-- POST `/api/auth/recover` `{code}` → `{user,recoveryCode}`. Original code consumed atomically; replacement returned once for passkey-only accounts. Existing device sessions remain valid. Link an email from Account to migrate away from passkeys.
 - POST `/api/auth/logout` `{}` clears this device's session.
 - GET `/api/auth/google` → OAuth redirect with PKCE + single-use state; callback `/api/auth/google/callback` redirects to `/?signedIn=1`. Enable with GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET and register exact callback URL at Google. Existing Google subject mappings win; otherwise Google-authoritative verified email (Gmail or matching Workspace hd domain) links to the same keyed-email identity as email-code sign-in. Requests openid/profile/email scopes.
 - POST `/api/sync` `{items:[],events:[],settings?:{updatedAt,...}}` → `{items,events,settings,serverTime}`. Full snapshot including tombstones. Items require `{id,updatedAt}`; any remaining fields are preserved. updatedAt: milliseconds or ISO timestamp. `deleted:true` is a tombstone, not hard deletion. LWW per item; equal timestamps use deterministic serialized-JSON ordering. Events require `{id,at}` (also accepts timestamp or createdAt), are append-only and deduplicated by id. Sync batches max 1000 items / 2000 events, account max 10,000 items / 100,000 events. Settings **require updatedAt**, LWW object merge. Fields: displayName, appearance(system/light/dark), weeklyGoal(3/4/5/7), reminderTime(HH:mm), timezone(IANA), remindersEnabled. Frontend aliases name/theme/goal/timeZone/pushEnabled accepted and preserved. Always merge response settings as well as items/events. Client should monotonically bump settings.updatedAt on each settings edit and initialize it for pre-existing local state.
@@ -30,7 +25,9 @@ Optional APP_ORIGIN pins host/origin. Auth rate limit 60 requests per IP per 15 
 ## Verified checks
 
 - `npx tsc -p tsconfig.worker.json`
-- `npx vitest run --config cloudflare/vitest.config.ts` (6 security/crypto tests)
-- `API_BASE_URL=http://localhost:8793 npx playwright test --config cloudflare/api.playwright.config.ts` (3 real Worker/SQLite/WebAuthn journeys)
+- `npx vitest run tests/backend.unit.test.ts tests/email-auth.unit.test.ts tests/incord.unit.test.ts` (security, email/Google identity and legacy-host contracts)
+- `API_BASE_URL=http://localhost:8793 npx playwright test --config cloudflare/api.playwright.config.ts` (real Worker/SQLite email-auth and sync journeys)
 
-Use **localhost**, not 127.0.0.1, for WebAuthn: browsers reject IP-address RP IDs. The API tests run a Chromium virtual resident-key authenticator via CDP. The isolated API test config expects an already-running local Worker. Main Playwright config may run this same spec alongside UI journeys. Backend crypto tests have a separate config because the main Vitest config only includes engine tests. Google live-provider callback and real push delivery are not verified without operator credentials/subscriptions.
+Use localhost for the loopback-only email test sink. The API tests sign in using six-digit email codes against real local SQLite Durable Objects. The isolated API test config expects an already-running local Worker with EMAIL_TEST_SINK=1. Main Playwright config starts a disposable Worker automatically. Google live-provider callback and real push delivery are not verified without operator credentials/subscriptions.
+
+Passkey registration/login and recovery-code routes are removed (404). `/api/config` and user responses expose no passkey flags or recovery codes. Existing credential SQL tables are retained, unused; there is no destructive migration. The legacy host retains page 301 redirects, API 410 responses and the unregistering service worker; it no longer serves related-origin WebAuthn metadata.

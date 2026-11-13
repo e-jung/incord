@@ -31,7 +31,7 @@ Screenshots are written to test-results/screens/. Tests use disposable localhost
 Normal builds use committed generated public-domain JSON. Bible books download into the offline cache only when first opened; starter paths and full documents are in the offline shell. See content/SOURCES.md and scripts/build-content.py --help for the reproducible source pipeline.
 
 ## Production (after review)
-Build assets, configure SESSION_SECRET (32+ random bytes), APP_ORIGIN, optional VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY/VAPID_SUBJECT, optional GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET. Email sign-in requires RESEND_API_KEY. EMAIL_FROM optionally overrides the default Incord <signin@incord.jesklabs.com>; verify that sender domain in Resend. Every code email sets reply_to to incord-support@googlegroups.com. Google requests email scope to link verified Gmail/Workspace addresses with email-code identities; other Google accounts can explicitly add email sign-in. No new passkeys are offered; legacy passkeys/recovery remain available for migration. Configure Google's callback to /api/auth/google/callback. VAPID private key is the base64url P-256 scalar. Use the same stable session secret and VAPID key across releases. Wrangler config includes the 15-minute reminder cron and SQLite Durable Object migrations. Use `scripts/deploy.sh` only after review; it supplies `APP_ORIGIN=https://incord.jesklabs.com`. Wrangler’s configured build hook rebuilds assets immediately before local serve or deployment, including direct `wrangler deploy` calls. Vite stamps About/telemetry with `git rev-parse --short HEAD` at build time; commit release changes before deploying so pre-commit assets cannot carry an older SHA. This change has not been deployed or pushed.
+Build assets, configure SESSION_SECRET (32+ random bytes), APP_ORIGIN, optional VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY/VAPID_SUBJECT, optional GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET. Email sign-in requires RESEND_API_KEY. EMAIL_FROM optionally overrides the default Incord <signin@incord.jesklabs.com>; verify that sender domain in Resend. Every code email sets reply_to to incord-support@googlegroups.com. Google requests email scope to link verified Gmail/Workspace addresses with email-code identities; other Google accounts can explicitly add email sign-in. Sign-in uses Google or email codes only; passkeys and recovery codes are not supported. Configure Google's callback to /api/auth/google/callback. VAPID private key is the base64url P-256 scalar. Use the same stable session secret and VAPID key across releases. Wrangler config includes the 15-minute reminder cron and SQLite Durable Object migrations. Use `scripts/deploy.sh` only after review; it supplies `APP_ORIGIN=https://incord.jesklabs.com`. Wrangler’s configured build hook rebuilds assets immediately before local serve or deployment, including direct `wrangler deploy` calls. Vite stamps About/telemetry with `git rev-parse --short HEAD` at build time; commit release changes before deploying so pre-commit assets cannot carry an older SHA. This change has not been deployed or pushed.
 
 
 ## Live-stack smoke
@@ -46,13 +46,13 @@ Without `SMOKE_URL`, the script targets https://incord.jesklabs.com. It uses Chr
 
 The default code reader runs `gog --account jung.ai.assistant@gmail.com --no-input gmail search 'from:signin@incord.jesklabs.com newer_than:10m' --max 1`. Only `GOG_HOME`, `GOG_KEYRING_BACKEND`, and `GOG_KEYRING_PASSWORD` are loaded from `/home/ubuntu/.openclaw/.env` into that subprocess, never printed. Override with `SMOKE_CODE_CMD` (a trusted shell command printing the latest subject or bare six-digit code), including for a local test sink. Previously observed codes are ignored. Each successful run requests two codes; the per-email limit is three per 15 minutes. A 429 waits 15 minutes before one retry, and mailbox polling never resends a code.
 
-Local Wrangler commands disable route-based origin inference so WebAuthn sees `localhost`, not the production custom domain.
+Local Wrangler commands disable route-based origin inference so API requests use `localhost`, not the production custom domain.
 
 ## Incord host migration
 
 The canonical origin is **https://incord.jesklabs.com**. Keep both custom-domain routes in `wrangler.jsonc`. The Worker script remains **byheart**, with the existing UserDO/RegistryDO bindings, migration history and internal storage keys intact: renaming them would strand production accounts. The repository directory need not change.
 
-The old origin redirects pages to the same path/query on Incord (301). Old `/api/*` calls return a 410 JSON update message; old `/sw.js` unregisters and moves open windows to Incord. `/.well-known/webauthn` on the old origin advertises Incord as a related origin. Existing passkeys remain bound to their old RP ID: supporting browsers can use the related-origin flow, otherwise use a recovery code, then add email sign-in from Account. Browser IndexedDB and push subscriptions cannot transfer across origins. Re-enable reminders on the new origin; account sync recovers saved public-domain items and practice history. Unsynced device-only material remains on the old origin and is not automatically migrated.
+The old origin redirects pages to the same path/query on Incord (301). Old `/api/*` calls return a 410 JSON update message; old `/sw.js` unregisters and moves open windows to Incord. Browser IndexedDB and push subscriptions cannot transfer across origins. Re-enable reminders on the new origin; account sync recovers saved public-domain items and practice history. Unsynced device-only material remains on the old origin and is not automatically migrated.
 
 ### Reviewed production deployment
 
@@ -63,7 +63,7 @@ scripts/deploy.sh
 node scripts/prod-smoke.mjs
 ```
 
-The production smoke checks the old-origin redirect (including path/query), old API 410 response, related-origin metadata and legacy service worker. For a local `SMOKE_URL`, it exercises the legacy host using a loopback Host header, without contacting production. `SMOKE_LEGACY_URL` can override the legacy target. Deploying and running the live smoke are architect-owned steps; the smoke creates and deletes a disposable production account.
+The production smoke checks the old-origin redirect (including path/query), old API 410 response, legacy service worker. For a local `SMOKE_URL`, it exercises the legacy host using a loopback Host header, without contacting production. `SMOKE_LEGACY_URL` can override the legacy target. Deploying and running the live smoke are architect-owned steps; the smoke creates and deletes a disposable production account.
 
 ## ESV attribution and device cache
 
@@ -91,3 +91,9 @@ Incord counts anonymous totals (like how many people practiced today) to improve
 ## Email-code local testing
 
 Use `--var EMAIL_TEST_SINK:1` with local Wrangler to intercept codes without contacting an email provider; GET `/api/test/last-code?email=person%40example.com` returns the last unexpired code on localhost/127.0.0.1 only. The sink and test delivery cannot activate on public hosts, even with the flag. Do not set this flag in production. Email mappings use a one-way keyed hash; keep SESSION_SECRET stable.
+
+## Practice feedback and whole passages
+
+Settings offers Key sounds and Haptics, both off by default and synced with per-field preference clocks. Sounds are generated locally with a short WebAudio tick (lower tone for a slip). Android uses `vibrate(8)`; iOS uses an offscreen, aria-hidden checkbox switch with focus restoration. This iOS technique is best-effort and requires real-device verification; headless tests verify the fallback and focus behavior, not physical vibration. No audio assets or permissions are requested.
+
+Discover → Passages contains 17 curated multi-verse selections, each saved as one memory item, with verse counts and BSB/KJV/WEB selection. Existing per-verse starters are unchanged. 1 Corinthians 13:4–8 includes the full eighth verse and is labeled accordingly.

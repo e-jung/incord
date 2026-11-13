@@ -2,7 +2,7 @@ import { test, expect, type Page, type TestInfo } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
 
 // Each test receives a fresh browser context/IndexedDB. Auth calls use the real
-// local Worker and a CDP authenticator; only external push delivery is mocked.
+// local Worker and email test sink; only external push delivery is mocked.
 async function screen(page: Page, info: TestInfo, name: string) {
   await page.evaluate(() => document.fonts.ready);
   expect(await page.locator('body').innerText()).not.toMatch(/\b(?:bible|wsc|personal)\b/);
@@ -73,18 +73,6 @@ async function emailSignin(page: Page, email: string) {
   await page.getByLabel('Six-digit code').fill(code);
   await expect(page.getByText('Signed in.',{exact:true})).toBeVisible();
 }
-async function enrollLegacy(page:Page){
- const cdp=await page.context().newCDPSession(page);await cdp.send('WebAuthn.enable');await cdp.send('WebAuthn.addVirtualAuthenticator',{options:{protocol:'ctap2',transport:'internal',hasResidentKey:true,hasUserVerification:true,isUserVerified:true,automaticPresenceSimulation:true}});
- const options=await (await page.request.post('/api/auth/register/options',{headers:{Origin:new URL(page.url()).origin},data:{displayName:'Legacy account'}})).json();
- const response=await page.evaluate(async options=>{
-  const decode=(v:string)=>Uint8Array.from(atob(v.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
-  const publicKey={...options,challenge:decode(options.challenge),user:{...options.user,id:decode(options.user.id)},excludeCredentials:(options.excludeCredentials||[]).map((c:any)=>({...c,id:decode(c.id)}))};
-  return (await navigator.credentials.create({publicKey}) as any).toJSON();
- },options);
- const registration=await page.request.post('/api/auth/register/verify',{headers:{Origin:new URL(page.url()).origin},data:{response}});expect(registration.ok()).toBe(true);
- return {cdp,code:(await registration.json()).recoveryCode};
-}
-
 async function register(page: Page, info?: TestInfo) {
   const email = `ui-${crypto.randomUUID()}@example.com`;
   await emailSignin(page, email);
@@ -126,9 +114,9 @@ test('empty Today, every tab, settings persistence, local export, and own-text v
   await screen(page, info, 'discover-own-validation');
   await account(page);
   await expect(page.getByRole('button', { name: 'Continue with Google' })).toHaveCount(0);
-  await page.getByText('Signed up before November 14?', {exact:true}).click();
-  await expect(page.getByRole('button', { name: 'Use recovery code' })).toBeDisabled();
-  await page.getByText('Signed up before November 14?', {exact:true}).click();
+  await expect(page.getByLabel('Email address', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Email me a code', exact: true })).toBeEnabled();
+  expect(await page.getByLabel('Email address', { exact: true }).evaluate((input: HTMLInputElement) => input.validity.valueMissing)).toBe(true);
   const reminders=page.getByRole('button', { name: 'Enable reminders', exact: true });
   if(await reminders.isEnabled()){await reminders.click();await expect(page.getByRole('alert')).toHaveText('Sign in to enable reminders.')}else{await expect(page.getByRole('region',{name:'Reminders',exact:true})).toContainText(/Permission denied|Add to Home Screen/)}
   await screen(page, info, 'account-signed-out');
@@ -356,12 +344,6 @@ test('email signup, sync, signout, signin, export and account deletion', async (
   await expect(page.getByRole('button', { name: /Synced promise/ })).toBeVisible();
 });
 
-test('legacy recovery rotation and single-use remain available in the disclosure',async({page},info)=>{
- await account(page);const {code,cdp}=await enrollLegacy(page);await page.reload();await account(page);await expect(page.getByText('Signed in.',{exact:true})).toBeVisible();await signout(page);
- await page.getByText('Signed up before November 14?',{exact:true}).click();await page.getByLabel('One-time recovery code').fill(code);await page.getByRole('button',{name:'Use recovery code',exact:true}).click();await expect(page.getByTestId('recovery-code')).not.toHaveText(code);await screen(page,info,'account-recovery-code');await page.getByRole('button',{name:'I saved my code',exact:true}).click();await signout(page);
- await page.getByText('Signed up before November 14?',{exact:true}).click();await page.getByLabel('One-time recovery code').fill(code);await page.getByRole('button',{name:'Use recovery code',exact:true}).click();await expect(page.getByRole('alert')).toContainText('Invalid or already used recovery code');await screen(page,info,'account-recovery-used');await cdp.detach();
-});
-
 test('push permission, mock subscription, test notification and disable', async ({ page }, info) => {
   const subscriptions: unknown[] = [];
   let notificationTests = 0;
@@ -489,7 +471,7 @@ test('all starter covers and document choices, collection sessions and Next item
 });
 
 
-test('375px segments fit and recovery input clears floating navigation', async ({page}, info) => {
+test('375px segments fit and email input clears floating navigation', async ({page}, info) => {
   await page.setViewportSize({width:375,height:812});
   await tab(page, 'Discover');
   for (const label of ['Verses','Your text','Catechisms']) {
@@ -500,8 +482,8 @@ test('375px segments fit and recovery input clears floating navigation', async (
   }
   await screen(page,info,'discover-375');
   await account(page);
-  await page.getByLabel('One-time recovery code').scrollIntoViewIfNeeded();
-  const input=await page.getByLabel('One-time recovery code').boundingBox();
+  await page.getByLabel('Email address', {exact:true}).scrollIntoViewIfNeeded();
+  const input=await page.getByLabel('Email address', {exact:true}).boundingBox();
   const nav=await page.getByRole('navigation').boundingBox();
   expect(input!.y+input!.height).toBeLessThan(nav!.y);
   await page.evaluate(()=>window.scrollTo(0,document.documentElement.scrollHeight));

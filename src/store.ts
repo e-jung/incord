@@ -3,17 +3,25 @@ import {books,documents,fetchEsvText} from './content';
 import {isEsv,stripEsvText,assertEsvLimit,ESV_OFFLINE_MESSAGE} from '../shared/esv';
 export {assertEsvLimit,ESV_OFFLINE_MESSAGE} from '../shared/esv';
 export type Item={id:string,title:string,text:string,collection:string,translation?:string,reference?:string,esvVerseKeys?:string[],step:number,learned:boolean,due:string,updatedAt:number,deleted?:boolean,card?:any,createdAt?:string,learnedAt?:string,order?:number,number?:number,part?:number,sortKey?:(string|number)[]};
-export type Settings={name:string,theme:string,textSize?:string,goal:number,reminderTime:string,timeZone:string,pushEnabled:boolean,days:string[],lastActive:string,returnStart?:string,updatedAt:number,fieldUpdatedAt?:Record<string,number>,newPerDay?:number};
+export type Settings={keySounds?:boolean,haptics?:boolean,name:string,theme:string,textSize?:string,goal:number,reminderTime:string,timeZone:string,pushEnabled:boolean,days:string[],lastActive:string,returnStart?:string,updatedAt:number,fieldUpdatedAt?:Record<string,number>,newPerDay?:number};
 export type ReviewEvent={id:string,itemId:string,at:string,slips:number,hidden:number,grade:string};
 export type LocalState={items:Item[],events:ReviewEvent[],settings:Settings,queue:string[],account?:Account|null};
 export type Account={id:string,displayName?:string,[key:string]:unknown};
 export const today=()=>new Date().toLocaleDateString('en-CA');
-export const defaults:Settings={name:'',theme:'system',textSize:'default',goal:4,newPerDay:3,reminderTime:'19:00',timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone,pushEnabled:false,days:[],lastActive:'',updatedAt:0};
+export const defaults:Settings={name:'',theme:'system',textSize:'default',goal:4,newPerDay:3,reminderTime:'19:00',timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone,pushEnabled:false,keySounds:false,haptics:false,days:[],lastActive:'',updatedAt:0};
 let db:IDBDatabase;
 let settingsSnapshot:Settings|undefined;
 export async function openStore():Promise<LocalState>{
  db=await new Promise((resolve,reject)=>{const r=indexedDB.open('byheart',1);r.onupgradeneeded=()=>r.result.createObjectStore('state');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)});
- return await new Promise((resolve,reject)=>{const r=db.transaction('state').objectStore('state').get('current');r.onsuccess=()=>{const state=r.result||emptyState();state.items=mergeItems(state.items,[]).map(item=>{const migrated={...item,createdAt:item.createdAt||new Date(item.updatedAt||0).toISOString()};return {...migrated,sortKey:canonical(migrated)}});settingsSnapshot=JSON.parse(JSON.stringify(state.settings));resolve(state)};r.onerror=()=>reject(r.error)});
+ return await new Promise((resolve,reject)=>{const r=db.transaction('state').objectStore('state').get('current');r.onsuccess=()=>{const state=r.result||emptyState();state.items=mergeItems(state.items,[]).map(item=>{const migrated={...item,createdAt:item.createdAt||new Date(item.updatedAt||0).toISOString()};return {...migrated,sortKey:canonical(migrated)}});// Missing defaults are migration values, never new user edits. Preserve legacy
+ // clocks for existing fields and assign zero only to newly introduced fields.
+ if(Object.keys(defaults).some(key=>state.settings[key]===undefined)){
+  const old=state.settings,clocks={...old.fieldUpdatedAt};
+  for(const key of Object.keys(old))if(key!=='updatedAt'&&key!=='fieldUpdatedAt'&&clocks[key]===undefined)clocks[key]=old.fieldUpdatedAt?0:old.updatedAt||0;
+  for(const [key,value] of Object.entries(defaults))if(old[key]===undefined){old[key]=structuredClone(value);clocks[key]=0}
+  old.fieldUpdatedAt=clocks;
+ }
+ settingsSnapshot=JSON.parse(JSON.stringify(state.settings));resolve(state)};r.onerror=()=>reject(r.error)});
 }
 export async function persist(state:LocalState){assertEsvLimit(state.items);state.settings=stampSettings(state.settings,settingsSnapshot);settingsSnapshot=JSON.parse(JSON.stringify(state.settings));return new Promise<Settings>((resolve,reject)=>{const tx=db.transaction('state','readwrite');const snapshot=JSON.parse(JSON.stringify(state));snapshot.items=snapshot.items.map((item:Item)=>({...((isEsv(item)&&item.deleted)?stripEsvText(item):item),sortKey:canonical(item)}));tx.objectStore('state').put(snapshot,'current');tx.oncomplete=()=>resolve(state.settings);tx.onerror=()=>reject(tx.error)})}
 export async function api(path:string,body?:unknown,method?:string){const r=await fetch('/api'+path,{method:method||(body?'POST':'GET'),headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(path==='/sync'?syncPayload(body):body):undefined});const result=await r.json();if(!r.ok)throw new Error((result.error||contentCopy.retry)+(result.requestId?' (Request '+result.requestId+')':''));return result}

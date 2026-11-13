@@ -27,12 +27,11 @@ test('N4 confirms global signout and notifies another device only once',async({p
  await page.getByLabel('Display name').fill('Account name');await page.getByLabel('Display name').press('Tab');const email=`qa2-${crypto.randomUUID()}@example.com`;await emailSignin(page,email);await expect(page.getByText('Signed in.',{exact:true})).toBeVisible();
  const second=await page.context().browser()!.newContext({extraHTTPHeaders:{'CF-Connecting-IP':'qa2-secondary-'+crypto.randomUUID()}});const other=await second.newPage();await other.goto('/');await other.getByRole('button',{name:'Account settings',exact:true}).click();
  await emailSignin(other,email);
- await expect(other.getByText('Signed in.',{exact:true})).toBeVisible();await expect(other.getByRole('button',{name:'Add a passkey to this device',exact:true})).toHaveCount(0);
- const uid=(await (await other.request.get('/api/me')).json()).user.id;
+ await expect(other.getByText('Signed in.',{exact:true})).toBeVisible();
 
  await page.getByRole('button',{name:'Sign out everywhere',exact:true}).click();const confirm=page.getByRole('dialog',{name:'Sign out everywhere?',exact:true});await expect(confirm).toBeVisible();expect((await (await page.request.get('/api/me')).json()).user).toBeTruthy();await shot(page,info,'signout-confirm');
  await confirm.getByRole('button',{name:'Sign out everywhere',exact:true}).click();await expect(page.getByText('Account data removed from this device.',{exact:false})).toBeVisible();
- const stale=await other.request.post('/api/auth/register/options',{headers:{Origin:new URL(other.url()).origin},data:{attachTo:uid}});expect(stale.status()).toBe(401);
+ const stale=await other.request.get('/api/export');expect(stale.status()).toBe(401);
  await other.reload();await expect(other.getByRole('status')).toContainText('You were signed out on all devices.');await other.getByRole('button',{name:'Account settings',exact:true}).click();await other.getByLabel('Appearance').selectOption('dark');const nameClock=await other.evaluate(async()=>{const db=await new Promise<IDBDatabase>(resolve=>{const r=indexedDB.open('byheart',1);r.onsuccess=()=>resolve(r.result)});return await new Promise<number>(resolve=>{const r=db.transaction('state').objectStore('state').get('current');r.onsuccess=()=>resolve(r.result.settings.fieldUpdatedAt?.name||0)})});expect(nameClock).toBe(0);await other.reload();await expect(other.getByText('You were signed out on all devices.',{exact:true})).toHaveCount(0);await second.close();
 });
 test('N9/N10/N16/N20 article previews, checks, touch controls and backdrop dismissal',async({page},info)=>{

@@ -31,7 +31,7 @@ const started = Date.now();
 function safe(error) {
   let message = error instanceof Error ? error.message : String(error);
   for (const secret of secrets) if (secret) message = message.split(secret).join('[redacted]');
-  // No stack, account export, credential, or recovery-code artifacts are written.
+  // No stack, account export, sign-in-code artifacts are written.
   return message.slice(0, 1800);
 }
 async function check(name, action) {
@@ -192,7 +192,7 @@ try {
   const localLegacy = ['localhost','127.0.0.1'].includes(target.hostname) && !process.env.SMOKE_LEGACY_URL;
   const canonicalOrigin = localLegacy ? 'https://incord.jesklabs.com' : origin;
   const legacyOrigin = process.env.SMOKE_LEGACY_URL || (localLegacy ? origin : origin === 'https://incord.jesklabs.com' ? 'https://byheart.jesklabs.com' : '');
-  if (legacyOrigin) await check('Legacy origin redirects paths, retires APIs and preserves passkey metadata', async () => {
+  if (legacyOrigin) await check('Legacy origin redirects paths and retires APIs', async () => {
     const legacy = new URL(legacyOrigin);
     expect(['http:', 'https:'].includes(legacy.protocol) && !legacy.username && !legacy.password && !legacy.search && !legacy.hash, 'Valid legacy origin').toBe(true);
     const context = await browser.newContext({ extraHTTPHeaders: localLegacy ? { Host: 'byheart.jesklabs.com' } : {} });
@@ -204,9 +204,6 @@ try {
     expect(retired.status()).toBe(410);
     expect(retired.headers()['content-type']).toContain('application/json');
     expect(JSON.stringify(await retired.json())).toMatch(/update|incord/i);
-    const metadata = await context.request.get(legacy.origin + '/.well-known/webauthn', { maxRedirects: 0 });
-    expect(metadata.status()).toBe(200);
-    expect(await metadata.json()).toEqual({ origins: [canonicalOrigin] });
     const sw = await context.request.get(legacy.origin + '/sw.js', { maxRedirects: 0 });
     expect(sw.status()).toBe(200);
     expect(sw.headers()['content-type']).toMatch(/javascript/);

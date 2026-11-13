@@ -1,10 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
-import {generateRegistrationOptions,verifyRegistrationResponse} from '@simplewebauthn/server';
 import { DatabaseSync } from 'node:sqlite';
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
-import {createServer} from 'node:https';
-import {tmpdir} from 'node:os';
-import {execFileSync} from 'node:child_process';
+import { mkdir } from 'node:fs/promises';
 import worker, { RegistryDO, UserDO, StatsDO, type Env } from '../cloudflare/worker';
 
 const origin='https://incord.jesklabs.com';
@@ -19,7 +15,7 @@ async function workerFixture(page:Page) {
  const registry=new RegistryDO(state()),stats=new StatsDO(state()),users=new Map<string,UserDO>();
  const namespace=(resolve:(id:string)=>{fetch:(request:Request)=>Promise<Response>})=>({idFromName:(id:string)=>id,get:(id:string)=>({fetch:(url:string,init:RequestInit)=>resolve(id).fetch(new Request(url,init))})}) as unknown as DurableObjectNamespace;
  env.REGISTRY=namespace(()=>registry);env.STATS=namespace(()=>stats);env.USERS=namespace(id=>{if(!users.has(id))users.set(id,new UserDO(state(id),env));return users.get(id)!});
- env.ASSETS={fetch:async()=>new Response('<!doctype html><title>WebAuthn origin fixture</title><h1>WebAuthn origin fixture</h1>',{headers:{'Content-Type':'text/html'}})} as Fetcher;
+ env.ASSETS={fetch:async()=>new Response('<!doctype html><title>Secure origin fixture</title><h1>Secure origin fixture</h1>',{headers:{'Content-Type':'text/html'}})} as Fetcher;
  await page.route(origin+'/**',async route=>{
   const r=route.request();const response=await worker.fetch(new Request(r.url(),{method:r.method(),headers:await r.allHeaders(),...(!['GET','HEAD'].includes(r.method())&&r.postData()?{body:r.postData()!}:{})}),env);
   await route.fulfill({status:response.status,headers:Object.fromEntries(response.headers),body:Buffer.from(await response.arrayBuffer())});
@@ -27,57 +23,12 @@ async function workerFixture(page:Page) {
  return env;
 }
 async function api(page:Page,path:string,input:unknown){return page.evaluate(async({path,input})=>{const r=await fetch('/api'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)});return {status:r.status,data:await r.json()}},{path,input})}
-async function credential(page:Page,kind:'register'|'login',options:any){return page.evaluate(async({kind,options})=>{
- const decode=(s:string)=>Uint8Array.from(atob(s.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
- const publicKey={...options,challenge:decode(options.challenge)};
- if(kind==='register'){publicKey.user={...options.user,id:decode(options.user.id)};publicKey.excludeCredentials=(options.excludeCredentials||[]).map((c:any)=>({...c,id:decode(c.id)}))}else publicKey.allowCredentials=(options.allowCredentials||[]).map((c:any)=>({...c,id:decode(c.id)}));
- const result=kind==='register'?await navigator.credentials.create({publicKey}):await navigator.credentials.get({publicKey});return (result as any).toJSON();
- },{kind,options})}
-test.describe('FIX-7 secure-origin worker integration',()=>{
+test.describe('Secure-origin worker integration',()=>{
  test.use({serviceWorkers:'block'});
- test('new Incord RP registers and signs in using a real Chromium virtual authenticator',async({page})=>{
+ test('removed auth endpoints are unavailable on the canonical HTTPS origin',async({page})=>{
   await workerFixture(page);await page.goto(origin);
-  const cdp=await page.context().newCDPSession(page);await cdp.send('WebAuthn.enable');
-  const {authenticatorId}=await cdp.send('WebAuthn.addVirtualAuthenticator',{options:{protocol:'ctap2',transport:'internal',hasResidentKey:true,hasUserVerification:true,isUserVerified:true,automaticPresenceSimulation:true}});
-  const registration=await api(page,'/auth/register/options',{displayName:'Migration QA'});expect(registration.status).toBe(200);expect(registration.data.rp.id).toBe('incord.jesklabs.com');
-  const registered=await api(page,'/auth/register/verify',{response:await credential(page,'register',registration.data)});expect(registered.status,JSON.stringify(registered.data)).toBe(200);expect(registered.data.user.hasIncordPasskey).toBe(true);
-  const device=await cdp.send('WebAuthn.getCredentials',{authenticatorId});expect(device.credentials[0].rpId).toBe('incord.jesklabs.com');
-  await api(page,'/auth/logout',{});
-  const login=await api(page,'/auth/login/options',{});expect(login.data.rpId).toBe('incord.jesklabs.com');
-  const response=await credential(page,'login',login.data);const signedIn=await api(page,'/auth/login/verify',{response});expect(signedIn.status).toBe(200);expect(signedIn.data).toMatchObject({legacyPasskey:false,user:{id:registered.data.user.id}});
-  expect((await api(page,'/auth/login/verify',{response})).status).toBe(400);
-  const legacy=await api(page,'/auth/login/options',{legacy:true});expect(legacy.data.rpId).toBe('byheart.jesklabs.com');
-  // The real browser must not silently use the new-RP credential for an old-RP flow.
-  const wrongRP=await credential(page,'login',{...legacy.data,rpId:'incord.jesklabs.com'});
-  expect((await api(page,'/auth/login/verify',{response:wrongRP})).status).toBe(401);
- });
- test('legacy By Heart RP signs into Incord with a virtual authenticator and related-origin metadata',async({playwright})=>{
-  // WebAuthn's browser-process ROR fetch bypasses Playwright page routing.
-  // Supply real loopback TLS + Chromium DNS/port mapping, without contacting production.
-  const dir=await mkdtemp(tmpdir()+'/incord-ror-');
-  execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-days','1','-subj','/CN=byheart.jesklabs.com','-keyout',dir+'/key','-out',dir+'/cert'],{stdio:'ignore'});
-  const server=createServer({key:await readFile(dir+'/key'),cert:await readFile(dir+'/cert')},(request,response)=>{response.writeHead(request.url==='/.well-known/webauthn'?200:404,{'Content-Type':'application/json'});response.end(JSON.stringify({origins:[origin]}))});
-  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));const port=(server.address() as {port:number}).port;
-  const browser=await playwright.chromium.launch({args:['--ignore-certificate-errors','--no-proxy-server',`--host-resolver-rules=MAP byheart.jesklabs.com:443 127.0.0.1:${port}`]});
-  try {const context=await browser.newContext({ignoreHTTPSErrors:true,serviceWorkers:'block'}),page=await context.newPage();
-  const env=await workerFixture(page),old='https://byheart.jesklabs.com';
-  await page.route(old+'/**',async route=>{
-   if(new URL(route.request().url()).pathname==='/.well-known/webauthn') {const r=await worker.fetch(new Request(route.request().url()),env);await route.fulfill({status:r.status,headers:Object.fromEntries(r.headers),body:await r.text()});return}
-   await route.fulfill({contentType:'text/html',body:'<!doctype html><title>Legacy credential provisioning fixture</title>'});
-  });
-  const cdp=await page.context().newCDPSession(page);await cdp.send('WebAuthn.enable');
-  await cdp.send('WebAuthn.addVirtualAuthenticator',{options:{protocol:'ctap2',transport:'internal',hasResidentKey:true,hasUserVerification:true,isUserVerified:true,automaticPresenceSimulation:true}});
-  await page.goto(old);
-  const uid=crypto.randomUUID();const options=await generateRegistrationOptions({rpName:'By Heart',rpID:'byheart.jesklabs.com',userName:uid,userID:new TextEncoder().encode(uid),authenticatorSelection:{residentKey:'required',userVerification:'required'}});
-  const response=await credential(page,'register',options);
-  const verified=await verifyRegistrationResponse({response,expectedChallenge:options.challenge,expectedOrigin:old,expectedRPID:'byheart.jesklabs.com',requireUserVerification:true});
-  expect(verified.verified).toBe(true);const stored=verified.registrationInfo!.credential;
-  await env.REGISTRY.get(env.REGISTRY.idFromName('registry')).fetch('https://internal/credential/set',{method:'POST',body:JSON.stringify({id:stored.id,uid})});
-  await env.USERS.get(env.USERS.idFromName(uid)).fetch('https://internal/credential/add',{method:'POST',body:JSON.stringify({name:'Legacy migration',credential:{...stored,publicKey:Buffer.from(stored.publicKey).toString('base64url'),rpID:'byheart.jesklabs.com'}})});
-  await page.goto(origin);const login=await api(page,'/auth/login/options',{legacy:true});
-  const assertion=await credential(page,'login',login.data);
-  const signedIn=await api(page,'/auth/login/verify',{response:assertion});expect(signedIn.status,JSON.stringify(signedIn.data)).toBe(200);expect(signedIn.data).toMatchObject({legacyPasskey:true,user:{displayName:'Legacy migration'}});
-  } finally {await browser.close();await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(dir,{recursive:true,force:true})}
+  for(const path of ['/auth/register/options','/auth/register/verify','/auth/login/options','/auth/login/verify','/auth/recover']) expect((await api(page,path,{legacy:true})).status).toBe(404);
+  const config=await page.evaluate(async()=>await(await fetch('/api/config')).json());expect(config).not.toHaveProperty('passkeys');expect(config.googleEnabled).toBe(false);
  });
  test('private counts HTML form submits from its protected same-origin page',async({page})=>{
   await page.goto('/stats');await page.getByLabel('Stats token').fill('incord-playwright-local-stats-token-32chars');await page.getByRole('button',{name:'View counts'}).click();await expect(page.getByRole('heading',{name:'Incord · Private counts'})).toBeVisible();
@@ -97,7 +48,7 @@ test.describe('FIX-7 UI migration evidence',()=>{
  test.use({serviceWorkers:'block'});
  test('About, privacy opt-out, new icon, Discover ESV and practice attribution',async({page},info)=>{
   await page.route('**/api/esv?*',route=>route.fulfill({contentType:'text/plain',body:'The LORD is my shepherd; I shall not want.'}));
-  await page.route('**/api/config',route=>route.fulfill({json:{passkeys:true}}));await page.route('**/api/me',route=>route.fulfill({json:{user:null}}));await page.route('**/api/stats',route=>route.fulfill({json:{ok:true}}));
+  await page.route('**/api/config',route=>route.fulfill({json:{email:true,googleEnabled:false}}));await page.route('**/api/me',route=>route.fulfill({json:{user:null}}));await page.route('**/api/stats',route=>route.fulfill({json:{ok:true}}));
   await page.goto('/');await page.getByRole('button',{name:'Account settings',exact:true}).click();
   const about=page.getByRole('region',{name:'About',exact:true});await expect(about).toContainText('Incord');await expect(about).toContainText('Crossway');await about.scrollIntoViewIfNeeded();await shot(page,info.project.name,'about');
   const privacy=page.getByRole('checkbox',{name:'Share anonymous usage counts'});await privacy.scrollIntoViewIfNeeded();await privacy.uncheck();await expect(privacy).not.toBeChecked();expect(await page.evaluate(()=>localStorage.getItem('incord.stats.enabled'))).toBe('0');await shot(page,info.project.name,'privacy');
