@@ -15,7 +15,9 @@ const lookupCopy = copySource.match(/export const contentCopy=[\s\S]*?} as const
 assert.ok(lookupCopy, 'canonical lookup copy exists');
 source = source.replace("import {contentCopy} from './config/copy';", lookupCopy.replace('export const', 'const'));
 source = source.replaceAll('import.meta.env.BASE_URL', "'/'");
-const sharedSource = await fs.readFile(path.join(root, 'shared/esv.ts'), 'utf8');
+let sharedSource = await fs.readFile(path.join(root, 'shared/esv.ts'), 'utf8');
+sharedSource = sharedSource.replace(/import books from [^;]+;/, `const books = ${JSON.stringify(await read('books.json'))};`);
+sharedSource = sharedSource.replace(/import chapterCounts from [^;]+;/, `const chapterCounts = ${await fs.readFile(path.join(root, 'shared/esv-structure.json'), 'utf8')};`);
 const sharedJS = ts.transpileModule(sharedSource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
 source = source.replace("'../shared/esv'", `"data:text/javascript;base64,${Buffer.from(sharedJS).toString('base64')}"`);
 const { outputText } = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } });

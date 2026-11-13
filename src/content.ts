@@ -1,10 +1,11 @@
+import {assertEsvLimit, esvReferenceKeys, ESV_OFFLINE_MESSAGE} from '../shared/esv';
 import {contentCopy} from './config/copy';
 /** Public-domain content. Bible books load only on demand; documents/starters are available offline in the shell. */
 import documentData from '../public/content/documents.json';
 import starterData from '../public/content/starters.json';
 import bookData from '../public/content/books.json';
 
-export type Translation = 'BSB' | 'KJV' | 'WEB';
+export type Translation = 'BSB' | 'KJV' | 'WEB' | 'ESV';
 export interface ContentItem {
   id: string;
   title: string;
@@ -16,6 +17,8 @@ export interface ContentItem {
   part?: number;
   parts?: number;
   heading?: string;
+  reference?: string;
+  esvVerseKeys?: string[];
 }
 export interface ContentCollection {
   id: string;
@@ -27,7 +30,7 @@ export interface ContentCollection {
 export const starters: ContentCollection[] = starterData;
 export const documents: ContentCollection[] = documentData;
 export const books = bookData;
-export const translations: Translation[] = ['BSB', 'KJV', 'WEB'];
+export const translations: Translation[] = ['BSB', 'KJV', 'WEB', 'ESV'];
 interface BookPack { book: string; translation: Translation; chapters: Record<string, Record<string, string>>; headings?: Record<string, string> }
 const cache = new Map<string, Promise<BookPack>>();
 const normalize = (s: string) => s.toLowerCase().replace(/\./g, '').replace(/\s/g, '');
@@ -68,6 +71,7 @@ async function loadBook(id: string, translation: Translation): Promise<BookPack>
 export async function lookupReference(reference: string, translation: string = 'BSB'): Promise<ContentItem[]> {
   const tr = translation.toUpperCase();
   if (!translations.includes(tr as Translation)) throw Error(contentCopy.translation);
+  if (tr === 'ESV') return lookupEsvReference(reference);
   const input = reference.trim().replace(/[–—]/g, '-').replace(/^(III|II|I)\s+/i, (_, roman: string) => `${roman.length} `);
   const match = /^(.+?)\s*(\d+)(?:[:.\s](\d+))?(?:\s*-\s*(\d+)(?:[:.\s](\d+))?)?$/.exec(input);
   if (!match) throw Error(contentCopy.reference);
@@ -100,3 +104,34 @@ export async function lookupReference(reference: string, translation: string = '
   if (!result.length) throw Error(contentCopy.empty);
   return result;
 }
+
+/** Publisher text is fetched as one exact passage, never split/rejoined using guessed verse boundaries. */
+export async function lookupEsvReference(reference: string): Promise<ContentItem[]> {
+  const coordinates = await lookupReference(reference, 'BSB');
+  const first = coordinates[0], last = coordinates[coordinates.length - 1];
+  const canonicalReference = first.title === last.title ? first.title : first.title + '–' + (first.title.split(':')[0] === last.title.split(':')[0] ? last.title.split(':')[1] : last.title.split(' ').at(-1));
+  const item: ContentItem = {id: 'esv-' + first.id.slice(4) + (coordinates.length > 1 ? '--esv-' + last.id.slice(4) : ''), title: canonicalReference, reference: canonicalReference, text: '', collection: 'bible', translation: 'ESV', esvVerseKeys: esvReferenceKeys(canonicalReference)};
+  assertEsvLimit([item]);
+  item.text = await fetchEsvText(canonicalReference);
+  return [item];
+}
+export async function fetchEsvText(reference: string): Promise<string> {
+  try {
+    const response = await fetch('/api/esv?q=' + encodeURIComponent(reference), {cache:'no-store'});
+    if (!response.ok) {
+      const result = await response.json().catch(() => null);
+      throw Error(result?.error || ESV_OFFLINE_MESSAGE);
+    }
+    const text = await response.text();
+    if (!text.trim()) throw Error(ESV_OFFLINE_MESSAGE);
+    return text;
+  } catch (error) {
+    if (error instanceof TypeError || (typeof navigator !== 'undefined' && navigator.onLine === false)) throw Error(ESV_OFFLINE_MESSAGE);
+    throw error;
+  }
+}
+/** Full wording checked against api.esv.org on 2026-11-13 (docs link to these usage terms). */
+export const esvAttribution = {
+  label: 'ESV', short: '(ESV)', url: 'https://www.esv.org',
+  copyright: 'Scripture quotations marked “ESV” are from the ESV® Bible (The Holy Bible, English Standard Version®), © 2001 by Crossway, a publishing ministry of Good News Publishers. Used by permission. All rights reserved. The ESV text may not be quoted in any publication made available to the public by a Creative Commons license. The ESV may not be translated into any other language. Users may not copy or download more than 500 verses of the ESV Bible or more than one half of any book of the ESV Bible.',
+};
