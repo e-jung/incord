@@ -61,7 +61,7 @@ scripts/deploy.sh
 node scripts/prod-smoke.mjs
 ```
 
-The production smoke checks the old-origin redirect (including path/query), old API 410 response, related-origin metadata and legacy service worker. It skips legacy-host checks for a local `SMOKE_URL`, unless `SMOKE_LEGACY_URL` is explicitly set. Deploying and running the live smoke are architect-owned steps; the smoke creates and deletes a disposable production account.
+The production smoke checks the old-origin redirect (including path/query), old API 410 response, related-origin metadata and legacy service worker. For a local `SMOKE_URL`, it exercises the legacy host using a loopback Host header, without contacting production. `SMOKE_LEGACY_URL` can override the legacy target. Deploying and running the live smoke are architect-owned steps; the smoke creates and deletes a disposable production account.
 
 ## ESV attribution and device cache
 
@@ -76,8 +76,8 @@ Checked 2026-11-13 against the [API overview](https://api.esv.org/docs/), [API c
 The real upstream smoke is **opt-in**, separate from unit/E2E fixtures and normal production smoke:
 
 ```sh
-ESV_LIVE_SMOKE=1 SMOKE_URL=http://localhost:8793 npm run smoke:esv
-# Or omit SMOKE_URL after deployment to check the canonical production Worker.
+ESV_LIVE_SMOKE=1 WORKER_URL=http://localhost:8793 npm run smoke:esv
+# After deployment, set WORKER_URL=https://incord.jesklabs.com explicitly.
 ```
 
 It calls `/api/esv` exactly once, makes no retries and prints no verse text or credentials. The target Worker must have a valid ESV key. No live ESV requests run during normal builds or tests.

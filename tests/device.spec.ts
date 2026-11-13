@@ -60,3 +60,9 @@ for(const state of ['on','missing','denied'] as const)test(`Account notification
 });
 
 });
+
+test('anonymous counts uses credentialless same-origin transport in Chromium and WebKit',async({page})=>{
+ await page.addInitScript(()=>{Object.defineProperty(navigator,'doNotTrack',{configurable:true,value:'0'});Object.defineProperty(navigator,'globalPrivacyControl',{configurable:true,value:false});localStorage.setItem('incord.stats.enabled','1')});
+ const sent=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/stats');await page.goto('/');const response=await sent;
+ expect(response.status()).toBe(200);const request=response.request(),headers=await request.allHeaders();expect(headers.origin).toBe(new URL(page.url()).origin);expect(headers.cookie).toBeUndefined();const payload=request.postDataJSON();expect(Object.keys(payload).sort()).toEqual(['events','token']);expect(payload.events).toContain('app_open');
+});

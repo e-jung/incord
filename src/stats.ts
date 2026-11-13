@@ -48,7 +48,7 @@ export async function flushStats() {
   const events=queue.splice(0,50);
   // Credentials are explicitly omitted: even the account cookie is unnecessary.
   // Failed sends are dropped; no disk queue or retry can link days or inflate counts.
-  try{await fetch('/api/stats',{method:'POST',credentials:'omit',mode:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:current,events}),keepalive:true})}catch{/* Best-effort totals, never block offline practice. */}
+  try{await fetch('/api/stats',{method:'POST',credentials:'omit',mode:'same-origin',referrerPolicy:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:current,events}),keepalive:true})}catch{/* Best-effort totals, never block offline practice. */}
 }
 /** Install once from App onMount; call its disposer on unmount. */
 export function installStats() {

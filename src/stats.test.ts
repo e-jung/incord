@@ -14,7 +14,7 @@ describe('Anonymous counter client',()=>{
  });
  it('sends only token and whitelisted categories, never identifiers or content; same-origin without cookies',async()=>{
   trackStats('practice_start');trackStats('private verse text');trackStats('starter_added:private-id');await flushStats();expect(fetcher).toHaveBeenCalledOnce();
-  const [url,init]=fetcher.mock.calls[0] as unknown as [string,RequestInit];expect(url).toBe('/api/stats');expect(init).toMatchObject({mode:'same-origin',credentials:'omit',keepalive:true});
+  const [url,init]=fetcher.mock.calls[0] as unknown as [string,RequestInit];expect(url).toBe('/api/stats');expect(init).toMatchObject({mode:'same-origin',credentials:'omit',referrerPolicy:'same-origin',keepalive:true});
   expect(JSON.parse(init.body as string)).toEqual({token:expect.stringMatching(/^[a-f0-9]{32}$/),events:['practice_start']});
  });
  it('caps batches at 50, flushes on idle, and does not retry failed sends',async()=>{
