@@ -322,7 +322,7 @@ test('email signup, sync, signout, signin, export and account deletion', async (
   await expect(page.getByRole('button', { name: 'Email me a code', exact: true })).toBeVisible();
   expect(await (await page.request.get('/api/me')).json()).toMatchObject({ user: null });
   await emailSignin(page, email);
-  await expect(page.getByText('Signed in.')).toBeVisible();
+  await expect(page.getByText('Signed in.',{exact:true})).toBeVisible();
   await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Export your data', exact: true }).click();
