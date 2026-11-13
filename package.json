@@ -9,7 +9,7 @@
     "check": "svelte-check --tsconfig ./tsconfig.json && tsc -p tsconfig.worker.json",
     "test": "vitest run --coverage",
     "e2e": "playwright test",
-    "serve": "WRANGLER_SEND_METRICS=false wrangler dev --local --port 8793",
+    "serve": "WRANGLER_SEND_METRICS=false wrangler dev --local --infer-origin-from-routes=false --port 8793",
     "content:build": "python3 scripts/build-content.py",
     "content:verify": "node scripts/verify-content.mjs"
   },

@@ -31,3 +31,16 @@ Normal builds use committed generated public-domain JSON. Bible books download i
 
 ## Production (after review)
 Build assets, configure SESSION_SECRET (32+ random bytes), APP_ORIGIN, optional VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY/VAPID_SUBJECT, optional GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET. Configure Google's callback to /api/auth/google/callback. VAPID private key is the base64url P-256 scalar. Use the same stable session secret and VAPID key across releases. Wrangler config includes the 15-minute reminder cron and SQLite Durable Object migrations. No deploy/push has been performed.
+
+
+## Live-stack smoke
+
+With a local build and `npm run serve` running, use:
+
+```sh
+SMOKE_URL=http://localhost:8793 node scripts/prod-smoke.mjs
+```
+
+Without `SMOKE_URL`, the script targets https://byheart.jesklabs.com. It uses Chromium at the iPhone 15 viewport, learns John 3:16 through all four steps, registers a virtual passkey, confirms explicit ownership/sync and recovery on a second device, checks CSP/console, push configuration and service workers, then deletes its temporary account even if a check fails. It never saves recovery codes or browser profiles. Push keys must be configured; provider delivery is not exercised.
+
+Local Wrangler commands disable route-based origin inference so WebAuthn sees `localhost`, not the production custom domain.

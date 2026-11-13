@@ -26,3 +26,17 @@ main.practicing{height:100dvh;min-height:0;overflow:hidden}.practice>header,.pra
 .keyboard .numberrow{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:5px}.numberrow .peek{grid-row:span 2;height:auto}.numberrow .number-key{width:100%;min-height:44px}
 .cover::after{content:"";position:absolute;inset:0;background:#0002;pointer-events:none}
 .toggle{flex-direction:row;align-items:center;font-weight:500}.toggle input{width:22px;height:22px;flex:none}.bulk-actions{display:flex;flex-wrap:wrap;gap:8px}.bulk-actions button{font-size:13px;padding:10px 14px!important}.list details{padding:16px 0;border-bottom:1px solid var(--line)}.list summary{cursor:pointer;min-height:44px;line-height:1.5;font-weight:600}.list details p{padding:12px 0}.item-menu{align-self:flex-end;min-width:44px;font-size:24px}.undo-toast{position:fixed;bottom:110px;left:50%;transform:translateX(-50%);z-index:7;border:1px solid var(--line);background:var(--bar);border-radius:16px;box-shadow:var(--sh);padding:8px 18px;white-space:nowrap;display:flex;gap:18px;align-items:center}
+
+/* Compact collection composition and independent trailing touch controls. */
+.page>header.collection-header{justify-content:flex-start;margin-bottom:16px}
+.cover.compact{width:100%;min-height:120px;height:120px;gap:8px;justify-content:center;padding:20px 24px}
+.cover.compact h1{font-size:23px;max-width:85%;z-index:1;line-height:1.25;letter-spacing:-.025em}
+.row-main{display:flex;align-items:center;gap:12px;flex:1;min-width:0;min-height:44px;background:none!important;color:inherit!important;text-align:left;padding:0!important;box-shadow:none!important;border-radius:0!important;font-weight:inherit!important}
+.row .item-menu{flex:none;align-self:center;width:44px;height:44px;padding:0}
+.collection-practice{margin-top:24px}.collection-practice button{width:100%}
+.document-row{display:flex;gap:12px;align-items:flex-start;border-bottom:1px solid var(--line)}
+.document-row details{flex:1;min-width:0;border-bottom:0;padding:12px 0}
+.document-row summary{display:list-item;list-style-position:inside;align-content:center}
+.document-row .document-add{width:44px;height:44px;flex:none;margin:12px 0;background:var(--fill);color:var(--acc)}
+.document-add:disabled{opacity:1;color:var(--ink3)}
+.added-toast{position:fixed;bottom:110px;left:50%;transform:translateX(-50%);z-index:9;max-width:calc(100% - 32px);background:var(--bar);border:1px solid var(--line);border-radius:16px;box-shadow:var(--sh);padding:14px 20px;text-align:center}

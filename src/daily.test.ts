@@ -9,3 +9,10 @@ describe('P1-5 daily load',()=>{
 });
 
 it('P1-5 completion slots use the same local calendar day as Today',()=>{const items=[item('done',true),item('b'),item('c'),item('d')];const events=[{id:'e',itemId:'done',at:'2026-11-14T05:00:00Z',slips:0,hidden:1,grade:'Good'}];expect(dailyPlan(items,events,'2026-11-13',3,Date.now(),Infinity,'America/Los_Angeles').filter(i=>!i.learned)).toHaveLength(2)});
+
+it('reviews estimate one blank pass at 1.2 seconds per word with a one-minute minimum',()=>{
+ const review={...item('review',true),text:Array(60).fill('word').join(' ')};
+ expect(estimateMinutes([review])).toBe(1);
+ expect(estimateMinutes(Array(8).fill(review))).toBe(10);
+ expect(estimateMinutes([item('short',true)])).toBe(1);
+});

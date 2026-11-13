@@ -109,3 +109,14 @@ Addressed all 53 findings (3 P0, 23 P1, 27 P2), following the architect decision
 Viewport review images are in `/home/ubuntu/.openclaw/workspace/reports/bible-memory-20261113/fix-2-screens/`; the complete local Playwright report and traces remain in `playwright-report/` and `test-results/`.
 
 No push or deployment performed. `/home/ubuntu/projects/byheart-qa` was not modified. Existing production-only gaps remain unchanged: live Google credentials/provider push and real iOS/Safari delivery require deployment/device verification.
+
+
+## Architect fix batch 3 — 2026-11-13
+
+Applied FIX-3-polish.md: collection rows now have independent inline 44px options controls, a single title in a 120px motif header, transient addition toasts and a full-width final practice button. Document questions keep their answer disclosures and bulk actions, with trailing round 44px add/check controls. Gentle return now applies day-zero capping before the welcome choice as well as afterward. Review workload remains one blank pass at 1.2 seconds per word, with a one-minute minimum, explicitly regression-tested.
+
+Added `scripts/prod-smoke.mjs`, a real Chromium/iPhone 15 UI/API journey with a four-step Gospel John 3:16 ladder, CDP virtual passkey, explicit device ownership and sync, second-context recovery, learned/history verification, push configuration, service-worker activation, enforcing CSP/console checks and guaranteed account/profile cleanup with pass/fail reporting. README documents local and production targets. Local Wrangler serve/E2E commands now disable route-based origin inference: the production custom-domain route otherwise rewrites the local WebAuthn RP ID to byheart.jesklabs.com.
+
+Verification: static checks pass with zero errors/warnings; 158 tests pass in eight files, with 100% engine coverage; content verification passes (198 packs, 93,302 verses, 268 document items and five starters). Local smoke against the E2E suite's real `wrangler dev` at `http://localhost:8793` passes all 14 checks in 8.2 seconds, including cleanup and zero console/CSP errors. All 86 mobile E2E journeys pass (43 per appearance, no skips, 3.4 minutes), including both welcome choices and inline touch-target/header/primary-button geometry. Production smoke was not run against the live site.
+
+Viewport review captures are refreshed in `/home/ubuntu/.openclaw/workspace/reports/bible-memory-20261113/fix-3-screens/`. No push or deployment performed; the QA worktree was not touched.

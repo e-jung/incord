@@ -232,7 +232,9 @@ test('catechism browse and complete a full ladder', async ({ page }, info) => {
   await screen(page, info, 'documents-westminster');
   const title = (await page.locator('summary').first().innerText()).replace(/^Q1 · /, '');
   await expect(page.locator('details').first()).not.toHaveAttribute('open', '');
+  await expect(page.locator('.document-add').first()).toHaveText('+');
   await page.getByRole('button', { name: 'Add Q1', exact: true }).click();
+  await expect(page.locator('.document-add').first()).toHaveText('✓');
   await tab(page, 'Today');
   await page.getByRole('button', { name: 'Begin', exact: true }).click();
   await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
@@ -387,7 +389,7 @@ test('push permission, mock subscription, test notification and disable', async 
   await cdp.detach();
 });
 
-test('gentle return welcome caps the backlog at three items', async ({ page }, info) => {
+for (const choice of ['Start', 'Check what I remember']) test(`gentle return welcome caps the backlog before and after ${choice}`, async ({ page }, info) => {
   await page.evaluate(async () => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => { const r = indexedDB.open('byheart', 1); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
     const last = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
@@ -401,8 +403,14 @@ test('gentle return welcome caps the backlog at three items', async ({ page }, i
   });
   await page.reload();
   await expect(page.getByRole('dialog', { name: 'Welcome back' })).toBeVisible();
+  await expect(page.locator('.hero')).toContainText('3 to practice');
+  await expect(page.locator('.hero')).toContainText('About 1 min');
   await screen(page, info, 'welcome-back');
-  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await page.getByRole('button', { name: choice, exact: true }).click();
+  if (choice !== 'Start') {
+    await expect(page.getByRole('heading', { name: 'Familiar word 1', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Close practice', exact: true }).click();
+  }
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByText('3 to practice', { exact: true })).toBeVisible();
   await expect(page.getByText('About 1 min', { exact: true })).toBeVisible();
@@ -442,7 +450,7 @@ test('all starter covers and document choices, collection sessions and Next item
   await page.getByRole('button', { name: 'Catechisms', exact: true }).click();
   for (const doc of ['Heidelberg Catechism', 'Apostles’ Creed', 'Nicene Creed']) {
     await page.getByRole('combobox', { name: 'Browse', exact: true }).selectOption({ label: doc });
-    await expect(page.locator('.list button.text-button').first()).toBeVisible();
+    await expect(page.locator('.document-add').first()).toBeVisible();
     await screen(page, info, `document-${doc.split(' ')[0].replace(/[^a-z]/gi, '').toLowerCase()}`);
   }
   await page.getByRole('button', { name: 'Verses', exact: true }).click();

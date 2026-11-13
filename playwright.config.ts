@@ -34,7 +34,7 @@ export default defineConfig({
     },
   })),
   webServer: {
-    command: 'npm run build && WRANGLER_SEND_METRICS=false npx wrangler dev --local --port '+new URL(base).port+' --persist-to .wrangler/e2e-'+new URL(base).port+' --var SESSION_SECRET:byheart-playwright-local-only-secret-32chars',
+    command: 'npm run build && WRANGLER_SEND_METRICS=false npx wrangler dev --local --infer-origin-from-routes=false --port '+new URL(base).port+' --persist-to .wrangler/e2e-'+new URL(base).port+' --var SESSION_SECRET:byheart-playwright-local-only-secret-32chars',
     url: base+'/api/config',
     reuseExistingServer: true,
     timeout: 120_000,
