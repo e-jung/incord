@@ -72,10 +72,15 @@ describe('N5/N6 response headers and N18 static routing', () => {
     const handlers: Record<string, (event: any) => void> = {};
     runInNewContext(readFileSync('public/sw.js', 'utf8'), {
       URL, Response, location: { origin: 'https://example.test' },
-      self: { addEventListener: (name: string, handler: (event: any) => void) => { handlers[name] = handler; } },
+      self: { location: { hostname: 'example.test', origin: 'https://example.test' }, addEventListener: (name: string, handler: (event: any) => void) => { handlers[name] = handler; } },
       caches: { match: async (key: unknown) => key === '/' ? new Response('<html>offline shell</html>') : undefined },
       fetch: async () => { throw Error('offline'); },
     });
+    for (const path of ['/stats', '/stats/logout']) {
+      let intercepted = false;
+      handlers.fetch({ request: { url: 'https://example.test' + path, method: 'GET', mode: 'navigate' }, respondWith: () => { intercepted = true; } });
+      expect(intercepted, 'Private stats must always authenticate against the network').toBe(false);
+    }
     for (const path of ['/assets/missing.js', '/content/missing.json', '/gallery']) {
       let result!: Promise<Response>;
       handlers.fetch({ request: { url: 'https://example.test' + path, method: 'GET', mode: 'navigate' }, respondWith: (response: Promise<Response>) => { result = response; } });

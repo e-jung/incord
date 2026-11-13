@@ -1,8 +1,14 @@
+import { handleEsv, assertEsvLimit, stripEsvText } from './esv';
+import { handleStatsRequest } from './stats';
+export { StatsDO } from './stats';
 import { generateRegistrationOptions, verifyRegistrationResponse, generateAuthenticationOptions, verifyAuthenticationResponse } from '@simplewebauthn/server';
 import type { RegistrationResponseJSON, AuthenticationResponseJSON, WebAuthnCredential } from '@simplewebauthn/server';
 
 export interface Env {
   ASSETS: Fetcher;
+  STATS: DurableObjectNamespace;
+  STATS_TOKEN?: string;
+  ESV_API_KEY?: string;
   USERS: DurableObjectNamespace;
   REGISTRY: DurableObjectNamespace;
   SESSION_SECRET: string;
@@ -16,7 +22,7 @@ export interface Env {
 type ObjectData = Record<string, unknown>;
 type Row = Record<string, string | number | null>;
 type Session = { uid: string; version: number; exp: number };
-type Challenge = { challenge: string; kind: string; uid?: string; verifier?: string; name?: string; sessionVersion?: number };
+type Challenge = { challenge: string; kind: string; uid?: string; verifier?: string; name?: string; rpID?: string; sessionVersion?: number };
 const encoder = new TextEncoder();
 const SESSION_AGE = 30 * 86400;
 const cookieName = 'bh_session';
@@ -86,7 +92,7 @@ export function clientErrorRecord(input: ObjectData, origin: string) {
     const match = line.match(/https?:\/\/[^\s)]+/); if (!match) return [];
     try { const frame = new URL(match[0]); if (frame.origin !== origin || frame.search || frame.hash || !/^\/(?:assets\/[a-zA-Z0-9_.-]+\.(?:js|mjs)|sw\.js):\d+:\d+$/.test(frame.pathname)) return []; return [frame.pathname]; } catch { return []; }
   }).slice(0, 5).join('\n') : '';
-  // By Heart is a single-path app. Do not retain arbitrary paths, query strings, or fragments.
+  // Incord is a single-path app. Do not retain arbitrary paths, query strings, or fragments.
   const route = typeof input.route === 'string' && /^\/(?:account|today|library|practice|learned|gallery)?(?:[?#].*)?$/.test(input.route) ? input.route.split(/[?#]/)[0] : '/';
   const version = typeof input.version === 'string' && /^(?:[a-f0-9]{7,40}|dev|development|unknown)$/.test(input.version) ? input.version : 'unknown';
   const uaFamily = ['Safari', 'Chrome', 'Chromium', 'Firefox', 'Edge', 'Other'].includes(String(input.uaFamily ?? input.ua)) ? String(input.uaFamily ?? input.ua) : 'Other';
@@ -104,6 +110,10 @@ async function api(request: Request, env: Env): Promise<Response> {
     console.log(JSON.stringify({ evt: 'client_error', ...clientErrorRecord(input, origin) }));
     return json({ ok: true });
   }
+  if (path === '/api/esv') return handleEsv(request, env, {
+    signedIn: async () => { try { await signedIn(request, env); return true; } catch (error) { if (error instanceof ApiError && error.status === 401) return false; throw error; } },
+    anonymousAllowed: async (limit, windowSeconds) => { try { await registry(env, '/limit', { key: 'esv:' + await digest(env.SESSION_SECRET + ':' + (request.headers.get('CF-Connecting-IP') || 'local')), limit, window: windowSeconds * 1000 }); return true; } catch (error) { if (error instanceof ApiError && error.status === 429) return false; throw error; } },
+  });
   if (path.startsWith('/api/auth/')) {
     await registry(env, '/limit', { key: await digest(env.SESSION_SECRET + ':' + (request.headers.get('CF-Connecting-IP') || 'local')), limit: 60, window: 900_000 });
     const rpID = url.hostname;
@@ -113,8 +123,8 @@ async function api(request: Request, env: Env): Promise<Response> {
       if (cookies(request)[cookieName]) assert(old, 'Session expired. Sign in again before adding a passkey.', 401);
       if (input.attachTo) assert(old, 'Session expired. Sign in again before adding a passkey.', 401);
       if (old) { const me = await user(env, old.uid, '/me'); assert(me.version === old.version && (!input.attachTo || me.user.id === input.attachTo), 'Session expired. Sign in again before adding a passkey.', 401); uid = old.uid; credentials = (await user(env, uid, '/credentials')).credentials; }
-      const options = await generateRegistrationOptions({ rpName: 'By Heart', rpID, userName: uid, userDisplayName: name || 'Friend', userID: new Uint8Array(encoder.encode(uid)), attestationType: 'none', authenticatorSelection: { residentKey: 'required', userVerification: 'required' }, excludeCredentials: credentials.map(c => ({ id: c.id, transports: c.transports })) });
-      const id = random(); await registry(env, '/challenge/set', { id, value: { challenge: options.challenge, kind: 'register', uid, name, ...(old ? { sessionVersion: old.version } : {}) } }); return json(options, 200, { 'Set-Cookie': cookie('bh_flow', id, 300, origin) });
+      const options = await generateRegistrationOptions({ rpName: 'Incord', rpID, userName: uid, userDisplayName: name || 'Friend', userID: new Uint8Array(encoder.encode(uid)), attestationType: 'none', authenticatorSelection: { residentKey: 'required', userVerification: 'required' }, excludeCredentials: credentials.map(c => ({ id: c.id, transports: c.transports })) });
+      const id = random(); await registry(env, '/challenge/set', { id, value: { challenge: options.challenge, kind: 'register', uid, name, rpID, ...(old ? { sessionVersion: old.version } : {}) } }); return json(options, 200, { 'Set-Cookie': cookie('bh_flow', id, 300, origin) });
     }
     if (path === '/api/auth/register/verify' && request.method === 'POST') {
       const input = await body(request), flow = await authChallenge(env, request, 'register');
@@ -123,20 +133,20 @@ async function api(request: Request, env: Env): Promise<Response> {
       let verification; try { verification = await verifyRegistrationResponse({ response, expectedChallenge: flow.challenge, expectedOrigin: origin, expectedRPID: rpID, requireUserVerification: true }); } catch { throw new ApiError(400, 'Passkey verification failed'); }
       assert(verification.verified && verification.registrationInfo, 'Passkey verification failed'); const credential = verification.registrationInfo.credential;
       await registry(env, '/credential/set', { id: credential.id, uid: flow.uid });
-      await user(env, flow.uid!, '/credential/add', { name: flow.name, credential: { ...credential, publicKey: b64(credential.publicKey) } });
+      await user(env, flow.uid!, '/credential/add', { name: flow.name, credential: { ...credential, rpID, publicKey: b64(credential.publicKey) } });
       const code = await recoveryCode(env, flow.uid!); return issue(env, flow.uid!, origin, { recoveryCode: code });
     }
     if (path === '/api/auth/login/options' && request.method === 'POST') {
-      await body(request); const options = await generateAuthenticationOptions({ rpID, userVerification: 'required' }); const id = random();
-      await registry(env, '/challenge/set', { id, value: { challenge: options.challenge, kind: 'login' } }); return json(options, 200, { 'Set-Cookie': cookie('bh_flow', id, 300, origin) });
+      const input = await body(request); const authenticationRPID = input.legacy === true && url.hostname === 'incord.jesklabs.com' ? 'byheart.jesklabs.com' : rpID; const options = await generateAuthenticationOptions({ rpID: authenticationRPID, userVerification: 'required' }); const id = random();
+      await registry(env, '/challenge/set', { id, value: { challenge: options.challenge, kind: 'login', rpID: authenticationRPID } }); return json(options, 200, { 'Set-Cookie': cookie('bh_flow', id, 300, origin) });
     }
     if (path === '/api/auth/login/verify' && request.method === 'POST') {
       const input = await body(request), flow = await authChallenge(env, request, 'login'), response = (input.response || input) as unknown as AuthenticationResponseJSON;
       assert(typeof response.id === 'string'); const found = await registry(env, '/credential/get', { id: response.id }); assert(found.uid, "That passkey's account was deleted. Create an account to start again.", 401);
       const stored = await user(env, found.uid, '/credential/get', { id: response.id }); assert(stored.credential, "That passkey's account was deleted. Create an account to start again.", 401);
       const credential = { ...stored.credential, publicKey: unb64(stored.credential.publicKey) } as WebAuthnCredential;
-      let verification; try { verification = await verifyAuthenticationResponse({ response, expectedChallenge: flow.challenge, expectedOrigin: origin, expectedRPID: rpID, credential, requireUserVerification: true }); } catch { throw new ApiError(401, 'Passkey verification failed'); }
-      assert(verification.verified, 'Passkey verification failed', 401); await user(env, found.uid, '/credential/counter', { id: response.id, counter: verification.authenticationInfo.newCounter }); return issue(env, found.uid, origin);
+      let verification; try { verification = await verifyAuthenticationResponse({ response, expectedChallenge: flow.challenge, expectedOrigin: origin, expectedRPID: flow.rpID || rpID, credential, requireUserVerification: true }); } catch { throw new ApiError(401, 'Passkey verification failed'); }
+      assert(verification.verified, 'Passkey verification failed', 401); await user(env, found.uid, '/credential/counter', { id: response.id, counter: verification.authenticationInfo.newCounter }); return issue(env, found.uid, origin, { legacyPasskey: flow.rpID === 'byheart.jesklabs.com' });
     }
     if (path === '/api/auth/recover' && request.method === 'POST') {
       const { code } = await body(request); assert(typeof code === 'string' && code.length <= 200); const result = await registry(env, '/recovery/take', { hash: await digest(code.trim()) }); assert(result.uid, 'Invalid or already used recovery code', 401);
@@ -167,17 +177,20 @@ async function api(request: Request, env: Env): Promise<Response> {
   const uid = session.uid;
   if (path === '/api/me' && request.method === 'GET') { const me = await user(env, uid, '/me', { takeRecovery: true }); return json({ user: me.user, ...(me.needsRecovery ? { recoveryCode: await recoveryCode(env, uid) } : {}) }); }
   if (path === '/api/sync' && request.method === 'POST') { const input = await body(request); const result = await user(env, uid, '/sync', input); await registry(env, '/schedule/set', { uid }); return json(result); }
-  if (path === '/api/export' && request.method === 'GET') return json(await user(env, uid, '/export'), 200, { 'Content-Disposition': 'attachment; filename="by-heart-export.json"' });
+  if (path === '/api/export' && request.method === 'GET') return json(await user(env, uid, '/export'), 200, { 'Content-Disposition': 'attachment; filename="incord.json"' });
   if (path === '/api/account' && request.method === 'DELETE') { await user(env, uid, '/delete'); await registry(env, '/delete', { uid }); return json({ ok: true }, 200, { 'Set-Cookie': cookie(cookieName, '', 0, origin) }); }
-  if (path === '/api/push/subscribe' && request.method === 'POST') { const input = await body(request); assert(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY, 'Push is not configured', 503); const result = await user(env, uid, '/push/subscribe', input); await registry(env, '/schedule/set', { uid }); return json(result); }
+  if (path === '/api/push/subscribe' && request.method === 'POST') { const input = await body(request); assert(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY, 'Push is not configured', 503); const result = await user(env, uid, '/push/subscribe', { ...input, origin }); await registry(env, '/schedule/set', { uid }); return json(result); }
   if (path === '/api/push/status' && request.method === 'GET') {
     const endpointHash = url.searchParams.get('endpointHash');
     assert(endpointHash === null || /^[a-f0-9]{64}$/.test(endpointHash), 'Invalid endpoint hash');
-    return json(await user(env, uid, '/push/status', { endpointHash }));
+    return json(await user(env, uid, '/push/status', { endpointHash, origin }));
   }
   if (path === '/api/push/test' && request.method === 'POST') { await registry(env, '/limit', { key: 'push:' + uid, limit: 3, window: 60_000 }); return json(await user(env, uid, '/push/test')); }
   throw new ApiError(404, 'Route not found');
 }
+const legacyServiceWorker = `self.addEventListener('install',()=>self.skipWaiting());
+self.addEventListener('activate',event=>event.waitUntil((async()=>{await self.registration.unregister();for(const client of await self.clients.matchAll({type:'window',includeUncontrolled:true})){const url=new URL(client.url);url.hostname='incord.jesklabs.com';await client.navigate(url.href)}})()));
+self.addEventListener('fetch',event=>{const url=new URL(event.request.url);if(event.request.mode==='navigate'){url.hostname='incord.jesklabs.com';event.respondWith(Response.redirect(url.href,301))}});`;
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const requestId = request.headers.get('cf-ray')?.replace(/[^a-zA-Z0-9-]/g, '').slice(0, 100) || crypto.randomUUID();
@@ -193,7 +206,15 @@ export default {
       const result = secure(response); result.headers.set('X-Request-ID', requestId); return result;
     };
     try {
-      const path = new URL(request.url).pathname;
+      const url = new URL(request.url), path = url.pathname;
+      if (url.hostname === 'byheart.jesklabs.com') {
+        if (path === '/.well-known/webauthn') return finish(json({ origins: ['https://incord.jesklabs.com'] }));
+        if (path === '/sw.js') return finish(new Response(legacyServiceWorker, { headers: { 'Content-Type': 'application/javascript', 'Cache-Control': 'no-store', 'Service-Worker-Allowed': '/' } }));
+        if (path.startsWith('/api/')) return finish(json({ error: 'Incord has moved. Update this app at https://incord.jesklabs.com.' }, 410));
+        url.hostname = 'incord.jesklabs.com'; return finish(Response.redirect(url.href, 301));
+      }
+      const statsResponse = await handleStatsRequest(request, env);
+      if (statsResponse) return await finish(statsResponse);
       if (path.startsWith('/api/')) return await finish(await api(request, env));
       let response = await env.ASSETS.fetch(request);
       // Static misses stay 404; only extensionless HTML app routes get the shell.
@@ -298,20 +319,23 @@ export class UserDO {
       return json({ ok: true });
     }
     assert(this.get('profile'), 'Account not found', 401);
-    if (path === '/me') { const needsRecovery = data.takeRecovery ? this.get('pendingRecovery') : null; if (needsRecovery) this.sql.exec('DELETE FROM meta WHERE key=?', 'pendingRecovery'); const profile = this.get('profile'); return json({ user: { ...profile, displayName: this.settings().displayName === undefined ? profile.displayName : (this.settings().displayName || 'Friend'), settings: this.settings(), hasPasskey: this.rows('SELECT COUNT(*) AS n FROM credentials')[0].n as number > 0 }, version: this.get('version'), ...(needsRecovery ? { needsRecovery: true } : {}) }); }
+    if (path === '/me') { const needsRecovery = data.takeRecovery ? this.get('pendingRecovery') : null; if (needsRecovery) this.sql.exec('DELETE FROM meta WHERE key=?', 'pendingRecovery'); const profile = this.get('profile'); return json({ user: { ...profile, displayName: this.settings().displayName === undefined ? profile.displayName : (this.settings().displayName || 'Friend'), settings: this.settings(), hasPasskey: this.rows('SELECT COUNT(*) AS n FROM credentials')[0].n as number > 0, hasIncordPasskey: this.list('credentials').some(c => c.rpID === 'incord.jesklabs.com') }, version: this.get('version'), ...(needsRecovery ? { needsRecovery: true } : {}) }); }
     if (path === '/revoke') { this.set('version', this.get('version') + 1); return json({ ok: true }); }
     if (path === '/recovery/pending') { this.set('pendingRecovery', !!data.needed); return json({ ok: true }); }
     if (path === '/credentials') return json({ credentials: this.list('credentials') });
     if (path === '/credential/get') return json({ credential: this.list('credentials').find(c => c.id === data.id) || null });
     if (path === '/credential/counter') { const credential = this.list('credentials').find(c => c.id === data.id); assert(credential, 'Unknown credential'); credential.counter = Math.max(credential.counter, data.counter); this.sql.exec('UPDATE credentials SET value=? WHERE id=?', JSON.stringify(credential), data.id); return json({ ok: true }); }
     if (path === '/sync') {
-      const items = data.items || [], events = data.events || []; assert(Array.isArray(items) && items.length <= 1000 && Array.isArray(events) && events.length <= 2000, 'Sync batch too large');
+      const incomingItems = data.items || [], events = data.events || []; assert(Array.isArray(incomingItems), 'Invalid items'); const items = incomingItems.map((item: any) => item && typeof item.id === 'string' ? stripEsvText(item) : item); assert(Array.isArray(items) && items.length <= 1000 && Array.isArray(events) && events.length <= 2000, 'Sync batch too large');
       for (const item of items) record(item);
       for (const event of events) { assert(event && typeof event.id === 'string' && event.id.length > 0 && event.id.length <= 160 && JSON.stringify(event).length <= 10_000, 'Invalid event'); assert(event.timestamp !== undefined || event.createdAt !== undefined || event.at !== undefined, 'Event needs timestamp, createdAt, or at'); timestamp(event.timestamp ?? event.createdAt ?? event.at); }
       const settings = data.settings ? settingsRecord(data.settings) : null;
       this.ctx.storage.transactionSync(() => {
         assert(Number(this.rows('SELECT COUNT(*) AS n FROM items')[0].n) + items.filter((i: SyncRecord) => !this.rows('SELECT id FROM items WHERE id=?', i.id).length).length <= 10_000, 'Account item limit reached');
         assert(Number(this.rows('SELECT COUNT(*) AS n FROM events')[0].n) + events.filter((e: ObjectData) => !this.rows('SELECT id FROM events WHERE id=?', String(e.id)).length).length <= 100_000, 'Account review log limit reached');
+        const prospective = new Map(this.list('items').map(item => [item.id, item]));
+        for (const item of items) { const old = prospective.get(item.id); if (!old || timestamp(item.updatedAt) > timestamp(old.updatedAt) || (timestamp(item.updatedAt) === timestamp(old.updatedAt) && JSON.stringify(item) > JSON.stringify(old))) prospective.set(item.id, item); }
+        try { assertEsvLimit([...prospective.values()]); } catch (error) { throw new ApiError(400, error instanceof Error ? error.message : 'ESV limit reached'); }
         for (const item of items as SyncRecord[]) {
           const serialized = JSON.stringify(item), updated = timestamp(item.updatedAt); const existing = this.rows('SELECT updated,value FROM items WHERE id=?', item.id)[0];
           // Equal-timestamp conflicts converge deterministically, independent of arrival order.
@@ -325,12 +349,14 @@ export class UserDO {
     if (path === '/export') return json({ format: 'by-heart', version: 1, exportedAt: new Date().toISOString(), user: { ...this.get('profile'), displayName: this.settings().displayName === undefined ? this.get('profile').displayName : (this.settings().displayName || 'Friend') }, items: this.list('items'), events: this.list('events'), settings: this.settings() });
     if (path === '/push/subscribe') {
       if (data.subscription === null || data.enabled === false) { if (data.endpoint) this.sql.exec('DELETE FROM subscriptions WHERE endpoint=?', data.endpoint); else this.sql.exec('DELETE FROM subscriptions'); return json({ ok: true }); }
-      const sub = (data.subscription || data) as PushSubscriptionData; validateSubscription(sub); assert(this.list('subscriptions').length < 5 || this.rows('SELECT endpoint FROM subscriptions WHERE endpoint=?', sub.endpoint).length, 'Device limit reached');
-      this.sql.exec('INSERT INTO subscriptions VALUES(?,?) ON CONFLICT(endpoint) DO UPDATE SET value=excluded.value', sub.endpoint, JSON.stringify(sub)); return json({ ok: true });
+      const sub = (data.subscription || data) as PushSubscriptionData; validateSubscription(sub); assert(this.list('subscriptions').filter(existing => data.origin !== 'https://incord.jesklabs.com' || (existing.origin && existing.origin !== 'https://byheart.jesklabs.com')).length < 5 || this.rows('SELECT endpoint FROM subscriptions WHERE endpoint=?', sub.endpoint).length, 'Device limit reached');
+      // Keep legacy subscriptions until their replacement has been accepted.
+      this.sql.exec('INSERT INTO subscriptions VALUES(?,?) ON CONFLICT(endpoint) DO UPDATE SET value=excluded.value', sub.endpoint, JSON.stringify({ ...sub, origin: data.origin }));
+      if (data.origin === 'https://incord.jesklabs.com') for (const old of this.list('subscriptions')) if (!old.origin || old.origin === 'https://byheart.jesklabs.com') this.sql.exec('DELETE FROM subscriptions WHERE endpoint=?', old.endpoint); return json({ ok: true });
     }
     if (path === '/push/status') {
       const endpointHashes = await Promise.all(this.list('subscriptions').map(sub => endpointHash(sub.endpoint)));
-      return json({ subscribed: !!data.endpointHash && endpointHashes.includes(data.endpointHash), endpointHashes, results: this.get('pushResults') || [] });
+      return json({ subscribed: !!data.endpointHash && endpointHashes.includes(data.endpointHash), endpointHashes, oldOriginOnly: this.list('subscriptions').length > 0 && this.list('subscriptions').every(sub => !sub.origin || sub.origin === 'https://byheart.jesklabs.com'), results: this.get('pushResults') || [] });
     }
     if (path === '/push/test') return json(await this.sendPush(true));
     if (path === '/push/remind') return json(await this.sendPush(false));
@@ -354,7 +380,7 @@ export class UserDO {
       const started = Date.now(), host = new URL(sub.endpoint).hostname;
       let status = 0, reason = '';
       try {
-        const response = await sendWebPush(sub, { title: 'By Heart', body: test ? 'Test notification. Reminders are working.' : `You have ${dueCount} ${dueCount === 1 ? 'item' : 'items'} to practice today.`, url: '/', tag: test ? 'by-heart-test' : 'by-heart-daily', renotify: test }, this.env);
+        const response = await sendWebPush(sub, { title: 'Incord', body: test ? 'Test notification. Reminders are working.' : `You have ${dueCount} ${dueCount === 1 ? 'item' : 'items'} to practice today.`, url: '/', tag: test ? 'by-heart-test' : 'by-heart-daily', renotify: test }, this.env);
         status = response.status;
         reason = await pushReason(response, sub, this.env);
         if (response.ok) sent++; else failed++;

@@ -13,5 +13,5 @@ export async function pushHealth(signedIn:boolean):Promise<{state:DevicePush,res
  let server=await api('/push/status'+(hash?'?endpointHash='+hash:''));
  // Reconcile rotated subscriptions and SW upgrades with the current account.
  if(subscription&&permission==='granted'&&!server.subscribed){await api('/push/subscribe',{subscription:subscription.toJSON()});server=await api('/push/status?endpointHash='+hash)}
- return {state:permission==='denied'?'denied':permission==='granted'?(subscription&&server.subscribed?'on':'missing'):'off',results:server.results||[]};
+ return {state:permission==='denied'?'denied':permission==='granted'?(subscription&&server.subscribed?'on':'missing'):server.oldOriginOnly?'missing':'off',results:server.results||[]};
 }

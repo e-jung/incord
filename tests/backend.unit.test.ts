@@ -214,3 +214,35 @@ describe('FIX6 private first-party error logging', () => {
     expect(response.status).toBe(502); expect(JSON.parse(log.mock.calls[0][0])).toMatchObject({ evt: 'server_error', status: 502, requestId: expect.any(String) });
   });
 });
+
+describe('Incord push origin migration', () => {
+ it('retains old subscriptions until a new-origin replacement is registered',async()=>{
+  const {invoke,subscription}=await pushFixture();
+  await invoke('/push/subscribe',{subscription,origin:'https://byheart.jesklabs.com'});
+  expect(await invoke('/push/status')).toMatchObject({oldOriginOnly:true,endpointHashes:expect.any(Array)});
+  const replacement={...subscription,endpoint:'https://web.push.apple.com/device/new-incord-endpoint'};
+  await invoke('/push/subscribe',{subscription:replacement,origin:'https://incord.jesklabs.com'});
+  expect(await invoke('/push/status',{endpointHash:await endpointHash(replacement.endpoint)})).toMatchObject({subscribed:true,oldOriginOnly:false,endpointHashes:[await endpointHash(replacement.endpoint)]});
+ });
+});
+
+describe('Incord ESV server boundaries',()=>{
+ it('strips device-only quotations before storage and export, and enforces the shared account cap',async()=>{
+  const {invoke}=await pushFixture();
+  const item={id:'esv-gen-1-1',translation:'ESV',reference:'Genesis 1:1',text:'publisher-private-text',esvVerseKeys:['gen-1-1'],updatedAt:Date.now()};
+  expect((await invoke('/sync',{items:[item]})).items[0].text).toBe('');
+  expect(JSON.stringify(await invoke('/export'))).not.toContain('publisher-private-text');
+  const many=Array.from({length:500},(_,i)=>`psa-${Math.floor(i/100)+1}-${i%100+1}`);
+  expect(await invoke('/sync',{items:[{...item,id:'esv-extra',esvVerseKeys:many}]})).toMatchObject({error:expect.stringContaining('500')});
+  expect((await invoke('/export')).items).toHaveLength(1);
+ });
+ it('limits anonymous ESV requests to 30 per IP/hour without persisting text',async()=>{
+  const {env}=await pushFixture();env.ESV_API_KEY='unit-api-key';
+  vi.stubGlobal('fetch',vi.fn(async()=>Response.json({passages:['  Exact publisher text.\n']})));
+  for(let n=0;n<30;n++) {
+   const response=await worker.fetch(new Request('https://app.test/api/esv?q=John%203:16'),env);
+   expect(response.status).toBe(200);expect(await response.text()).toBe('  Exact publisher text.\n');expect(response.headers.get('Cache-Control')).toContain('no-store');
+  }
+  expect((await worker.fetch(new Request('https://app.test/api/esv?q=John%203:16'),env)).status).toBe(429);
+ });
+});
