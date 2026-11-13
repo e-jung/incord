@@ -49,7 +49,11 @@ async function typePassage(page: Page, options: { wrong?: boolean; onscreen?: bo
     const initial = word.replace(/^[^\p{L}\p{N}]+/u, '').slice(0, 1).toLowerCase();
     const key = options.wrong ? (initial === 'z' ? 'x' : 'z') : initial;
     if (options.peek) await page.getByRole('button', { name: 'Peek', exact: true }).click();
-    else if (options.onscreen) await page.getByRole('button', { name: key.toUpperCase(), exact: true }).click();
+    else if (options.onscreen) {
+      const toggle=page.getByRole('button',{name:/^[0-9]$/.test(key)?'Show numbers':'Show letters',exact:true});
+      if(await toggle.count())await toggle.click();
+      await page.getByRole('button', { name: key.toUpperCase(), exact: true }).click();
+    }
     else await page.keyboard.press(key);
   }
   await expect(page.getByRole('dialog')).toBeVisible();
