@@ -6,7 +6,7 @@ export type ReviewEvent={id:string,itemId:string,at:string,slips:number,hidden:n
 export type LocalState={items:Item[],events:ReviewEvent[],settings:Settings,queue:string[],account?:Account|null};
 export type Account={id:string,displayName?:string,[key:string]:unknown};
 export const today=()=>new Date().toLocaleDateString('en-CA');
-export const defaults:Settings={name:'',theme:'system',goal:4,reminderTime:'19:00',timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone,pushEnabled:false,days:[],lastActive:'',updatedAt:0};
+export const defaults:Settings={name:'',theme:'system',goal:4,newPerDay:3,reminderTime:'19:00',timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone,pushEnabled:false,days:[],lastActive:'',updatedAt:0};
 let db:IDBDatabase;
 let settingsSnapshot:Settings|undefined;
 export async function openStore():Promise<LocalState>{

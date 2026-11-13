@@ -20,6 +20,15 @@ export function collectionColor(item: SourceItem): string {
 }
 
 export const copy = {
+ contentType:'Content type', preferences:'Preferences', dataLabel:'Data', galleryVerseCount:'10 verses', galleryStep:'Step 2',
+ learningStep:(step:number)=>`Learning · step ${step}`,
+ reviewDate:(date:string)=>'Review '+new Date(date).toLocaleDateString(undefined,{month:'short',day:'numeric'}),
+ lordsDay:(day:number)=>`Lord's Day ${day}`,
+ questionPrefix:(n:number)=>`Q${n} · `,
+ addQuestion:(n:number)=>`Add Q${n}`,
+ weekOption:(n:number)=>`${plural(n,'day')} a week`,
+
+ mergeHistoryDetail:"This includes saved practice history and removed items.",
   passkeyCanceled:"Passkey request canceled. Try again when you’re ready.",
   myVerses: "My verses",
   myTexts: "My texts",
@@ -67,7 +76,7 @@ export const copy = {
   stepPassedTitle:(step:number)=>`Step ${step} passed`,
   backOn:(day:string)=>`Back ${day}`,
   memoryResult:(hidden:number,slips:number)=>`${hidden-slips} of ${hidden} from memory · ${plural(slips,'slip')}`,
-  mergeTitle:(count:number)=>`Add the ${plural(count,'item')} on this device to your account?`,
+  mergeTitle:(count:number)=>count?`Add the ${plural(count,'item')} on this device to your account?`:'Add the practice history on this device to your account?',
   batchTitle:(count:number)=>`Add ${plural(count,'item')}?`,
   removeDetail:(title:string)=>`${title} and its progress will be removed from your library.`,
   welcomeCount:(count:number)=>`${plural(count,'learned item')} to check today.`,

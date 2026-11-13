@@ -312,3 +312,28 @@ test('P2-14/15 tab and detail history restores screens, closes sheets and protec
  await expect(page.getByRole('heading',{name:'Today',exact:true})).toBeVisible();
  expect(page.url()).not.toBe('about:blank');
 });
+
+for(const removed of [false,true])test(`P1-19 startup identity acquisition requires consent for ${removed?'removed-item history':'local items'}`,async({page})=>{
+ await own(page,'Unclaimed private text');
+ if(removed)await page.evaluate(async()=>{const db=await new Promise<IDBDatabase>(resolve=>{const r=indexedDB.open('byheart',1);r.onsuccess=()=>resolve(r.result)});const state:any=await new Promise(resolve=>{const r=db.transaction('state').objectStore('state').get('current');r.onsuccess=()=>resolve(r.result)});state.items[0].deleted=true;await new Promise<void>(resolve=>{const tx=db.transaction('state','readwrite');tx.objectStore('state').put(state,'current');tx.oncomplete=()=>resolve()});db.close()});
+ let uploads:any[]=[];
+ await page.route('**/api/me',route=>route.fulfill({json:{user:{id:'oauth-test-user',displayName:'Friend'}}}));
+ await page.route('**/api/sync',async route=>{uploads.push(route.request().postDataJSON());await route.fulfill({json:{items:[],events:[]}})});
+ await page.reload();
+ const merge=page.getByRole('dialog').filter({hasText:/on this device to your account/});
+ await expect(merge).toBeVisible();
+ expect(uploads).toHaveLength(0);
+ await merge.getByRole('button',{name:'Add',exact:true}).click();
+ await expect.poll(()=>uploads.length).toBeGreaterThan(0);
+ expect(JSON.stringify(uploads)).toContain('Unclaimed private text');
+});
+
+test('P2-15 button-dismissed preview consumes its history entry',async({page})=>{
+ await tab(page,'Library');
+ await page.locator('.covers button').filter({has:page.locator('b',{hasText:'Psalm 23'})}).click();
+ await expect(page.getByRole('dialog',{name:'Psalm 23',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Close dialog',exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>!!history.state?.sheet)).toBe(false);
+ await page.goBack();
+ await expect(page.getByRole('heading',{name:'Today',exact:true})).toBeVisible();
+});

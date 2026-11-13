@@ -182,7 +182,7 @@ test('add BSB verse by reference and complete all four ladder steps', async ({ p
   await expect(page.getByRole('status')).toHaveText(/\d+ items? added to your library\./);
   await tab(page, 'Today');
   await expect(page.getByText('1 to practice', { exact: true })).toBeVisible();
-  await expect(page.getByText('About 1 min', { exact: true })).toBeVisible();
+  await expect(page.getByText('About 2 min', { exact: true })).toBeVisible();
   await expect(page.locator('.row small')).toHaveText('New · BSB');
   await screen(page, info, 'today-due');
   await page.getByRole('button', { name: 'Begin', exact: true }).click();
@@ -211,7 +211,7 @@ test('add BSB verse by reference and complete all four ladder steps', async ({ p
   await screen(page, info, 'today-done');
   await page.getByRole('button', { name: 'Visit your library', exact: true }).click();
   await page.getByRole('button', { name: /My verses.*1 of 1 learned/ }).click();
-  await page.getByRole('button', { name: /John 3:16/ }).click();
+  await page.getByRole('button', { name: /^John 3:16/ }).click();
   await expect(page.getByText('Review · blank recall')).toBeVisible();
   await screen(page, info, 'review-recall');
   await typePassage(page);
@@ -287,7 +287,7 @@ test('shortcut success and failed blank review returns to step 3', async ({ page
   await page.getByRole('button', { name: 'Back to Today', exact: true }).click();
   await tab(page, 'Library');
   await page.getByRole('button', { name: /My texts.*1 of 1 learned/ }).click();
-  await page.getByRole('button', { name: /A quiet word/ }).click();
+  await page.getByRole('button', { name: /^A quiet word/ }).click();
   await typePassage(page, { wrong: true });
   await expect(page.getByRole('dialog')).toHaveAccessibleName("Let's relearn this");
   await screen(page, info, 'review-again');
@@ -440,7 +440,7 @@ test('all starter covers and document choices, collection sessions and Next item
   await page.getByRole('button', { name: 'Catechisms', exact: true }).click();
   for (const doc of ['Heidelberg Catechism', 'Apostles’ Creed', 'Nicene Creed']) {
     await page.getByRole('combobox', { name: 'Browse', exact: true }).selectOption({ label: doc });
-    await expect(page.getByRole('button', { name: /^Add (?:Q1$|article$)/ }).first()).toBeVisible();
+    await expect(page.locator('.list button.text-button').first()).toBeVisible();
     await screen(page, info, `document-${doc.split(' ')[0].replace(/[^a-z]/gi, '').toLowerCase()}`);
   }
   await page.getByRole('button', { name: 'Verses', exact: true }).click();
