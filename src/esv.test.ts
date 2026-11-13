@@ -1,6 +1,6 @@
 import {afterEach,describe,expect,it,vi} from 'vitest';
 import {lookupReference,fetchEsvText,esvAttribution} from './content';
-import {addItems,mergeItems,api,ensureItemText,syncPayload,type Item} from './store';
+import {addItems,mergeItems,api,ensureItemText,syncPayload,persist,emptyState,type Item} from './store';
 import {assertEsvLimit,esvReferenceKeys,stripEsvText,ESV_OFFLINE_MESSAGE} from '../shared/esv';
 const exact='  “For God so loved the world…”\n\n';
 const esv=(reference='John 3:16',id='esv-jhn-3-16'):Item=>({id,title:reference,reference,translation:'ESV',esvVerseKeys:esvReferenceKeys(reference),text:exact,collection:'bible',step:1,learned:false,due:'now',updatedAt:1});
@@ -38,6 +38,7 @@ describe('ESV device-only content',()=>{
 describe('ESV verse cap',()=>{
  const fiveHundred=()=>{const list:Item[]=[];let count=0;for(let n=1;count<500;n++){const full=esvReferenceKeys(`Psalm ${n}`);const take=Math.min(full.length,500-count);list.push(esv(`Psalm ${n}:1-${take}`,`esv-psa-${n}`));count+=take}expect(count).toBe(500);return list};
  it('permits exactly 500 verses and rejects the 501st atomically',()=>{const full=addItems([],fiveHundred());expect(full.length).toBeGreaterThan(1);expect(()=>addItems(full,[esv('John 3:16')])).toThrow('500 ESV verses');expect(full.length).toBeGreaterThan(1);expect(full.every(i=>i.text===exact)).toBe(true)});
+ it('rejects over-cap persistence including undo/import bypasses before touching IndexedDB',async()=>{const state=emptyState();state.items=[...fiveHundred(),esv()];await expect(persist(state)).rejects.toThrow('500 ESV verses')});
  it('counts overlapping passages once and excludes tombstones/non-ESV',()=>{const full=fiveHundred();expect(()=>assertEsvLimit([...full,esv('Psalm 1:1'),{...esv(),deleted:true},{...esv(),id:'kjv-jhn-3-16',translation:'KJV'}])).not.toThrow()});
  it('rejects missing, forged, excessive, and mismatched verse metadata',()=>{for(const esvVerseKeys of [undefined,[],['made-up'],['jhn-3-17'],Array(501).fill('jhn-3-16')])expect(()=>assertEsvLimit([{...esv(),esvVerseKeys}])).toThrow()});
  it('honors the publisher half-book cache limit in addition to the 500-verse cap',()=>{expect(()=>assertEsvLimit([esv('Jude 1:1-12')])).not.toThrow();expect(()=>assertEsvLimit([esv('Jude 1:1-13')])).toThrow('half of any Bible book')});
