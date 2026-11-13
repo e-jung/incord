@@ -55,6 +55,8 @@ async function device(label) {
     ...(target.hostname==='localhost'?{extraHTTPHeaders:{'CF-Connecting-IP':'smoke-'+crypto.randomUUID()}}:{}),
   });
   contexts.push(context); // Retain immediately so finally can clean up partial flows.
+  // Opt smoke browsers out of anonymous usage counts so test runs never pollute /stats.
+  await context.addInitScript(() => { try { Object.defineProperty(Navigator.prototype, 'globalPrivacyControl', { get: () => true, configurable: true }); } catch {} });
   context.setDefaultTimeout(15_000);
   context.setDefaultNavigationTimeout(30_000);
   await context.exposeBinding('__smokeCspViolation', (_source, value) => {
