@@ -39,7 +39,7 @@ test.describe('Worker API (real local SQLite DOs and virtual WebAuthn)', () => {
   test('origin protection, anonymous access and config', async ({ page, request }) => {
     await page.goto(base);
     expect((await api(page, '/config')).data).toMatchObject({ passkeys: true });
-    expect((await api(page, '/me')).status).toBe(401);
+    expect((await api(page, '/me')).data.user).toBeNull();
     const bad = await request.post(base + '/api/auth/login/options', { data: {}, headers: { Origin: 'https://other.invalid' } });
     expect(bad.status()).toBe(403);
     const missing = await request.post(base + '/api/auth/login/options', { data: {} }); expect(missing.status()).toBe(403);
@@ -55,19 +55,29 @@ test.describe('Worker API (real local SQLite DOs and virtual WebAuthn)', () => {
     const event = { id: 'review-1', itemId: item.id, at: new Date(now).toISOString(), grade: 'Good' };
     const sync = await api(page, '/sync', { items: [item], events: [event], settings: { name: 'Kind friend', theme: 'dark', goal: 4, timeZone: 'America/Los_Angeles', pushEnabled: true, reminderTime: '19:00', updatedAt: now } });
     expect(sync.status).toBe(200); expect(sync.data.items).toEqual([item]); expect(sync.data.events).toEqual([event]); expect(sync.data.settings.timezone).toBe('America/Los_Angeles');
+    expect((await api(page, '/me')).data.user.displayName).toBe('Kind friend');
+    expect((await api(page, '/export')).data.user.displayName).toBe('Kind friend');
+    expect((await api(page, '/sync', {settings:{timeZone:'Mars/Phobos',updatedAt:now}})).status).toBe(400);
+    const fieldA=await api(page, '/sync',{settings:{name:'Grace',theme:'light',updatedAt:now+20,fieldUpdatedAt:{name:now+20,theme:now}}}); expect(fieldA.status).toBe(200);
+    const fieldB=await api(page, '/sync',{settings:{name:'Kind friend',theme:'dark',updatedAt:now+30,fieldUpdatedAt:{name:now,theme:now+30}}}); expect(fieldB.data.settings).toMatchObject({name:'Grace',displayName:'Grace',theme:'dark'});
+    expect((await api(page, '/export')).data.user.displayName).toBe('Grace');
     const repeated = await api(page, '/sync', { items: [{ ...item, title: 'Older edit', updatedAt: now - 100 }], events: [event] });
     expect(repeated.data.items[0].title).toBe(item.title); expect(repeated.data.events).toHaveLength(1);
     const tombstone = await api(page, '/sync', { items: [{ ...item, deleted: true, updatedAt: now + 10 }], events: [] }); expect(tombstone.data.items[0].deleted).toBe(true);
     const invalid = await api(page, '/sync', { items: [{ ...item, updatedAt: now + 86400000 }] }); expect(invalid.status).toBe(400);
     const exported = await api(page, '/export'); expect(exported.data.format).toBe('by-heart'); expect(exported.data.events).toHaveLength(1); expect(JSON.stringify(exported.data)).not.toContain('publicKey');
     const signedCookie = (await page.context().cookies()).find(c => c.name === 'bh_session')!; expect(signedCookie.httpOnly).toBe(true);
-    await api(page, '/auth/logout', {}); expect((await api(page, '/me')).status).toBe(401);
+    await api(page, '/auth/logout', {}); expect((await api(page, '/me')).data.user).toBeNull();
     await passkey(page, 'login');
+    const activeCookie = (await page.context().cookies()).find(c => c.name === 'bh_session')!;
     const recovered = await api(page, '/auth/recover', { code: registration.recoveryCode }); expect(recovered.status).toBe(200); expect(recovered.data.recoveryCode).not.toBe(registration.recoveryCode);
     expect((await api(page, '/auth/recover', { code: registration.recoveryCode })).status).toBe(401);
-    const oldContext = await page.context().browser()!.newContext(); await oldContext.addCookies([signedCookie]); const oldPage = await oldContext.newPage(); await oldPage.goto(base); expect((await api(oldPage, '/me')).status).toBe(401); await oldContext.close();
+    const oldContext = await page.context().browser()!.newContext(); await oldContext.addCookies([activeCookie]); const oldPage = await oldContext.newPage(); await oldPage.goto(base); expect((await api(oldPage, '/me')).data.user.displayName).toBe('Grace');
+    expect((await api(page, '/auth/logout-everywhere', {})).status).toBe(200);
+    expect((await api(oldPage, '/me')).data.user).toBeNull(); await oldContext.close();
+    await passkey(page, 'login');
     expect((await api(page, '/account', undefined, 'DELETE')).status).toBe(200);
-    expect((await api(page, '/me')).status).toBe(401);
+    expect((await api(page, '/me')).data.user).toBeNull();
     expect((await api(page, '/auth/recover', { code: recovered.data.recoveryCode })).status).toBe(401);
   });
 
@@ -75,7 +85,7 @@ test.describe('Worker API (real local SQLite DOs and virtual WebAuthn)', () => {
     await page.goto(base); await authenticator(page); await passkey(page, 'register');
     await api(page, '/auth/logout', {});
     const options = await api(page, '/auth/login/options', {}); expect(options.status).toBe(200);
-    const bad = await api(page, '/auth/login/verify', { response: { id: 'nonexistent' } }); expect(bad.status).toBe(401);
+    const bad = await api(page, '/auth/login/verify', { response: { id: 'nonexistent' } }); expect(bad.status).toBe(401); expect(bad.data.error).toContain("passkey's account was deleted");
     const replay = await api(page, '/auth/login/verify', { response: { id: 'nonexistent' } }); expect(replay.status).toBe(400);
   });
 });

@@ -89,16 +89,17 @@ async function api(request: Request, env: Env): Promise<Response> {
     }
     if (path === '/api/auth/login/verify' && request.method === 'POST') {
       const input = await body(request), flow = await authChallenge(env, request, 'login'), response = (input.response || input) as unknown as AuthenticationResponseJSON;
-      assert(typeof response.id === 'string'); const found = await registry(env, '/credential/get', { id: response.id }); assert(found.uid, 'Unknown passkey', 401);
-      const stored = await user(env, found.uid, '/credential/get', { id: response.id }); assert(stored.credential, 'Unknown passkey', 401);
+      assert(typeof response.id === 'string'); const found = await registry(env, '/credential/get', { id: response.id }); assert(found.uid, "That passkey's account was deleted. Create an account to start again.", 401);
+      const stored = await user(env, found.uid, '/credential/get', { id: response.id }); assert(stored.credential, "That passkey's account was deleted. Create an account to start again.", 401);
       const credential = { ...stored.credential, publicKey: unb64(stored.credential.publicKey) } as WebAuthnCredential;
       let verification; try { verification = await verifyAuthenticationResponse({ response, expectedChallenge: flow.challenge, expectedOrigin: origin, expectedRPID: rpID, credential, requireUserVerification: true }); } catch { throw new ApiError(401, 'Passkey verification failed'); }
       assert(verification.verified, 'Passkey verification failed', 401); await user(env, found.uid, '/credential/counter', { id: response.id, counter: verification.authenticationInfo.newCounter }); return issue(env, found.uid, origin);
     }
     if (path === '/api/auth/recover' && request.method === 'POST') {
       const { code } = await body(request); assert(typeof code === 'string' && code.length <= 200); const result = await registry(env, '/recovery/take', { hash: await digest(code.trim()) }); assert(result.uid, 'Invalid or already used recovery code', 401);
-      await user(env, result.uid, '/revoke'); return issue(env, result.uid, origin, { recoveryCode: await recoveryCode(env, result.uid) });
+      return issue(env, result.uid, origin, { recoveryCode: await recoveryCode(env, result.uid) });
     }
+    if (path === '/api/auth/logout-everywhere' && request.method === 'POST') { const session = await signedIn(request, env); await user(env, session.uid, '/revoke'); return json({ ok: true }, 200, { 'Set-Cookie': cookie(cookieName, '', 0, origin) }); }
     if (path === '/api/auth/logout' && request.method === 'POST') return json({ ok: true }, 200, { 'Set-Cookie': cookie(cookieName, '', 0, origin) });
     if (path === '/api/auth/google' && request.method === 'GET') {
       assert(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET, 'Google sign-in is not enabled', 404); const state = random(), verifier = random(48);
@@ -118,7 +119,9 @@ async function api(request: Request, env: Env): Promise<Response> {
     }
     throw new ApiError(404, 'Route not found');
   }
-  const session = await signedIn(request, env), uid = session.uid;
+  let session: Session;
+  try { session = await signedIn(request, env); } catch (error) { if (path === '/api/me' && request.method === 'GET' && error instanceof ApiError && error.status === 401) return json({ user: null }); throw error; }
+  const uid = session.uid;
   if (path === '/api/me' && request.method === 'GET') { const me = await user(env, uid, '/me', { takeRecovery: true }); return json({ user: me.user, ...(me.needsRecovery ? { recoveryCode: await recoveryCode(env, uid) } : {}) }); }
   if (path === '/api/sync' && request.method === 'POST') { const input = await body(request); const result = await user(env, uid, '/sync', input); await registry(env, '/schedule/set', { uid }); return json(result); }
   if (path === '/api/export' && request.method === 'GET') return json(await user(env, uid, '/export'), 200, { 'Content-Disposition': 'attachment; filename="by-heart-export.json"' });
@@ -168,14 +171,19 @@ type SyncRecord = ObjectData & { id: string; updatedAt: number | string; deleted
 export function timestamp(value: unknown) { const n = typeof value === 'string' ? Date.parse(value) : value; assert(typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= Date.now() + 300_000, 'Invalid updatedAt'); return n; }
 function record(value: unknown): asserts value is SyncRecord { assert(value && typeof value === 'object' && !Array.isArray(value)); const r = value as ObjectData; assert(typeof r.id === 'string' && r.id.length > 0 && r.id.length <= 160, 'Invalid id'); assert(JSON.stringify(value).length <= 50_000, 'Item too large'); timestamp(r.updatedAt); }
 export function localDay(now: Date, timezone: string) { return new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now); }
-function settingsRecord(input: unknown): ObjectData { assert(input && typeof input === 'object' && !Array.isArray(input), 'Invalid settings'); const s = input as ObjectData; timestamp(s.updatedAt);
+const settingAliases:Record<string,string>={name:'displayName',theme:'appearance',goal:'weeklyGoal',timeZone:'timezone',pushEnabled:'remindersEnabled'};
+/** Per-field LWW; legacy records without field clocks use their record revision. */
+export function mergeServerSettings(old:any,incoming:any){const result={...old,fieldUpdatedAt:{...old.fieldUpdatedAt}};for(const key of Object.keys(old))if(key!=='updatedAt'&&key!=='fieldUpdatedAt'&&result.fieldUpdatedAt[key]===undefined)result.fieldUpdatedAt[key]=old.fieldUpdatedAt?0:old.updatedAt??0;for(const key of Object.keys(incoming)){if(key==='updatedAt'||key==='fieldUpdatedAt')continue;const before=old.fieldUpdatedAt?.[key]??(old.fieldUpdatedAt?0:old.updatedAt??0),after=incoming.fieldUpdatedAt?.[key]??(incoming.fieldUpdatedAt?0:incoming.updatedAt??0);if(after>before||(after===before&&JSON.stringify(incoming[key])>JSON.stringify(old[key]))){result[key]=incoming[key];result.fieldUpdatedAt[key]=after}}result.updatedAt=Math.max(old.updatedAt||0,incoming.updatedAt||0);return result}
+export function settingsRecord(input: unknown): ObjectData { assert(input && typeof input === 'object' && !Array.isArray(input), 'Invalid settings'); const s = { ...(input as ObjectData) }; timestamp(s.updatedAt);
   if (s.name !== undefined) s.displayName = s.name; if (s.theme !== undefined) s.appearance = s.theme; if (s.goal !== undefined) s.weeklyGoal = s.goal; if (s.timeZone !== undefined) s.timezone = s.timeZone; if (s.pushEnabled !== undefined) s.remindersEnabled = s.pushEnabled;
   if (s.remindersEnabled !== undefined) assert(typeof s.remindersEnabled === 'boolean', 'Invalid reminder setting');
-  if (s.displayName !== undefined) assert(typeof s.displayName === 'string' && s.displayName.length <= 80, 'Invalid display name');
+  if (s.displayName !== undefined) { assert(typeof s.displayName === 'string' && s.displayName.length <= 80, 'Invalid display name'); s.name = s.displayName = s.displayName.trim(); }
   if (s.weeklyGoal !== undefined) assert([3, 4, 5, 7].includes(Number(s.weeklyGoal)), 'Invalid weekly goal');
   if (s.appearance !== undefined) assert(['system', 'light', 'dark'].includes(String(s.appearance)), 'Invalid appearance');
   if (s.reminderTime !== undefined) assert(typeof s.reminderTime === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(s.reminderTime), 'Invalid reminder time');
-  if (s.timezone !== undefined) { try { new Intl.DateTimeFormat('en', { timeZone: String(s.timezone) }).format(); } catch { throw new ApiError(400, 'Invalid timezone'); } }
+  if (s.newPerDay !== undefined) assert([1,2,3,5].includes(Number(s.newPerDay)), 'Invalid daily limit');
+  if (s.timezone !== undefined) { assert(typeof s.timezone === 'string' && s.timezone.length > 0, 'Invalid timezone'); try { new Intl.DateTimeFormat('en', { timeZone: String(s.timezone) }).format(); } catch { throw new ApiError(400, 'Invalid timezone'); } }
+  if(s.fieldUpdatedAt !== undefined) { assert(s.fieldUpdatedAt && typeof s.fieldUpdatedAt === 'object' && !Array.isArray(s.fieldUpdatedAt), 'Invalid field timestamps'); for(const value of Object.values(s.fieldUpdatedAt)) timestamp(value); const times = {...s.fieldUpdatedAt as Record<string,unknown>}; for(const [from,to] of Object.entries(settingAliases)) if(times[from] !== undefined) times[to] = times[from]; s.fieldUpdatedAt = times; }
   assert(JSON.stringify(s).length < 10_000, 'Settings too large'); return s;
 }
 export class UserDO {
@@ -203,7 +211,7 @@ export class UserDO {
       return json({ ok: true });
     }
     assert(this.get('profile'), 'Account not found', 401);
-    if (path === '/me') { const needsRecovery = data.takeRecovery ? this.get('pendingRecovery') : null; if (needsRecovery) this.sql.exec('DELETE FROM meta WHERE key=?', 'pendingRecovery'); const profile = this.get('profile'); return json({ user: { ...profile, displayName: this.settings().displayName || profile.displayName, settings: this.settings(), hasPasskey: this.rows('SELECT COUNT(*) AS n FROM credentials')[0].n as number > 0 }, version: this.get('version'), ...(needsRecovery ? { needsRecovery: true } : {}) }); }
+    if (path === '/me') { const needsRecovery = data.takeRecovery ? this.get('pendingRecovery') : null; if (needsRecovery) this.sql.exec('DELETE FROM meta WHERE key=?', 'pendingRecovery'); const profile = this.get('profile'); return json({ user: { ...profile, displayName: this.settings().displayName === undefined ? profile.displayName : (this.settings().displayName || 'Friend'), settings: this.settings(), hasPasskey: this.rows('SELECT COUNT(*) AS n FROM credentials')[0].n as number > 0 }, version: this.get('version'), ...(needsRecovery ? { needsRecovery: true } : {}) }); }
     if (path === '/revoke') { this.set('version', this.get('version') + 1); return json({ ok: true }); }
     if (path === '/recovery/pending') { this.set('pendingRecovery', !!data.needed); return json({ ok: true }); }
     if (path === '/credentials') return json({ credentials: this.list('credentials') });
@@ -223,11 +231,11 @@ export class UserDO {
           if (!existing || updated > Number(existing.updated) || (updated === Number(existing.updated) && serialized > String(existing.value))) this.sql.exec('INSERT INTO items VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET value=excluded.value,updated=excluded.updated', item.id, serialized, updated);
         }
         for (const event of events) this.sql.exec('INSERT OR IGNORE INTO events VALUES(?,?)', event.id, JSON.stringify(event));
-        if (settings) { const old = this.settings(); if (timestamp(settings.updatedAt) > timestamp(old.updatedAt) || (timestamp(settings.updatedAt) === timestamp(old.updatedAt) && JSON.stringify(settings) > JSON.stringify(old))) this.set('settings', { ...old, ...settings }); }
+        if (settings) this.set('settings', mergeServerSettings(this.settings(), settings));
       });
       return json({ items: this.list('items'), events: this.list('events'), settings: this.settings(), serverTime: Date.now() });
     }
-    if (path === '/export') return json({ format: 'by-heart', version: 1, exportedAt: new Date().toISOString(), user: this.get('profile'), items: this.list('items'), events: this.list('events'), settings: this.settings() });
+    if (path === '/export') return json({ format: 'by-heart', version: 1, exportedAt: new Date().toISOString(), user: { ...this.get('profile'), displayName: this.settings().displayName === undefined ? this.get('profile').displayName : (this.settings().displayName || 'Friend') }, items: this.list('items'), events: this.list('events'), settings: this.settings() });
     if (path === '/push/subscribe') {
       if (data.subscription === null || data.enabled === false) { if (data.endpoint) this.sql.exec('DELETE FROM subscriptions WHERE endpoint=?', data.endpoint); else this.sql.exec('DELETE FROM subscriptions'); return json({ ok: true }); }
       const sub = (data.subscription || data) as PushSubscriptionData; validateSubscription(sub); assert(this.list('subscriptions').length < 5 || this.rows('SELECT endpoint FROM subscriptions WHERE endpoint=?', sub.endpoint).length, 'Device limit reached');

@@ -55,3 +55,10 @@ describe('Backend security and interoperable Web Push', () => {
     expect(await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, vapid.publicKey, unb64(signature), enc.encode(header + '.' + claims))).toBe(true);
   });
 });
+
+import {settingsRecord,mergeServerSettings} from '../cloudflare/worker';
+describe('QA account settings regressions',()=>{
+ it('P2-16 rejects invalid server time zones',()=>{expect(()=>settingsRecord({timeZone:'Mars/Phobos',updatedAt:1})).toThrow('Invalid timezone');expect(settingsRecord({timeZone:'America/Los_Angeles',updatedAt:1}).timezone).toBe('America/Los_Angeles')});
+ it('P2-17 normalizes display names and aliases consistently',()=>{expect(settingsRecord({name:' Grace ',updatedAt:1})).toMatchObject({name:'Grace',displayName:'Grace'});expect(settingsRecord({name:'   ',updatedAt:1})).toMatchObject({name:'',displayName:''})});
+ it('P1-18 normalizes field clocks and merges independent edits',()=>{const old=settingsRecord({name:'Grace',theme:'light',updatedAt:20,fieldUpdatedAt:{name:20,theme:10}}),incoming=settingsRecord({name:'',theme:'dark',updatedAt:30,fieldUpdatedAt:{name:10,theme:30}});expect(mergeServerSettings(old,incoming)).toMatchObject({name:'Grace',displayName:'Grace',theme:'dark',appearance:'dark'});expect(mergeServerSettings(incoming,old)).toEqual(mergeServerSettings(old,incoming));expect(()=>settingsRecord({updatedAt:1,fieldUpdatedAt:{name:Date.now()+86400000}})).toThrow()});
+});
