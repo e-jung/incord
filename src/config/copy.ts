@@ -146,7 +146,7 @@ export const copy = {
  groupGoalStart:'From question or article',groupGoalEnd:'Through question or article',
 
  findSomething:'Find something to memorize',discoverCategories:'Discover categories',
- discoverFilters:['All','Topics','Passages','Catechisms & creeds'],topics:'Topics',catechismsAndCreeds:'Catechisms & creeds',
+ discoverFilters:['Topics','Passages','Catechisms & creeds','Add your own'],addYourOwn:'Add your own',preferenceSaved:'Saved on this device.',textSizeAccessibility:'For larger text, use Text size in Settings, from Small to Extra large. Page pinch-zoom is disabled to keep scrolling steady.',hapticTestHelp:'A gentle tap should be felt on supported devices.',topics:'Topics',catechismsAndCreeds:'Catechisms & creeds',
  gospelFeaturedDetail:'10 verses · Grace, received by faith',psalmFeaturedDetail:'6 verses · One passage',wscFeaturedDetail:'Questions 1–12',
  documentDescriptions:{wsc:'Reformed · 1647',heidelberg:'Reformed · historic English',apostles:'The faith we confess',nicene:'Historic Christian creed',wlc:'Reformed · American edition',baptist:'Particular Baptist',spurgeon:'Baptist · 1855', 'young-children':'For children · 1840'},
 
@@ -253,6 +253,7 @@ export const copy = {
 
   "appName": "Incord",
   "loadingBody": "",
+  loadingPassage:"Loading passage…",
   "loadingTitle": "",
   "loadingHint": "",
   "reviewed": "Reviewed",

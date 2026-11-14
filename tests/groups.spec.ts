@@ -61,7 +61,7 @@ test('three isolated members: link/code invites, Discover goal sync, prayer, tit
   await refresh(page);await expect(groupArticle(page,name).getByText('3 members · You are the owner')).toBeVisible();
   await groupArticle(page,name).getByRole('button',{name:'Choose goal in Discover',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Choose a group goal',exact:true})).toBeVisible();
-  await page.locator('.featured-cards').getByRole('button',{name:/Psalm 23/}).click();
+  await page.getByRole('button',{name:'Passages',exact:true}).click();await page.locator('.featured-cards').getByRole('button',{name:/Psalm 23/}).click();
   await page.getByRole('dialog').getByRole('button',{name:'Use as group goal',exact:true}).click();
   await expect(groupArticle(page,name).getByRole('region',{name:'Group goal'})).toContainText('Psalm 23');
   await page.route('**/api/groups/'+groupId+'/goal/add',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({results:[{status:'invalid reference',reason:'ESV content limit reached'}]})}),{times:1});

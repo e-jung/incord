@@ -20,7 +20,7 @@ for(const width of [320,393])test(`iOS all tab items and shared primary buttons 
  await settings(page);await expect(page.locator('.haptic-overlay')).toHaveCount(0);
  const scrollY=await page.evaluate(()=>window.scrollY);
  const before=await page.locator('button').evaluateAll(buttons=>buttons.map((button,i)=>{button.dataset.hapticTest=String(i);const b=button.getBoundingClientRect();return {i,x:b.x,y:b.y,width:b.width,height:b.height}}));
- await page.getByLabel('Haptics',{exact:true}).check();await expect.poll(()=>page.locator('.haptic-overlay').count()).toBeGreaterThan(5);await page.evaluate(y=>window.scrollTo(0,y),scrollY);await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+ await page.getByLabel('Haptics',{exact:true}).check();const saved=page.locator('.feedback-setting .action-feedback').filter({hasText:'Saved on this device.'});await expect(saved).toBeVisible();await expect(saved).toHaveCount(0,{timeout:4500});await expect.poll(()=>page.locator('.haptic-overlay').count()).toBeGreaterThan(5);await page.evaluate(y=>window.scrollTo(0,y),scrollY);await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
  for(const box of before){const after=await page.locator(`button[data-haptic-test="${box.i}"]`).boundingBox();if(!after)continue;for(const key of ['x','y','width','height'] as const)expect(Math.abs(after[key]-box[key])).toBeLessThan(0.6)}
  await expect(page.locator('input.haptic-button,textarea.haptic-button,select.haptic-button,a.haptic-button')).toHaveCount(0);
  await page.evaluate(()=>{(document.activeElement as HTMLElement)?.blur()});await tap(page.getByRole('button',{name:'Test haptic',exact:true}));await expect(page.locator('body')).toBeFocused();
@@ -37,7 +37,7 @@ for(const width of [320,393])test(`iOS all tab items and shared primary buttons 
  await tap(page.getByRole('button',{name:'Find something to memorize',exact:true}));
  await expect.poll(()=>page.evaluate(()=>(window as any).__buttonClicks)).toEqual(['Find something to memorize']);
  await expect(page.getByRole('heading',{name:'Start here',exact:true})).toBeVisible();
- await tap(page.locator('.featured-cards').getByRole('button',{name:/^Psalm 23/}));
+ await tap(page.getByRole('button',{name:'Passages',exact:true}));await tap(page.locator('.featured-cards').getByRole('button',{name:/^Psalm 23/}));
  await expect(page.getByRole('dialog')).toBeVisible();
  const add=page.getByRole('dialog').getByRole('button',{name:'Add to my library',exact:true});
  const overlay=add.locator('xpath=following-sibling::*[1][self::input[contains(@class,"haptic-overlay")]]');await expect(overlay).toHaveAttribute('aria-hidden','true');await expect(overlay).toHaveAttribute('tabindex','-1');

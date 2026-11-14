@@ -36,7 +36,7 @@ test('Sound preview works with defaults OFF and haptics stay silent until enable
  await expect(page.getByRole('button',{name:'Test haptic',exact:true})).toBeDisabled();
  const afterPreview=await page.evaluate(()=>(window as any).__feedbackCalls);
  await expect(page.getByLabel('Key sounds',{exact:true})).not.toBeChecked();await expect(page.getByLabel('Haptics',{exact:true})).not.toBeChecked();
- await tab(page,'Discover');await page.locator('.passage-cards').getByRole('button',{name:/Romans 8:31–39/}).click();await page.getByRole('dialog').getByRole('button',{name:'Add to my library',exact:true}).click();await page.getByRole('button',{name:/^Romans 8:31–39/}).click();
+ await tab(page,'Discover');await page.getByRole('button',{name:'Passages',exact:true}).click();await page.locator('.passage-cards').getByRole('button',{name:/Romans 8:31–39/}).click();await page.getByRole('dialog').getByRole('button',{name:'Add to my library',exact:true}).click();await page.getByRole('button',{name:/^Romans 8:31–39/}).click();
  const words=await page.locator('[data-word]').allTextContents();for(const word of words.slice(0,2))await page.keyboard.press(Array.from(word.replace(/^[^\p{L}\p{N}]+/u,''))[0].toLowerCase());
  expect(await page.evaluate(()=>(window as any).__feedbackCalls)).toEqual(afterPreview);
 });
@@ -66,7 +66,7 @@ test('signed-in default translation syncs from Settings and the single Discover 
  await page.getByRole('combobox',{name:'Default translation',exact:true}).selectOption('KJV');
  await expect.poll(async()=>(await(await page.request.get('/api/export')).json()).settings).toMatchObject({defaultTranslation:'KJV',fieldUpdatedAt:{defaultTranslation:expect.any(Number)}});
  const firstClock=(await(await page.request.get('/api/export')).json()).settings.fieldUpdatedAt.defaultTranslation;expect(firstClock).toBeGreaterThan(0);await page.reload();await settings(page);await expect(page.getByRole('combobox',{name:'Default translation',exact:true})).toHaveValue('KJV');
- await tab(page,'Discover');await expect(page.getByRole('combobox',{name:'Default translation',exact:true})).toHaveCount(1);await expect(page.getByRole('combobox',{name:'Default translation',exact:true})).toHaveValue('KJV');
+ await tab(page,'Discover');await page.getByRole('button',{name:'Passages',exact:true}).click();await expect(page.getByRole('combobox',{name:'Default translation',exact:true})).toHaveCount(1);await expect(page.getByRole('combobox',{name:'Default translation',exact:true})).toHaveValue('KJV');
  const kjvCard=page.locator('.passage-cards').getByRole('button',{name:/Psalm 23/});await expect(kjvCard).toContainText('KJV');await kjvCard.click();await expect(page.getByRole('dialog').locator('.translation-badge')).toHaveText('KJV');await page.keyboard.press('Escape');
  await page.getByRole('combobox',{name:'Default translation',exact:true}).selectOption('ESV');
  await expect.poll(async()=>(await(await page.request.get('/api/export')).json()).settings.defaultTranslation).toBe('ESV');expect((await(await page.request.get('/api/export')).json()).settings.fieldUpdatedAt.defaultTranslation).toBeGreaterThan(firstClock);
@@ -86,7 +86,7 @@ test('signed-in default translation syncs from Settings and the single Discover 
  try{
   let secondFetches=0;const held=new Promise<void>(resolve=>release=resolve);await context.route('**/api/esv?*',async route=>{secondFetches++;await held;await route.fulfill({contentType:'text/plain',body:text})});const second=await context.newPage();await settings(second);await signin(second,email);
   await expect(second.getByRole('combobox',{name:'Default translation',exact:true})).toHaveValue('ESV');await second.reload();await settings(second);await expect(second.getByRole('combobox',{name:'Default translation',exact:true})).toHaveValue('ESV');
-  await tab(second,'Discover');await expect(second.getByRole('combobox',{name:'Default translation',exact:true})).toHaveCount(1);await expect(second.getByRole('combobox',{name:'Default translation',exact:true})).toHaveValue('ESV');
+  await tab(second,'Discover');await second.getByRole('button',{name:'Topics',exact:true}).click();await expect(second.getByRole('combobox',{name:'Default translation',exact:true})).toHaveCount(1);await expect(second.getByRole('combobox',{name:'Default translation',exact:true})).toHaveValue('ESV');
   await tab(second,'Library');await second.getByRole('button',{name:/^Passages 0 of 1 learned/}).click();await expect(second.locator('.source-row').getByRole('link',{name:'ESV',exact:true})).toBeVisible();await second.getByRole('button',{name:/^Psalm 23:1[–-]6/}).click();await expect.poll(()=>secondFetches).toBe(1);
   // A remote preference must not cancel the in-flight ESV practice load.
   await page.getByRole('button',{name:'Close practice',exact:true}).click();await settings(page);await page.getByRole('combobox',{name:'Default translation',exact:true}).selectOption('KJV');await expect.poll(async()=>(await(await page.request.get('/api/export')).json()).settings.defaultTranslation).toBe('KJV');

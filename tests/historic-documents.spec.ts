@@ -1,7 +1,7 @@
 import {test,expect,type Page} from '@playwright/test';
 
 async function discover(page:Page){await page.goto('/');await page.getByRole('navigation').getByRole('button',{name:'Discover',exact:true}).click()}
-async function openDocument(page:Page,title:string){await page.locator('.document-cards').getByRole('button',{name:new RegExp(title)}).click();return page.locator('#document-browser')}
+async function openDocument(page:Page,title:string){await page.getByRole('button',{name:'Catechisms & creeds',exact:true}).click();await page.locator('.document-cards').getByRole('button',{name:new RegExp(title)}).click();return page.locator('#document-browser')}
 
 test('document cards replace duplicate Catechisms mode and document selector; historic editions and per-question adds remain',async({page})=>{
  await discover(page);

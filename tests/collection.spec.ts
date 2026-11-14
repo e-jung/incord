@@ -5,6 +5,7 @@ test('featured previews, collection additions, remove confirmation, Undo and re-
   const nav = page.getByRole('navigation');
   await nav.getByRole('button', { name: 'Discover', exact: true }).click();
   await expect(page.locator('.featured-cards .cover')).toHaveCount(3);
+  await page.getByRole('button',{name:'Passages',exact:true}).click();
   await page.locator('.featured-cards .cover').filter({ has: page.locator('b', { hasText: 'Psalm 23' }) }).click();
   await expect(page.getByRole('dialog', { name: 'Psalm 23', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Add to my library', exact: true }).click();
@@ -12,7 +13,8 @@ test('featured previews, collection additions, remove confirmation, Undo and re-
   await expect(page.locator('.row-main')).toHaveCount(1);
   await expect(page.getByRole('button', { name: /^Psalm 23:1–6/ })).toBeVisible();
   await page.getByRole('button', { name: 'Add items', exact: true }).click();
-  await page.getByRole('button', { name: 'Verses', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Add your own', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'Verses', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await page.getByLabel('Bible reference').fill('John 11:35');
   await page.getByRole('button', { name: 'Find verses', exact: true }).click();
   await page.getByRole('button', { name: 'Add to library', exact: true }).click();
@@ -44,6 +46,7 @@ test('featured previews, collection additions, remove confirmation, Undo and re-
   await options.click();
   await page.getByRole('dialog').getByRole('button', { name: 'Remove', exact: true }).click();
   await page.getByRole('button', { name: 'Add items', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Add your own', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await page.getByLabel('Bible reference').fill('John 11:35');
   await page.getByRole('button', { name: 'Find verses', exact: true }).click();
   await page.getByRole('button', { name: 'Add to library', exact: true }).click();

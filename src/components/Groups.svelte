@@ -1,5 +1,5 @@
 <script lang="ts">
-import {onMount, untrack} from 'svelte';
+import {onMount, tick, untrack} from 'svelte';
 import {api, type Settings} from '../store';
 import {copy as ui} from '../config/copy';
 import Sheet from './Sheet.svelte';
@@ -13,7 +13,7 @@ type Member = {id:string; name:string; role:Role; self:boolean; weekDays:string[
 type Group = Summary & {members:Member[]; pending?:{id:string; name:string}[]; approveNewMembers:boolean; weeklyPush:boolean};
 type Invite = {code:string; url:string; expiresAt:number; maxUses:number};
 type Note = {text:string; error?:boolean};
-type Confirmation = {kind:'delete'|'leave'|'remove'|'transfer'; member?:Member};
+type Confirmation = {kind:'delete'|'leave'|'remove'|'transfer'; member?:Member; groupName:string; done?:boolean};
 let {account, settings, onSync, onChooseGoal, onSignIn, pendingCode='', onJoined, initialGroupId='', onSave, onDialogChange=()=>{}}: {
  account:any|null; settings:Settings; onSync:()=>Promise<void>; onChooseGoal:(groupId:string)=>void;
  onSignIn:()=>void; pendingCode?:string; onJoined:()=>void; initialGroupId?:string; onSave?:()=>Promise<void>; onDialogChange?:(close:(()=>void)|null)=>void;
@@ -26,20 +26,50 @@ let name = $state(''), code = $state(''), approval = $state(false), expiresDays 
 let confirmation = $state<Confirmation|null>(null);
 let inviteInput = $state<HTMLInputElement>();
 let formsOpen = $state(false);
+let pendingReceipts = $state<Record<string,{member:{id:string;name:string};index:number}>>({});
+const pendingRows = $derived.by(()=>{
+ const rows=[...(group?.pending||[])];
+ for(const [key,receipt] of Object.entries(pendingReceipts)){if(notes[key]&&!rows.some(member=>member.id===receipt.member.id))rows.splice(receipt.index,0,receipt.member)}
+ return rows;
+});
+const noteTimers = new Map<string,ReturnType<typeof setTimeout>>();
+let copyRequest = 0;
 let epoch = 0, listRequest = 0, detailRequest = 0, alive = true, attemptedInvite = '';
 const manager = $derived(group?.role === 'owner' || group?.role === 'admin');
 const pendingCount = $derived(groups.reduce((sum,item)=>sum+(item.pending?.length||0),0));
 const owner = $derived(group?.role === 'owner');
 const visible = $derived(!!account && String(account.id) === activeIdentity);
-const message = (key:string, text:string, error=false) => {notes = {...notes, [key]:{text,error}}};
-const clearNote = (key:string) => {const next={...notes};delete next[key];notes=next};
+const clearNote = (key:string) => {
+ clearTimeout(noteTimers.get(key));noteTimers.delete(key);
+ const next={...notes};delete next[key];notes=next;
+};
+function clearNotes(){for(const timer of noteTimers.values())clearTimeout(timer);noteTimers.clear();notes={};pendingReceipts={};copyRequest++}
+function message(key:string,text:string,error=false,persistent=false){
+ clearNote(key);notes={...notes,[key]:{text,error}};const note=notes[key];
+ if(!error&&!persistent)noteTimers.set(key,setTimeout(()=>{
+  if(notes[key]!==note)return;
+  clearNote(key);if(key==='confirm'&&confirmation?.done)confirmation=null;
+ },3000));
+}
+// Reveal only clipped feedback, leaving focus and already-visible controls in place.
+function revealFeedback(node:HTMLElement,note:Note|undefined){
+ let revision=0;
+ const reveal=async(value:Note|undefined)=>{const request=++revision;if(!value)return;
+  for(let parent=node.parentElement;parent;parent=parent.parentElement){if(parent instanceof HTMLDetailsElement&&!parent.open)parent.open=true}
+  await tick();if(!alive||!node.isConnected||request!==revision||!value)return;
+  const view=window.visualViewport;let top=view?.offsetTop||0,bottom=top+(view?.height||window.innerHeight);
+  for(let parent=node.parentElement;parent;parent=parent.parentElement){if(/auto|scroll|hidden/.test(getComputedStyle(parent).overflowY)){const box=parent.getBoundingClientRect();top=Math.max(top,box.top);bottom=Math.min(bottom,box.bottom)}}
+  const box=node.getBoundingClientRect();if(box.top<top||box.bottom>bottom)node.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'});
+ };
+ void reveal(note);return {update(value:Note|undefined){void reveal(value)},destroy(){revision++}};
+}
 const current = (version:number) => alive && version === epoch && !!account && String(account.id) === activeIdentity;
 function weekDotDays(days:string[]){return days.map(value=>{if(!/^\d{4}-\d{2}-\d{2}$/.test(value))return value;const [year,month,date]=value.split('-').map(Number);return new Date(year,month-1,date).toLocaleDateString(ui.dateLocale)})}
 const path = (id:string, suffix='') => `/groups/${encodeURIComponent(id)}${suffix}`;
 const errorText = (error:unknown) => error instanceof Error ? error.message : ui.groups.retry;
-function clearDetail(){group=null;invite=null;confirmation=null;detailRequest++;detailLoading=false;}
+function clearDetail(){group=null;invite=null;copyRequest++;if(busy!=='confirm')confirmation=null;detailRequest++;detailLoading=false;}
 function reset(identity:string){
- epoch++;listRequest++;clearDetail();groups=[];pendingMemberships=[];selected='';notes={};busy='';loading=false;
+ epoch++;listRequest++;clearDetail();groups=[];pendingMemberships=[];selected='';clearNotes();confirmation=null;busy='';loading=false;
  name='';code='';formsOpen=!!pendingCode;approval=false;expiresDays=14;maxUses=20;activeIdentity=identity;attemptedInvite='';
 }
 $effect(()=>{
@@ -54,13 +84,13 @@ $effect(()=>{
 });
 $effect(()=>{
  const id=initialGroupId, identity=account ? String(account.id) : '';
- untrack(()=>{if(id && identity && identity===activeIdentity && selected!==id){clearDetail();selected=id;void loadDetail(id)}});
+ untrack(()=>{if(id && identity && identity===activeIdentity && selected!==id){clearDetail();clearNotes();selected=id;void loadDetail(id)}});
 });
-$effect(()=>{const open=confirmation;onDialogChange(open?()=>{confirmation=null}:null)});
+$effect(()=>{const open=confirmation;onDialogChange(open?()=>{if(!busy)confirmation=null}:null)});
 onMount(()=>{
  const focus=()=>{if(document.visibilityState==='visible' && visible && !busy)void refresh()};
  window.addEventListener('focus',focus);document.addEventListener('visibilitychange',focus);
- return()=>{onDialogChange(null);alive=false;epoch++;window.removeEventListener('focus',focus);document.removeEventListener('visibilitychange',focus)};
+ return()=>{onDialogChange(null);alive=false;epoch++;clearNotes();window.removeEventListener('focus',focus);document.removeEventListener('visibilitychange',focus)};
 });
 async function loadDetail(id:string){
  const version=epoch, request=++detailRequest;detailLoading=true;clearNote('detail');
@@ -80,12 +110,12 @@ async function refresh(first=false){
  }catch(error){if(current(version)&&request===listRequest)message('list',errorText(error),true)}
  finally{if(current(version)&&request===listRequest)loading=false}
 }
-function choose(id:string){if(id===selected)return;clearDetail();selected=id;notes={};void loadDetail(id)}
+function choose(id:string){if(id===selected)return;clearDetail();selected=id;clearNotes();void loadDetail(id)}
 function cancelReads(){listRequest++;detailRequest++;loading=false;detailLoading=false}
 async function withdraw(id:string){
- if(busy)return;cancelReads();const version=epoch;busy='withdraw:'+id;clearNote('requests');
- try{await api(path(id,'/leave'),{});if(!current(version))return;pendingMemberships=pendingMemberships.filter(item=>item.id!==id);await refresh();if(current(version))message('requests',ui.groups.requestWithdrawn)}
- catch(error){if(current(version))message('requests',errorText(error),true)}
+ if(busy)return;cancelReads();const version=epoch;busy='withdraw:'+id;clearNote('withdraw:'+id);
+ try{await api(path(id,'/leave'),{});if(!current(version))return;pendingMemberships=pendingMemberships.filter(item=>item.id!==id);await refresh();if(current(version))message('withdraw:'+id,ui.groups.requestWithdrawn)}
+ catch(error){if(current(version))message('withdraw:'+id,errorText(error),true)}
  finally{if(current(version))busy=''}
 }
 async function create(){
@@ -103,7 +133,7 @@ async function join(value=code){
  cancelReads();const version=epoch;busy='join';clearNote('join');
  try{
   const out=await api('/groups/join',{code:value.trim()});if(!current(version))return;
-  if(out.pending){message('join',ui.groups.awaitingApproval(out.ownerName));code='';onJoined();await refresh();return}
+  if(out.pending){message('join',ui.groups.awaitingApproval(out.ownerName),false,true);code='';onJoined();await refresh();return}
   if(!out.group)throw new Error(ui.groups.inviteInvalid);
   clearDetail();group=out.group;selected=out.group.id;code='';onJoined();
   await refresh();if(current(version))message('join',ui.groups.joined);
@@ -113,19 +143,19 @@ async function join(value=code){
 async function mutate(key:string,suffix:string,body:unknown={},success:string=ui.groups.saved,options:{method?:string; forget?:boolean; sync?:boolean}={}){
  if(!group||busy)return;
  cancelReads();const version=epoch,id=group.id;busy=key;clearNote(key);
+ if(key.startsWith('pending:')){const index=group.pending?.findIndex(member=>key==='pending:'+member.id)??-1;if(index>=0)pendingReceipts={...pendingReceipts,[key]:{member:group.pending![index],index}}}
  try{
   // Start the network request directly in the click handler, including prayer.
   const out=await api(path(id,suffix),body,options.method);if(!current(version)||selected!==id)return;
   if(options.forget){clearDetail();groups=groups.filter(g=>g.id!==id);selected='';}
   if(suffix==='/remove'&&group){const memberId=(body as {memberId:string}).memberId;group={...group,members:group.members.filter(member=>member.id!==memberId),pending:group.pending?.filter(member=>member.id!==memberId)}}
-  if(key==='confirm')confirmation=null;
-  if(suffix==='/invite')invite=out;
-  if(suffix==='/invite/revoke')invite=null;
-  if(options.sync){try{await onSync()}catch{if(current(version))message(key,ui.groups.syncIncomplete,true);return}}
-  if(suffix==='/goal/add'){const rejected=(out.results||[]).filter((item:any)=>!['added','already in library'].includes(item.status));if(rejected.length){if(current(version)){await refresh();message(key,ui.groups.goalRejected(rejected.length,rejected[0].reason||ui.groups.retry),true)}return}}
-  if(!current(version))return;
+  if(key==='confirm'&&confirmation)confirmation={...confirmation,done:true};
+  if(suffix==='/invite'||suffix==='/invite/revoke'){copyRequest++;clearNote('copy');invite=suffix==='/invite'?out:null;}
+  if(options.sync){try{await onSync()}catch{if(current(version)&&selected===id)message(key,ui.groups.syncIncomplete,true);return}}
+  if(suffix==='/goal/add'){const rejected=(out.results||[]).filter((item:any)=>!['added','already in library'].includes(item.status));if(rejected.length){if(current(version)&&selected===id){await refresh();if(current(version)&&selected===id)message(key,ui.groups.goalRejected(rejected.length,rejected[0].reason||ui.groups.retry),true)}return}}
+  if(!current(version)||(!options.forget&&selected!==id))return;
   if(suffix!=='/pray')await refresh();
-  if(current(version))message(key,suffix==='/pray'&&out.alreadySent?ui.groups.prayerAlreadySent:success);
+  if(current(version)&&(options.forget||selected===id))message(key,suffix==='/pray'&&out.alreadySent?ui.groups.prayerAlreadySent:success);
  }catch(error){if(current(version)&&selected===id)message(key,errorText(error),true)}
  finally{if(current(version))busy=''}
 }
@@ -137,12 +167,12 @@ async function weekly(enabled:boolean){
  finally{if(current(version))busy=''}
 }
 async function copyInvite(){
- if(!invite)return;const version=epoch,id=selected;
- try{if(!navigator.clipboard?.writeText)throw new Error();await navigator.clipboard.writeText(new URL(invite.url,location.origin).href);if(current(version)&&selected===id)message('copy',ui.groups.inviteCopied)}
- catch{if(current(version)&&selected===id){inviteInput?.focus();inviteInput?.select();message('copy',ui.groups.inviteCopyFallback)}}
+ if(!invite)return;const version=epoch,id=selected,request=++copyRequest,link=invite.url;clearNote('copy');
+ try{if(!navigator.clipboard?.writeText)throw new Error();await navigator.clipboard.writeText(new URL(link,location.origin).href);if(current(version)&&selected===id&&request===copyRequest)message('copy',ui.groups.inviteCopied)}
+ catch{if(current(version)&&selected===id&&request===copyRequest){inviteInput?.focus({preventScroll:true});inviteInput?.select();message('copy',ui.groups.inviteCopyFallback,false,true)}}
 }
 function confirmAction(){
- if(!confirmation||!group)return;
+ if(!confirmation||confirmation.done||!group)return;
  const {kind,member}=confirmation;
  if(kind==='delete')void mutate('confirm','',undefined,ui.groups.deleted,{method:'DELETE',forget:true});
  else if(kind==='leave')void mutate('confirm','/leave',{},ui.groups.left,{forget:true});
@@ -153,17 +183,17 @@ const confirmationTitle = $derived(confirmation?.kind==='delete'?ui.groups.delet
 </script>
 
 {#snippet feedback(key:string)}
- {#if notes[key]}<p class="feedback" class:failed={notes[key].error} role={notes[key].error?'alert':'status'}>{notes[key].text}</p>{/if}
+ <p use:revealFeedback={notes[key]} class="feedback" class:sr-only={!notes[key]} class:failed={notes[key]?.error} aria-live="polite" aria-atomic="true" role={notes[key]?(notes[key].error?'alert':'status'):undefined}>{notes[key]?.text||''}</p>
 {/snippet}
 
 <section class="groups-panel" aria-labelledby="groups-heading">
  <header class="heading"><h2 id="groups-heading">{ui.groups.heading}</h2>{#if visible&&pendingCount}<span class="translation-badge" aria-label={ui.groups.pendingCount(pendingCount)}>{pendingCount}</span>{/if}{#if visible}<button class="text-button" disabled={loading||!!busy} onclick={()=>void refresh()}>{loading?ui.groups.refreshing:ui.groups.refresh}</button>{/if}</header>
+ {#if visible}{@render feedback('list')}{/if}
  <p class="intro">{ui.groups.intro}</p>
  {#if !account}
   <p>{pendingCode?ui.groups.signInInvite:ui.groups.signInHelp}</p>
   <button class="secondary" onclick={onSignIn}>{ui.groups.signIn}</button>
  {:else if visible}
-  {@render feedback('list')}
   {#if loading&&!groups.length}<p role="status">{ui.groups.loadingList}</p>{/if}
   {#if groups.length}
    <nav class="group-list" aria-label={ui.groups.listLabel}>
@@ -172,8 +202,10 @@ const confirmationTitle = $derived(confirmation?.kind==='delete'?ui.groups.delet
     {/each}
    </nav>
   {:else if !loading&&!notes.list}<p>{ui.groups.empty}</p>{/if}
-  {#if pendingMemberships.length}<section class="panel stack" aria-label={ui.groups.yourRequests}><h3>{ui.groups.yourRequests}</h3>{#each pendingMemberships as item (item.id)}<div class="stack"><strong>{item.name}</strong><small>{ui.groups.awaitingApproval(item.ownerName)}</small><button class="text-button" disabled={!!busy} onclick={()=>void withdraw(item.id)}>{busy==='withdraw:'+item.id?ui.groups.withdrawing:ui.groups.withdraw}</button></div>{/each}</section>{/if}
-  {@render feedback('requests')}
+  {@render feedback('detail')}
+  {#if detailLoading&&!group}<p role="status">{ui.groups.loadingDetail}</p>{/if}
+  {#if pendingMemberships.length}<section class="panel stack" aria-label={ui.groups.yourRequests}><h3>{ui.groups.yourRequests}</h3>{#each pendingMemberships as item (item.id)}<div class="stack"><strong>{item.name}</strong><small>{ui.groups.awaitingApproval(item.ownerName)}</small><button class="text-button" disabled={!!busy} onclick={()=>void withdraw(item.id)}>{busy==='withdraw:'+item.id?ui.groups.withdrawing:ui.groups.withdraw}</button>{@render feedback('withdraw:'+item.id)}</div>{/each}</section>{/if}
+  {#each Object.keys(notes).filter(key=>key.startsWith('withdraw:')&&!pendingMemberships.some(item=>key==='withdraw:'+item.id)) as key (key)}{@render feedback(key)}{/each}
   <details class="panel" bind:open={formsOpen}>
    <summary>{ui.groups.createOrJoin}</summary>
    <div class="forms">
@@ -192,10 +224,6 @@ const confirmationTitle = $derived(confirmation?.kind==='delete'?ui.groups.delet
     </form>
    </div>
   </details>
-  {#if !formsOpen}{@render feedback('join')}{@render feedback('create')}{/if}
-  {#if !confirmation}{@render feedback('confirm')}{/if}
-  {@render feedback('detail')}
-  {#if detailLoading&&!group}<p role="status">{ui.groups.loadingDetail}</p>{/if}
   {#if group}
    <article class="panel stack" aria-label={group.name} aria-busy={detailLoading}>
     <header><h3 class="group-name">{group.name}</h3><small>{ui.groups.memberSummary(group.memberCount,group.role)}</small></header>
@@ -229,8 +257,8 @@ const confirmationTitle = $derived(confirmation?.kind==='delete'?ui.groups.delet
          {#if manager&&member.role!=='owner'&&(owner||member.role==='member')}
           <details class="member-controls"><summary>{ui.groups.manageMember(member.name)}</summary><div class="stack">
            {#if owner}<label>{ui.groups.roleFor(member.name)}<select value={member.role} disabled={!!busy} onchange={(event)=>{const role=event.currentTarget.value;event.currentTarget.value=member.role;void mutate(`role:${member.id}`,'/role',{memberId:member.id,role},ui.groups.roleUpdated)}}><option value="member">{ui.groups.memberRole}</option><option value="admin">{ui.groups.adminRole}</option></select></label>{@render feedback(`role:${member.id}`)}{/if}
-           <button class="text-button danger" disabled={!!busy} onclick={()=>{clearNote('confirm');confirmation={kind:'remove',member}}}>{ui.groups.removeMember}</button>
-           {#if owner}<button class="text-button" disabled={!!busy} onclick={()=>{clearNote('confirm');confirmation={kind:'transfer',member}}}>{ui.groups.transferTo(member.name)}</button>{/if}
+           <button class="text-button danger" disabled={!!busy} onclick={()=>{clearNote('confirm');confirmation={kind:'remove',member,groupName:group!.name}}}>{ui.groups.removeMember}</button>
+           {#if owner}<button class="text-button" disabled={!!busy} onclick={()=>{clearNote('confirm');confirmation={kind:'transfer',member,groupName:group!.name}}}>{ui.groups.transferTo(member.name)}</button>{/if}
           </div></details>
          {/if}
         {/if}
@@ -247,12 +275,11 @@ const confirmationTitle = $derived(confirmation?.kind==='delete'?ui.groups.delet
       {#if owner}
        <label class="check"><input type="checkbox" checked={group.approveNewMembers} disabled={!!busy} onchange={(event)=>{const approveNewMembers=event.currentTarget.checked;event.currentTarget.checked=group!.approveNewMembers;void mutate('approval','/update',{approveNewMembers},ui.groups.approvalSaved)}} />{ui.groups.approveNew}</label>{@render feedback('approval')}
       {/if}
-      {#if group.pending?.length}
+      {#if pendingRows.length}
        <section class="stack" aria-label={ui.groups.pendingLabel}><h3>{ui.groups.pendingHeading}</h3>
-        {#each group.pending as pending (pending.id)}<div class="pending stack"><strong>{pending.name}</strong><div class="actions"><button class="secondary" disabled={!!busy} aria-label={ui.groups.approveMember(pending.name)} onclick={()=>void mutate(`pending:${pending.id}`,'/approve',{memberId:pending.id},ui.groups.memberApproved)}>{ui.groups.approve}</button><button class="text-button" disabled={!!busy} aria-label={ui.groups.declineMember(pending.name)} onclick={()=>void mutate(`pending:${pending.id}`,'/remove',{memberId:pending.id},ui.groups.requestDeclined)}>{ui.groups.decline}</button></div>{@render feedback(`pending:${pending.id}`)}</div>{/each}
+        {#each pendingRows as pending (pending.id)}<div class="pending stack"><strong>{pending.name}</strong>{#if group.pending?.some(member=>member.id===pending.id)}<div class="actions"><button class="secondary" disabled={!!busy} aria-label={ui.groups.approveMember(pending.name)} onclick={()=>void mutate(`pending:${pending.id}`,'/approve',{memberId:pending.id},ui.groups.memberApproved)}>{ui.groups.approve}</button><button class="text-button" disabled={!!busy} aria-label={ui.groups.declineMember(pending.name)} onclick={()=>void mutate(`pending:${pending.id}`,'/remove',{memberId:pending.id},ui.groups.requestDeclined)}>{ui.groups.decline}</button></div>{/if}{@render feedback(`pending:${pending.id}`)}</div>{/each}
        </section>
       {/if}
-      {#each Object.keys(notes).filter(key=>key.startsWith('pending:')&&!group!.pending?.some(member=>key===`pending:${member.id}`)) as key (key)}{@render feedback(key)}{/each}
       <form class="stack" onsubmit={(event)=>{event.preventDefault();void mutate('invite','/invite',{expiresDays,maxUses},ui.groups.inviteReady)}}>
        <h3>{ui.groups.inviteHeading}</h3>
        <label>{ui.groups.inviteDays}<input type="number" min="1" max="90" step="1" required bind:value={expiresDays} /></label>
@@ -273,24 +300,24 @@ const confirmationTitle = $derived(confirmation?.kind==='delete'?ui.groups.delet
     {/if}
     <footer class="stack">
      <p class="privacy">{ui.groups.privacy(settings.groupShareTitles!==false)}</p>
-     {#if owner}<small>{ui.groups.ownerLeaveHelp}</small><button class="text-button danger" disabled={!!busy} onclick={()=>{clearNote('confirm');confirmation={kind:'delete'}}}>{ui.groups.delete}</button>
-     {:else}<button class="text-button" disabled={!!busy} onclick={()=>{clearNote('confirm');confirmation={kind:'leave'}}}>{ui.groups.leave}</button>{/if}
+     {#if owner}<small>{ui.groups.ownerLeaveHelp}</small><button class="text-button danger" disabled={!!busy} onclick={()=>{clearNote('confirm');confirmation={kind:'delete',groupName:group!.name}}}>{ui.groups.delete}</button>
+     {:else}<button class="text-button" disabled={!!busy} onclick={()=>{clearNote('confirm');confirmation={kind:'leave',groupName:group!.name}}}>{ui.groups.leave}</button>{/if}
     </footer>
    </article>
   {/if}
  {/if}
 </section>
 
-{#if visible&&confirmation&&group}
+{#if visible&&confirmation}
  <Sheet title={confirmationTitle} close={busy?undefined:()=>{confirmation=null}}>
   <div class="group-confirmation stack">
-   {#if confirmation.kind==='delete'}<p>{ui.groups.deleteDetail(group.name)}</p>
-   {:else if confirmation.kind==='leave'}<p>{ui.groups.leaveDetail(group.name)}</p>
-   {:else if confirmation.kind==='transfer'}<p>{ui.groups.transferDetail(confirmation.member?.name||'',group.name)}</p>
-   {:else}<p>{ui.groups.removeDetail(confirmation.member?.name||'',group.name)}</p>{/if}
-   <button disabled={!!busy} onclick={confirmAction}>{busy==='confirm'?ui.groups.saving:confirmation.kind==='delete'?ui.groups.delete:confirmation.kind==='leave'?ui.groups.leave:confirmation.kind==='transfer'?ui.groups.transfer:ui.groups.removeMember}</button>
+   {#if confirmation.kind==='delete'}<p>{ui.groups.deleteDetail(confirmation.groupName)}</p>
+   {:else if confirmation.kind==='leave'}<p>{ui.groups.leaveDetail(confirmation.groupName)}</p>
+   {:else if confirmation.kind==='transfer'}<p>{ui.groups.transferDetail(confirmation.member?.name||'',confirmation.groupName)}</p>
+   {:else}<p>{ui.groups.removeDetail(confirmation.member?.name||'',confirmation.groupName)}</p>{/if}
+   <button disabled={!!busy||confirmation.done} onclick={confirmAction}>{busy==='confirm'?ui.groups.saving:confirmation.kind==='delete'?ui.groups.delete:confirmation.kind==='leave'?ui.groups.leave:confirmation.kind==='transfer'?ui.groups.transfer:ui.groups.removeMember}</button>
    {@render feedback('confirm')}
-   <button class="secondary" disabled={!!busy} onclick={()=>{confirmation=null}}>{ui.groups.cancel}</button>
+   <button class="secondary" disabled={!!busy} onclick={()=>{confirmation=null}}>{confirmation.done?ui.closeDialog:ui.groups.cancel}</button>
   </div>
  </Sheet>
 {/if}

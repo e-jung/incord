@@ -5,11 +5,12 @@ async function tab(page: Page, name: string) {
 }
 async function own(page: Page, title: string, text = 'Grace and peace remain with you.') {
   await tab(page, 'Discover');
+  await page.getByRole('button', { name: 'Add your own', exact: true }).click();
   await page.getByRole('button', { name: 'Your text', exact: true }).click();
   await page.getByLabel('Title or question').fill(title);
   await page.getByLabel('Text to remember').fill(text);
   await page.getByRole('button', { name: 'Add your text', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'My texts', exact: true })).toBeVisible();
+  await expect(page.locator('.action-feedback[role="status"]')).toHaveText('1 item added to your library.');
 }
 async function openOwn(page: Page, title: string) {
   await tab(page, 'Library');
@@ -167,6 +168,7 @@ test('P1-7 wrong visible initial has amber slip feedback without scoring a hidde
 for (const mode of ['passage', 'separate', 'chunks', 'large batch']) {
   test(`P1-10 range addition: ${mode}`, async ({ page }) => {
     await tab(page, 'Discover');
+    await page.getByRole('button', { name: 'Add your own', exact: true }).click();
     await page.getByLabel('Bible reference').fill(mode === 'passage' || mode === 'separate' ? 'Romans 8:28-30' : 'Psalm 119:1-24');
     await page.getByRole('button', { name: 'Find verses', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Add to library', exact: true })).toBeVisible();
@@ -262,7 +264,7 @@ test('P1-15 uncached offline book explains how to download it', async ({ browser
   // A blocked service worker makes the browser's offline emulation deterministic;
   // Chromium otherwise lets worker requests bypass context.setOffline.
   const context=await browser.newContext({serviceWorkers:'block',baseURL});const page=await context.newPage();
-  try{await page.goto('/');await tab(page,'Discover');await page.getByLabel('Bible reference').fill('Isaiah 1:1');await context.setOffline(true);
+  try{await page.goto('/');await tab(page,'Discover');await page.getByRole('button', { name: 'Add your own', exact: true }).click();await page.getByLabel('Bible reference').fill('Isaiah 1:1');await context.setOffline(true);
   await page.getByRole('button',{name:'Find verses',exact:true}).click();await expect(page.getByRole('alert')).toHaveText("This book isn't saved on this device yet. Connect once to download it.");}finally{await context.close()}
 });
 
@@ -319,7 +321,7 @@ test('P2-14/15 tab and detail history restores screens, closes sheets and protec
  await page.goBack();
  await expect(page.getByRole('heading',{name:'Discover',exact:true})).toBeVisible();
  await tab(page,'Discover');
- await page.locator('.featured-cards button').filter({has:page.locator('b',{hasText:'Psalm 23'})}).click();
+ await page.getByRole('button',{name:'Passages',exact:true}).click();await page.locator('.featured-cards button').filter({has:page.locator('b',{hasText:'Psalm 23'})}).click();
  await expect(page.getByRole('dialog',{name:'Psalm 23',exact:true})).toBeVisible();
  await page.goBack();
  await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -345,7 +347,7 @@ for(const removed of [false,true])test(`P1-19 startup identity acquisition requi
 
 test('P2-15 button-dismissed preview consumes its history entry',async({page})=>{
  await tab(page,'Discover');
- await page.locator('.featured-cards button').filter({has:page.locator('b',{hasText:'Psalm 23'})}).click();
+ await page.getByRole('button',{name:'Passages',exact:true}).click();await page.locator('.featured-cards button').filter({has:page.locator('b',{hasText:'Psalm 23'})}).click();
  await expect(page.getByRole('dialog',{name:'Psalm 23',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'Close dialog',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>!!history.state?.sheet)).toBe(false);
@@ -355,7 +357,7 @@ test('P2-15 button-dismissed preview consumes its history entry',async({page})=>
 
 test('P2-15 preview add replaces the sheet entry with collection detail',async({page})=>{
  await tab(page,'Discover');
- await page.locator('.featured-cards button').filter({has:page.locator('b',{hasText:'Psalm 23'})}).click();
+ await page.getByRole('button',{name:'Passages',exact:true}).click();await page.locator('.featured-cards button').filter({has:page.locator('b',{hasText:'Psalm 23'})}).click();
  await page.getByRole('button',{name:'Add to my library',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Psalm 23',exact:true})).toBeVisible();
  await page.goBack();

@@ -29,7 +29,7 @@ test('text sizes persist and extra large keeps 375x667 practice usable',async({p
  await page.getByRole('button',{name:'Account settings',exact:true}).click();
  for(const size of ['small','default','large','extra-large']){await page.getByRole('combobox',{name:'Text size',exact:true}).selectOption(size);await shot(page,info.project.name,`text-${size}`)}
  await page.reload();await page.getByRole('button',{name:'Account settings',exact:true}).click();await expect(page.getByRole('combobox',{name:'Text size',exact:true})).toHaveValue('extra-large');
- await tab(page,'Discover');await page.getByRole('button',{name:'Your text',exact:true}).click();await page.getByLabel('Title or question').fill('A question that wraps across more than one line');await page.getByLabel('Text to remember').fill('Grace and peace be with you always.');await page.getByRole('button',{name:'Add your text',exact:true}).click();await page.getByRole('button').filter({has:page.locator('b',{hasText:'A question that wraps'})}).click();
+ await tab(page,'Discover');await page.getByRole('button', { name: 'Add your own', exact: true }).click();await page.getByRole('button',{name:'Your text',exact:true}).click();await page.getByLabel('Title or question').fill('A question that wraps across more than one line');await page.getByLabel('Text to remember').fill('Grace and peace be with you always.');await page.getByRole('button',{name:'Add your text',exact:true}).click();await expect(page.locator('.action-feedback[role="status"]')).toHaveText('1 item added to your library.');await page.getByRole('navigation').getByRole('button',{name:'Library',exact:true}).click();await page.getByRole('button',{name:/^My texts/}).click();await page.getByRole('button').filter({has:page.locator('b',{hasText:'A question that wraps'})}).click();
  await expect(page.locator('.practice')).toBeVisible();
  const layout=await page.evaluate(()=>{const verse=document.querySelector('.verse')!.getBoundingClientRect(),keyboard=document.querySelector('.keyboard')!.getBoundingClientRect(),title=document.querySelector('.prompt h1')!.getBoundingClientRect();return {verse:verse.height,keyboard:keyboard.bottom,title:title.top,width:document.documentElement.scrollWidth}});
  expect(layout.verse).toBeGreaterThan(80);expect(layout.keyboard).toBeLessThanOrEqual(667);expect(layout.title).toBeGreaterThanOrEqual(0);expect(layout.width).toBe(375);
@@ -54,7 +54,7 @@ for(const state of ['on','missing','denied'] as const)test(`Account notification
  await page.goto('/');await page.getByRole('button',{name:'Account settings',exact:true}).click();
  await expect(page.getByText(state==='on'?'Reminders on this device: on':state==='missing'?'Permission granted but not subscribed. Turn on again.':/Permission denied\. Enable/,{exact:state!=='denied'})).toBeVisible();
  if(state==='on'){
-  await page.getByRole('button',{name:'Send test notification',exact:true}).click();await expect(page.getByRole('status')).toContainText('Apple rejected it (403 BadJwtToken).');
+  await page.getByRole('button',{name:'Send test notification',exact:true}).click();await expect(page.getByRole('region',{name:'Reminders',exact:true}).getByRole('alert')).toContainText('Apple rejected it (403 BadJwtToken).');
  }
  await page.getByText('Delivery log',{exact:true}).click();await expect(page.locator('details')).toContainText('Apple rejected it (403 BadJwtToken).');await page.getByText('Delivery log',{exact:true}).scrollIntoViewIfNeeded();await shot(page,info.project.name,`notification-${state}`);
 });

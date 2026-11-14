@@ -3,6 +3,7 @@ async function tap(button:Locator){await button.waitFor({state:'visible'});await
 async function account(page:Page){if(page.url()==='about:blank')await page.goto('/');else await tap(page.getByRole('navigation').getByRole('button',{name:'Today',exact:true}));await tap(page.getByRole('button',{name:'Account settings',exact:true}))}
 async function longPassage(page:Page){
  await tap(page.getByRole('navigation').getByRole('button',{name:'Discover',exact:true}));
+ await tap(page.getByRole('button',{name:'Passages',exact:true}));
  await tap(page.locator('.passage-cards').getByRole('button',{name:/Romans 8:31–39/}));
  await tap(page.getByRole('dialog').getByRole('button',{name:'Add to my library',exact:true}));
  await expect(page.getByRole('button',{name:/^Romans 8:31–39/})).toBeVisible();
@@ -97,6 +98,7 @@ test('passage added from a collection stays in that collection',async({page})=>{
  await page.locator('.featured-cards').getByRole('button').filter({has:page.locator('b',{hasText:'The Gospel in 10 verses'})}).click();
  await tap(page.getByRole('dialog').getByRole('button',{name:'Add to my library',exact:true}));
  await page.getByRole('button',{name:'Add items',exact:true}).click();
+ await tap(page.getByRole('button',{name:'Passages',exact:true}));
  await page.locator('.passage-cards').getByRole('button',{name:/Psalm 23/}).click();await tap(page.getByRole('dialog').getByRole('button',{name:'Add to my library',exact:true}));
  await expect(page.getByRole('heading',{name:'The Gospel in 10 verses',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:/^Psalm 23:1–6/})).toBeVisible();
 });

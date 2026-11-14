@@ -26,10 +26,14 @@ async function account(page: Page) {
 }
 async function addOwn(page: Page, title = 'A quiet word', text = 'Grace and peace be with you always.') {
   await tab(page, 'Discover');
+  await page.getByRole('button', { name: 'Add your own', exact: true }).click();
   await page.getByRole('button', { name: 'Your text', exact: true }).click();
   await page.getByLabel('Title or question').fill(title);
   await page.getByLabel('Text to remember').fill(text);
   await page.getByRole('button', { name: 'Add your text', exact: true }).click();
+  await expect(page.locator('.action-feedback[role="status"]')).toHaveText('1 item added to your library.');
+  await tab(page, 'Library');
+  await page.getByRole('button', { name: /^My texts/ }).click();
   await expect(page.getByRole('heading', { name: 'My texts', exact: true })).toBeVisible();
 }
 async function beginOwn(page: Page, title = 'A quiet word') {
@@ -109,9 +113,12 @@ test('empty Today, every tab, settings persistence, local export, and own-text v
   await expect(page.getByText('No items yet.')).toBeVisible();
   await screen(page, info, 'library-empty');
   await page.getByRole('button', { name: '+ Add', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Add your own', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByLabel('Bible reference')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Discover', exact: true })).toBeVisible();
   await tab(page, 'Discover');
   await screen(page, info, 'discover-verses');
+  await page.getByRole('button', { name: 'Add your own', exact: true }).click();
   await page.getByRole('button', { name: 'Your text', exact: true }).click();
   await page.getByRole('button', { name: 'Add your text', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText('Add a title and some text.');
@@ -146,7 +153,7 @@ test('empty Today, every tab, settings persistence, local export, and own-text v
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Export your data', exact: true }).click();
   expect((await download).suggestedFilename()).toBe('incord.json');
-  await expect(page.getByRole('status')).toHaveText('Your export is ready.');
+  await expect(page.getByRole('region',{name:'Data',exact:true}).getByRole('status').filter({hasText:'Your export is ready.'})).toHaveText('Your export is ready.');
   await tab(page, 'Today');
   await expect(page.getByText('0 of 5 this week')).toBeVisible();
 });
@@ -156,6 +163,7 @@ test('own words persist offline, collection detail buttons, restart and remove',
   await screen(page, info, 'library-own');
   await screen(page, info, 'collection-own');
   await page.getByRole('button', { name: 'Add items', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Add your own', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('heading', { name: 'Discover', exact: true })).toBeVisible();
   await tab(page, 'Library');
   await page.getByRole('button', { name: /My texts.*0 of 1 learned/ }).click();
@@ -186,12 +194,13 @@ test('own words persist offline, collection detail buttons, restart and remove',
 
 test('add BSB verse by reference and complete all four ladder steps', async ({ page }, info) => {
   await tab(page, 'Discover');
+  await page.getByRole('button', { name: 'Add your own', exact: true }).click();
   await page.getByLabel('Bible reference').fill('John 3:16');
   await page.getByRole('button', { name: 'Find verses', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Add to library', exact: true })).toBeVisible();
   await screen(page, info, 'verse-search-results');
   await page.getByRole('button', { name: 'Add to library', exact: true }).click();
-  await expect(page.getByRole('status')).toHaveText(/\d+ items? added to your library\./);
+  await expect(page.getByRole('status').filter({hasText:/^\d+ items? added to your library\.$/})).toHaveText(/\d+ items? added to your library\./);
   await tab(page, 'Today');
   await expect(page.getByText('1 to practice', { exact: true })).toBeVisible();
   await expect(page.getByText('About 2 min', { exact: true })).toBeVisible();
@@ -339,7 +348,7 @@ test('email signup, sync, signout, signin, export and account deletion', async (
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.getByRole('button', { name: 'Delete account', exact: true }).click();
   await page.getByRole('button', { name: 'Yes, delete account', exact: true }).click();
-  await expect(page.getByRole('status')).toHaveText('Account deleted. Local practice is still on this device.');
+  await expect(page.getByRole('region',{name:'Data',exact:true}).getByRole('status').filter({hasText:'Account deleted. Local practice is still on this device.'})).toHaveText('Account deleted. Local practice is still on this device.');
   const cached=await page.evaluate(async()=>{const db=await new Promise<IDBDatabase>(resolve=>{const r=indexedDB.open('byheart',1);r.onsuccess=()=>resolve(r.result)});const value:any=await new Promise(resolve=>{const r=db.transaction('state').objectStore('state').get('current');r.onsuccess=()=>resolve(r.result)});db.close();return value.account});
   expect(cached).toBeNull();
   expect(await (await page.request.get('/api/me')).json()).toMatchObject({ user: null });
@@ -377,11 +386,11 @@ test('push permission, mock subscription, test notification and disable', async 
   await account(page);
   await register(page, info);
   await page.getByRole('button', { name: 'Enable reminders', exact: true }).click();
-  await expect(page.getByRole('status')).toHaveText('Gentle reminders enabled.');
+  await expect(page.getByRole('region',{name:'Reminders',exact:true}).getByRole('status').filter({hasText:'Gentle reminders enabled.'})).toHaveText('Gentle reminders enabled.');
   expect(subscriptions).toEqual([{ subscription: { endpoint: 'https://push.example.invalid/byheart-test', keys: { p256dh: 'mock-p256dh', auth: 'mock-auth' } } }]);
   await screen(page, info, 'account-push-enabled');
   await page.getByRole('button', { name: 'Send test notification', exact: true }).click();
-  await expect(page.getByRole('status')).toHaveText("Sent to Apple. If it didn't appear, check Settings → Notifications → Incord.");
+  await expect(page.getByRole('region',{name:'Reminders',exact:true}).getByRole('status').filter({hasText:"Sent to Apple. If it didn't appear, check Settings → Notifications → Incord."})).toHaveText("Sent to Apple. If it didn't appear, check Settings → Notifications → Incord.");
   expect(notificationTests).toBe(1);
   await page.getByRole('button', { name: 'Disable reminders', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Enable reminders', exact: true })).toBeVisible();
@@ -428,6 +437,7 @@ test('all featured covers and document choices, collection sessions and Next ite
   await expect(page.locator('.featured-cards .cover')).toHaveCount(3);
   for (let index = 0; index < covers.length; index++) {
     await tab(page, 'Discover');
+    await page.getByRole('button', { name: ['Topics', 'Passages', 'Catechisms & creeds'][index], exact: true }).click();
     await page.locator('.featured-cards').getByRole('button').filter({ has: page.locator('b', { hasText: covers[index] }) }).click();
     await expect(page.getByRole('dialog', { name: covers[index], exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Add to my library', exact: true }).click();
@@ -455,6 +465,7 @@ test('all featured covers and document choices, collection sessions and Next ite
     await expect(page.locator('.document-add').first()).toBeVisible();
     await screen(page, info, `document-${doc.split(' ')[0].replace(/[^a-z]/gi, '').toLowerCase()}`);
   }
+  await page.getByRole('button', { name: 'Add your own', exact: true }).click();
   await page.getByRole('button', { name: 'Verses', exact: true }).click();
   await page.getByLabel('Bible reference').fill('not a Bible reference');
   await page.getByRole('button', { name: 'Find verses', exact: true }).click();
@@ -468,7 +479,7 @@ test('all featured covers and document choices, collection sessions and Next ite
     await expect(page.locator('.row')).toHaveCount(3);
     await screen(page, info, `verse-search-${translation.toLowerCase()}`);
     await page.getByRole('button', { name: 'Add to library', exact: true }).click();
-    await expect(page.getByRole('status')).toHaveText(/\d+ items? added to your library\./);
+    await expect(page.getByRole('status').filter({hasText:/^\d+ items? added to your library\.$/})).toHaveText(/\d+ items? added to your library\./);
     // Switching modes clears previous search results before the next request.
     await page.getByRole('button', { name: 'Your text', exact: true }).click();
     await page.getByRole('button', { name: 'Verses', exact: true }).click();
@@ -479,6 +490,7 @@ test('all featured covers and document choices, collection sessions and Next ite
 test('375px segments fit and email input clears floating navigation', async ({page}, info) => {
   await page.setViewportSize({width:375,height:812});
   await tab(page, 'Discover');
+  await page.getByRole('button', { name: 'Add your own', exact: true }).click();
   for (const label of ['Verses','Your text']) {
     const button=page.getByRole('button',{name:label,exact:true});
     await button.click();

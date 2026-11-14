@@ -37,7 +37,7 @@ test('N18 missing book displays a friendly recoverable message', async ({ browse
   await context.route('**/content/bsb/isa.json', route => route.fulfill({ status: 404, contentType: 'text/plain', body: 'Not found' }));
   await page.goto('/');
   await page.getByRole('navigation').getByRole('button', { name: 'Discover', exact: true }).click();
-  await page.getByLabel('Bible reference').fill('Isaiah 1:1');
+  await page.getByRole('button', { name: 'Add your own', exact: true }).click();await page.getByLabel('Bible reference').fill('Isaiah 1:1');
   await page.getByRole('button', { name: 'Find verses', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText("This book isn't saved on this device yet. Connect once to download it.");
   } finally {await context.close()}

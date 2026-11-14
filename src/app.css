@@ -192,3 +192,10 @@ button.key.haptic-pressed{background:var(--acc);color:var(--on-acc)}
 .keyboard-toggle{width:44px;min-width:44px;flex:none;font-size:13px;padding:0}
 .keyrow.has-toggle::after{content:"";width:44px;flex:none}
 .practice-instruction{font-size:13px;color:var(--ink2);line-height:1.4}
+
+/* Feedback belongs to the action, never the page header. */
+.action-feedback{font-size:14px;line-height:1.5;overflow-wrap:anywhere;scroll-margin-block:20px;color:var(--ink2)}.action-feedback.failed{color:var(--slip)}
+.discover-section-heading{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin:20px 0 12px}.discover-section-heading h2{font-size:22px;flex:1}.discover-section-heading .translation-picker{flex:none}.discover-section-heading select{min-width:82px;padding:8px;max-width:110px}.discover-section-heading>.action-feedback{flex-basis:100%}
+.featured-cards>.discovery-choice{flex:0 0 142px}.discovery-choice{min-width:0}.discovery-choice>.cover{width:100%;height:100%}.discovery-choice:has(.action-feedback)>.cover{height:auto}.discovery-choice>.action-feedback{margin-top:8px}
+
+.mcp-app.revoked-app:has(.action-feedback){padding-block:12px}.mcp-app.revoked-app:not(:has(.action-feedback)){display:none}
