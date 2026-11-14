@@ -1,3 +1,4 @@
+import {testIp} from './network';
 import {test,expect,type Page} from '@playwright/test';
 
 const thanks='Thanks — Eric reads every one.';
@@ -24,7 +25,7 @@ async function stats(page:Page,message:string){
 }
 
 test.use({serviceWorkers:'block',viewport:{width:393,height:852}});
-test.beforeEach(async({context})=>{await context.setExtraHTTPHeaders({'CF-Connecting-IP':'feedback-ui-'+crypto.randomUUID()})});
+test.beforeEach(async({context})=>{await context.setExtraHTTPHeaders({'CF-Connecting-IP':testIp()})});
 
 test('signed-out feedback sends only chosen fields to the real Worker and appears in private stats',async({page})=>{
  await settings(page);const f=form(page);

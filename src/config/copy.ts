@@ -143,7 +143,7 @@ export const copy = {
 
  groupShareTitles:"Show what I'm memorizing to my groups",groupShareHelp:'Shares titles and translations, including learned items. Never the text or your review details.',
  groupReceivePrayer:'Prayer encouragements',groupPrayerHelp:'Let group members send you a quiet prayer encouragement. Push reminders must also be on.',
- groupInviteSignin:'Sign in to join your group',groupInviteSigninHelp:'Use Google or an email code below. Your invitation will be waiting after sign-in.',
+ groupInviteSignin:'Sign in to join your group',groupInviteSigninHelp:'Use Google, email, or a sign-in code below. Your invitation will be waiting after sign-in.',
  groupGoalChoose:'Choose a group goal',groupGoalHelp:'Choose a passage, topic, featured collection, or a range from a catechism or creed.',
  groupGoalUse:'Use as group goal',groupGoalSaving:'Saving goal…',groupGoalError:'The group goal could not be saved. Try again.',
  groupGoalStart:'From question or article',groupGoalEnd:'Through question or article',
@@ -385,6 +385,13 @@ export const copy = {
   passages: 'Passages',
   passageTranslation: 'Passage translation',
   passageDetail: 'Memorize each passage as one whole item.',
+  codeAccount: {
+    signoutWarning:"Save your sign-in code before signing out. This device’s saved copy will be removed. Without another sign-in method, a lost code cannot be recovered.", everywhereDetail:"All devices will need to sign in again with your sign-in code.",
+    googleCollision:"That Google account already belongs to another account. Use a different Google account to link this one.",googleExpired:"Your sign-in changed or expired. Sign in to this account again, then try linking Google.",googleFailed:"Google could not be linked. Your account is unchanged. Please try again.",
+   create:"Create an account with a sign-in code",creating:"Creating your account…",signin:"Sign in with a code",field:"Your sign-in code",placeholder:"Three words and four digits",signingIn:"Signing in…",
+   title:"Sign-in code",add:"Add a sign-in code",saveTitle:"Save your sign-in code",saveDetail:"This code opens your account on another device. Keep it private and save a copy somewhere safe.",saved:"I saved this code. It can't be recovered.",continue:"Continue",reveal:"Reveal code",hide:"Hide code",copy:"Copy code",copied:"Code copied.",share:"Share code",shared:"Code shared.",print:"Print / Save as card",printTitle:"Your Incord sign-in code",printHelp:"Keep this card somewhere private. Anyone with this code can sign in to your account.",
+   missing:"This device doesn't have a saved copy. You can create a new code below.",regenerate:"Regenerate code",regenerateTitle:"Replace your sign-in code?",regenerateDetail:"Your old code will stop working. Devices already signed in stay signed in. Save the new code before continuing.",replace:"Replace code",cancel:"Cancel",remove:"Remove sign-in code",removeTitle:"Remove your sign-in code?",removeDetail:"You'll use email or Google to sign in instead. Your saved practice won't change.",removed:"Sign-in code removed.",backup:"Add email or Google so you can't get locked out",dismiss:"Remind me in 30 days",addGoogle:"Add Google",busy:"Saving…",copyError:"Couldn't copy the code. Select it and copy it manually.",deviceOnly:"Only a saved copy on this device can be revealed. Incord cannot recover a lost code.",
+  },
   emailSignin: 'Sign in with email',
   addEmail: 'Add email sign-in',
   emailAddress: 'Email address',

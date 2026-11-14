@@ -1,3 +1,4 @@
+import {testIp} from './network';
 import { test, expect, type Page, type Locator } from '@playwright/test';
 async function tap(button:Locator){await button.waitFor({state:'visible'});await button.page().evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));const overlay=button.locator('xpath=following-sibling::*[1][self::input[contains(@class,"haptic-overlay")]]');if(await overlay.count())await overlay.tap();else await button.click()}
 async function account(page:Page){if(page.url()==='about:blank')await page.goto('/');else await tap(page.getByRole('navigation').getByRole('button',{name:'Today',exact:true}));await tap(page.getByRole('button',{name:'Account settings',exact:true}))}
@@ -14,7 +15,7 @@ async function typeWords(page:Page,count:number){
  const words=await page.locator('[data-word]').allTextContents();
  for(const word of words.slice(0,count)){const key=Array.from(word.replace(/^[^\p{L}\p{N}]+/u,''))[0].toLowerCase();await page.keyboard.press(key)}
 }
-test.beforeEach(async({context})=>{await context.setExtraHTTPHeaders({'CF-Connecting-IP':'product-'+crypto.randomUUID()})});
+test.beforeEach(async({context})=>{await context.setExtraHTTPHeaders({'CF-Connecting-IP':testIp()})});
 for(const width of [320,375,393])test(`Settings controls fit ${width}px including Safari time input`,async({page})=>{
  await page.setViewportSize({width,height:852});await account(page);
  const controls=page.locator('.settings-group input,.settings-group select,.settings-group textarea,.settings-group button');
@@ -87,7 +88,7 @@ test('keyboard feedback edited AFTER signing in syncs field clocks and survives 
  const settings=(await(await page.request.get('/api/export')).json()).settings;
  expect(settings.fieldUpdatedAt.keySounds).toBeGreaterThan(0);expect(settings.fieldUpdatedAt.haptics).toBeGreaterThan(0);
  await page.reload();await account(page);await expect(page.getByLabel('Key sounds',{exact:true})).toBeChecked();await expect(page.getByLabel('Haptics',{exact:true})).toBeChecked();
- const context=await browser.newContext({baseURL,viewport:{width:393,height:852},extraHTTPHeaders:{'CF-Connecting-IP':'feedback-secondary-'+crypto.randomUUID()}});
+ const context=await browser.newContext({baseURL,viewport:{width:393,height:852},extraHTTPHeaders:{'CF-Connecting-IP':testIp()}});
  try{await context.addInitScript(enableVibrate);const second=await context.newPage();await account(second);await signin(second);
   for(const reload of [false,true]){if(reload){await second.reload();await account(second)}await expect(second.getByLabel('Key sounds',{exact:true})).toBeChecked();await expect(second.getByLabel('Haptics',{exact:true})).toBeChecked()}
   await expect.poll(async()=>(await(await second.request.get('/api/export')).json()).settings.fieldUpdatedAt).toMatchObject({keySounds:settings.fieldUpdatedAt.keySounds,haptics:settings.fieldUpdatedAt.haptics});

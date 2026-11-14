@@ -1,9 +1,10 @@
+import {testIp} from './network';
 import {test,expect,type Page} from '@playwright/test';
 
 async function settings(page:Page){await page.goto('/');await page.getByRole('button',{name:'Account settings',exact:true}).click()}
 async function start(page:Page,email:string){await page.getByLabel('Email address',{exact:true}).fill(email);await page.getByRole('button',{name:'Email me a code',exact:true}).click();await expect(page.getByLabel('Six-digit code')).toBeVisible();return (await (await page.request.get('/api/test/last-code?email='+encodeURIComponent(email))).json()).code as string}
 async function signout(page:Page){await page.getByRole('button',{name:'Sign out',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'Sign out',exact:true}).click();await expect(page.getByLabel('Email address',{exact:true})).toBeVisible()}
-test.beforeEach(async({context})=>{await context.setExtraHTTPHeaders({'CF-Connecting-IP':'email-ui-'+crypto.randomUUID()})});
+test.beforeEach(async({context})=>{await context.setExtraHTTPHeaders({'CF-Connecting-IP':testIp()})});
 
 test('email signup is first in settings, six digits auto-submit, returning email preserves account',async({page})=>{
  await settings(page);await expect(page.locator('.settings-group').first()).toHaveAttribute('aria-labelledby','account-heading');
@@ -38,6 +39,6 @@ test('feature toggle hides email while Google sign-in remains available',async({
 
 test('a second independent browser context signs into the same email account',async({page,browser,baseURL})=>{
  await settings(page);const email=`second-device-${crypto.randomUUID()}@example.com`,code=await start(page,email);await page.getByLabel('Six-digit code').fill(code);await expect(page.getByText('Signed in.',{exact:true})).toBeVisible();const first=(await(await page.request.get('/api/me')).json()).user;
- const context=await browser.newContext({baseURL,viewport:{width:393,height:852},extraHTTPHeaders:{'CF-Connecting-IP':'second-device-'+crypto.randomUUID()}});
+ const context=await browser.newContext({baseURL,viewport:{width:393,height:852},extraHTTPHeaders:{'CF-Connecting-IP':testIp()}});
  try {const other=await context.newPage();await settings(other);const code=await start(other,email);await other.getByLabel('Six-digit code').fill(code);await expect(other.getByText('Signed in.',{exact:true})).toBeVisible();expect((await(await other.request.get('/api/me')).json()).user.id).toBe(first.id);expect((await(await page.request.get('/api/me')).json()).user.id).toBe(first.id);await expect(other.getByRole('dialog')).toHaveCount(0)}finally{await context.close()}
  });

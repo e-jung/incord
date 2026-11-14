@@ -1,3 +1,4 @@
+import {testIp} from './network';
 import { test, expect, type Page, type TestInfo } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
 
@@ -99,7 +100,7 @@ async function signout(page: Page) {
 
 test.beforeEach(async ({ page, context }) => {
   // Isolate local rate-limit buckets from repeated runs and API security tests.
-  await context.setExtraHTTPHeaders({ 'CF-Connecting-IP': `ui-${crypto.randomUUID()}` });
+  await context.setExtraHTTPHeaders({ 'CF-Connecting-IP': testIp() });
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Today', exact: true })).toBeVisible();
 });

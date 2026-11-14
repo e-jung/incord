@@ -1,3 +1,4 @@
+import {testIp} from './network';
 import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
 import {
   Client, StreamableHTTPClientTransport, discoverOAuthServerInfo,
@@ -75,7 +76,7 @@ async function exchange(f: Flow, returned: URL) {
 }
 async function connect(resource: string, token: string) {
   const client = new Client({ name: 'incord-playwright', version: '1.0.0' });
-  const ip='mcp-sdk-'+crypto.randomUUID();
+  const ip=testIp();
   try {
     await client.connect(new StreamableHTTPClientTransport(new URL(resource), {
       authProvider: { token: async () => token },
@@ -125,7 +126,7 @@ async function approveSignedIn(page: Page, f: Flow) {
 }
 
 test.beforeEach(async ({ context }) => {
-  await context.setExtraHTTPHeaders({ 'CF-Connecting-IP': 'mcp-' + crypto.randomUUID() });
+  await context.setExtraHTTPHeaders({ 'CF-Connecting-IP': testIp() });
 });
 
 test('MCP discovery advertises OAuth and refuses anonymous access', async ({ request, baseURL }) => {

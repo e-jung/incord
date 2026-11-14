@@ -8,7 +8,7 @@ An offline-first, open-source Scripture/catechism memory PWA. Svelte 5 + Vite + 
 - Practice uses Incord keys only (plus physical keyboard input). Ignore retired typingMode/peekNoteDismissed settings and their field clocks on load/sync. The keyboard has three rows only; the conditional 123/ABC key lives left of Z in row three. The first-letter instruction uses the feedback lane only until the session’s first key; wrong letters reveal the word without a separate Peek control. The unlinked /haptics-lab.html compares native switch variants on hardware.
 - Pure engine in src/engine, rules/copy in src/config. FSRS review. IndexedDB is authoritative while offline; sync uses LWW items, append-only idempotent review events.
 - Bundled BSB/KJV/WEB and historic public-domain catechisms/creeds. ESV is fetched through the Crossway API under its published conditions; never bundle it or persist its text server-side. Never introduce other copyrighted translations without publisher authorization. See content/SOURCES.md.
-- All local functionality works signed out. Google OAuth and email codes conditional on credentials. No passwords.
+- All local functionality works signed out. Email-free sign-in codes work with SESSION_SECRET alone; Google OAuth and email codes are conditional on provider credentials. No passwords.
 - Gentle-return backlog is capped, not presented as overdue debt.
 - Screens compose reusable components; keep visual styling in app.css/tokens.css.
 
@@ -28,6 +28,7 @@ npm run check; npm test; npm run build.
 npm run serve — local Wrangler at http://localhost:8793 (build hook runs automatically).
 For frontend HMR: npm run dev (API/account functionality requires Wrangler).
 npm run e2e — starts disposable localhost Worker when needed.
+On shared/CPU-constrained hosts, run the three Playwright projects sequentially with `--project=iPhone15-light`, `--project=iPhone15-dark`, then `--project=WebKit-iPhone15`. Inspect request/action traces before changing production tap or feedback timing to address a test timeout. Groups `aria-busy` covers the complete list/detail refresh; wait for idle between independently tested resume triggers.
 See README.md for local secrets. Never commit .dev.vars or production credentials.
 
 ## Security
@@ -40,6 +41,7 @@ Preserve migration history; additive migrations only. Never log text, recovery c
 - Use `addItems`/`findLiveItem`; ids are unique even across tombstones. Re-add revives with strictly newer revision and reset progress. Sort collections canonically, not by sync arrival.
 - IndexedDB stores cached account identity. Config fetch is independent; reconnect/focus/visibility retries identity and queue. Never sync unclaimed device items until explicit Add/Keep separate choice. Signout confirms and clears account data from this device after sync.
 - Settings use per-field timestamps; ordinary item saves must not advance preference clocks. Assign the `persist()` result back before syncing. Email/Google sign-in adds a device session; only logout-everywhere revokes other devices.
+- Sign-in codes use three cryptographically chosen words from the shared 2048-word kid-safe list plus four unbiased digits (46.28 bits). Store only a domain-separated HMAC in RegistryDO; never log or sync plaintext. A device-only code cache is gated by account ID and non-secret revision, cleared on signout/revocation/removal, and revealed only after a tap. Required save acknowledgment survives reload and gates sync, local-item ownership merge, Groups invite and OAuth continuation. Regenerating an existing account never repeats the new-account merge. Code mappings are non-orphans; removal requires another sign-in method.
 - Groups has its own fourth bottom tab; Today only shows a compact attention link for manager approvals, received prayers, or a started goal ≥80% learned with 1–2 items left. Groups refreshes on tab entry, visible focus/resume, pull from the page top, and mutations. Keep pending badges in the Groups nav icon and join deep links on Groups. Attention exposes only authorized counts, with received-prayer attention using the recipient’s local day while preserving the existing UTC daily dedup.
 - Action feedback stays beside its originating control: errors use alert, successes use status and expire after ~3 seconds; global notices are reserved for app-level sync/offline/sign-in state. Discover defaults to Topics, retains its chip during navigation, and keeps reference/own-text forms under Add your own. Horizontal covers/chips bleed to page edges with the same 24px resting/scroll gutter and proximity snapping; never let their native overlays turn a swipe into an action.
 - The installed PWA limits page pinch zoom via viewport/touch-action/non-passive WebKit gesture handlers. Keep form fields at least 16px and preserve the Small–Extra large Text size alternative.

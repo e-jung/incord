@@ -1,3 +1,4 @@
+import {testIp} from './network';
 import {test,expect,type Page,type APIResponse,type BrowserContext,type Locator,type Response} from '@playwright/test';
 
 const groups=(page:Page)=>page.getByRole('region',{name:'Groups',exact:true});
@@ -75,14 +76,14 @@ async function fits(page:Page,width:number){
 }
 
 test.use({serviceWorkers:'block'});
-test.beforeEach(async({context})=>context.setExtraHTTPHeaders({'CF-Connecting-IP':'groups-ui-'+crypto.randomUUID()}));
+test.beforeEach(async({context})=>context.setExtraHTTPHeaders({'CF-Connecting-IP':testIp()}));
 
 test('three isolated members: link/code invites, Discover goal sync, prayer, title privacy, leave and removal',async({page,browser,baseURL},info)=>{
  // Multi-context real-Worker flows are slower in Linux WebKit on shared CI.
  // Keep every assertion/action deadline; allow the complete flow to finish.
  test.setTimeout(browser.browserType().name()==='webkit'?300000:180000);
  const contexts:BrowserContext[]=[];let groupId='';
- const make=async()=>{const context=await browser.newContext({baseURL,viewport:{width:393,height:852},colorScheme:info.project.use.colorScheme as 'light'|'dark',isMobile:true,hasTouch:true,serviceWorkers:'block',extraHTTPHeaders:{'CF-Connecting-IP':'groups-other-'+crypto.randomUUID()}});contexts.push(context);return context.newPage()};
+ const make=async()=>{const context=await browser.newContext({baseURL,viewport:{width:393,height:852},colorScheme:info.project.use.colorScheme as 'light'|'dark',isMobile:true,hasTouch:true,serviceWorkers:'block',extraHTTPHeaders:{'CF-Connecting-IP':testIp()}});contexts.push(context);return context.newPage()};
  const anna=await make(),ben=await make(),name='Small circle '+crypto.randomUUID().slice(0,8);
  try{
   await page.goto('/');await login(page,'Eric');const created=await create(page,name);groupId=created.group.id;
@@ -136,7 +137,7 @@ test('three isolated members: link/code invites, Discover goal sync, prayer, tit
 
 test('approval, invite rotation/revocation, Discover catechism range, admin and ownership transfer',async({page,browser,baseURL})=>{
  test.setTimeout(browser.browserType().name()==='webkit'?300000:150000);await page.goto('/');await login(page,'Owner');const name='Approval circle '+crypto.randomUUID().slice(0,8);const created=await create(page,name,true);const id=created.group.id;
- const context=await browser.newContext({baseURL,viewport:{width:320,height:852},serviceWorkers:'block',extraHTTPHeaders:{'CF-Connecting-IP':'groups-approval-'+crypto.randomUUID()}}),friend=await context.newPage();
+ const context=await browser.newContext({baseURL,viewport:{width:320,height:852},serviceWorkers:'block',extraHTTPHeaders:{'CF-Connecting-IP':testIp()}}),friend=await context.newPage();
  try{
   const old=created.invite;const current=await invite(page,name);await friend.goto('/');await login(friend,'Friend');await openGroups(friend);await form(friend,'join');
   await groups(friend).getByLabel('Invite code',{exact:true}).fill(old.code);await groups(friend).getByRole('button',{name:'Join group',exact:true}).click();await expect(groups(friend).getByRole('alert')).toBeVisible();

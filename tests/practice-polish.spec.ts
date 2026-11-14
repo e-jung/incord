@@ -3,7 +3,13 @@ import {mkdir} from 'node:fs/promises';
 import {readFileSync} from 'node:fs';
 const longQuestion=JSON.parse(readFileSync('public/content/documents.json','utf8')).find((d:any)=>d.id==='wlc').items.find((i:any)=>i.id==='wlc-79');
 test.use({serviceWorkers:'block'});
-async function tap(button:Locator){await button.waitFor();await button.page().evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));const overlay=button.locator('xpath=following-sibling::input[contains(@class,"haptic-overlay")][1]');if(await overlay.count())await overlay.tap();else await button.click()}
+// A trusted centre tap reaches either the button or its just-attached sibling switch.
+// Keep visibility, enabled, stability and hit-target checks without delaying native taps.
+async function tap(button:Locator){
+ await expect(button).toBeVisible();await expect(button).toBeEnabled();await button.scrollIntoViewIfNeeded();
+ const point=await button.evaluate(button=>{const box=button.getBoundingClientRect(),x=box.x+box.width/2,y=box.y+box.height/2,target=document.elementFromPoint(x,y);if(!target||!button.contains(target)&&!(target===button.nextElementSibling&&target.classList.contains('haptic-overlay')))throw Error('Practice control is covered by an unrelated element');return{x,y}});
+ await button.page().touchscreen.tap(point.x,point.y);
+}
 // A fresh document in the same context verifies IndexedDB persistence without
 // Linux MiniBrowser's repeated same-document-history reload crash.
 async function reopen(page:Page){const context=page.context();await page.close();return context.newPage()}

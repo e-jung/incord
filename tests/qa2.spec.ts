@@ -1,3 +1,4 @@
+import {testIp} from './network';
 import {test,expect,type Page} from '@playwright/test';
 import {mkdir} from 'node:fs/promises';
 async function emailSignin(page: Page, email: string) {
@@ -11,7 +12,7 @@ async function emailSignin(page: Page, email: string) {
   await page.getByLabel('Six-digit code').fill(code);
   await expect(page.getByText('Signed in.',{exact:true})).toBeVisible();
 }
-test.beforeEach(async({context})=>{await context.setExtraHTTPHeaders({'CF-Connecting-IP':'qa2-'+crypto.randomUUID()})});
+test.beforeEach(async({context})=>{await context.setExtraHTTPHeaders({'CF-Connecting-IP':testIp()})});
 const shots='test-results/screens/qa5';
 async function shot(page:any,info:any,name:string){await mkdir(shots,{recursive:true});await page.screenshot({path:`${shots}/${info.project.name}-${name}.png`})}
 test('N2/N8 Psalm 119 defaults to exclusive chunks and confirms the count above results',async({page},info)=>{
@@ -25,7 +26,7 @@ test('N2/N8 Psalm 119 defaults to exclusive chunks and confirms the count above 
 test('N4 confirms global signout and notifies another device only once',async({page},info)=>{
  await page.goto('/');await page.getByRole('button',{name:'Account settings',exact:true}).click();
  await page.getByLabel('Display name').fill('Account name');await page.getByLabel('Display name').press('Tab');const email=`qa2-${crypto.randomUUID()}@example.com`;await emailSignin(page,email);await expect(page.getByText('Signed in.',{exact:true})).toBeVisible();
- const second=await page.context().browser()!.newContext({extraHTTPHeaders:{'CF-Connecting-IP':'qa2-secondary-'+crypto.randomUUID()}});const other=await second.newPage();await other.goto('/');await other.getByRole('button',{name:'Account settings',exact:true}).click();
+ const second=await page.context().browser()!.newContext({extraHTTPHeaders:{'CF-Connecting-IP':testIp()}});const other=await second.newPage();await other.goto('/');await other.getByRole('button',{name:'Account settings',exact:true}).click();
  await emailSignin(other,email);
  await expect(other.getByText('Signed in.',{exact:true})).toBeVisible();
 

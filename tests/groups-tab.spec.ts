@@ -51,7 +51,7 @@ for(const [kind,attention,text] of [
 });
 test('Groups refreshes on tab entry, focus, visible resume and downward pull',async({page})=>{
  const state=await account(page,{pendingRequests:0,prayersToday:0,goalsNearlyDone:0});await page.goto('/');await expect.poll(state.lists).toBeGreaterThan(0);
- const enter=state.lists();await tab(page,'Groups');await expect.poll(state.lists).toBeGreaterThan(enter);await expect(panel(page).getByRole('article')).toBeVisible();
+ const enter=state.lists();await tab(page,'Groups');await expect.poll(state.lists).toBeGreaterThan(enter);await expect(panel(page).getByRole('article')).toBeVisible();await expect(panel(page).getByRole('article')).toHaveAttribute('aria-busy','false');
  for(const event of ['focus','visibilitychange']){const before=state.lists();await page.evaluate(event=>{(event==='focus'?window:document).dispatchEvent(new Event(event))},event);await expect.poll(state.lists).toBeGreaterThan(before);await expect(panel(page).getByRole('article')).toHaveAttribute('aria-busy','false')}
  await page.evaluate(()=>window.scrollTo(0,0));
  const beforePull=state.lists();await panel(page).evaluate(node=>{const target=node.querySelector('p')||node;const start={identifier:7,target,clientX:100,clientY:80};const dispatch=(type:string,touches:object[],changedTouches:object[]=[])=>{const event=new Event(type,{bubbles:true});Object.defineProperties(event,{touches:{value:touches},changedTouches:{value:changedTouches}});target.dispatchEvent(event)};dispatch('touchstart',[start]);dispatch('touchend',[],[{...start,clientY:180}])});

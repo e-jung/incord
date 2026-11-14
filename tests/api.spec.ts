@@ -1,3 +1,4 @@
+import {testIp} from './network';
 import { test, expect, type Page } from '@playwright/test';
 
 const base = process.env.API_BASE_URL || 'http://localhost:8793';
@@ -17,7 +18,7 @@ async function emailLogin(page: Page, email: string) {
 }
 
 test.describe('Worker API (real local SQLite DOs and email sign-in)', () => {
-  test.beforeEach(async({context})=>{await context.setExtraHTTPHeaders({'CF-Connecting-IP':'api-'+crypto.randomUUID()})});
+  test.beforeEach(async({context})=>{await context.setExtraHTTPHeaders({'CF-Connecting-IP':testIp()})});
   test('auth rate limits isolate and throttle a single caller',async({page})=>{
     await page.goto(base);
     for(let n=0;n<60;n++)expect((await api(page,'/auth/logout',{})).status).toBe(200);

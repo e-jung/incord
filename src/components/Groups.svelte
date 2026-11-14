@@ -229,7 +229,7 @@ const confirmationTitle = $derived(confirmation?.kind==='delete'?ui.groups.delet
    </div>
   </details>{/if}
   {#if group}
-   <article class="panel stack" aria-label={group.name} aria-busy={detailLoading}>
+   <article class="panel stack" aria-label={group.name} aria-busy={loading || detailLoading}>
     <header><h3 class="group-name">{group.name}</h3><small>{ui.groups.memberSummary(group.memberCount,group.role)}</small></header>
     <section class="stack goal" aria-label={ui.groups.goalHeading}>
      <h3>{ui.groups.goalHeading}</h3>

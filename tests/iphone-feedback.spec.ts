@@ -1,3 +1,4 @@
+import {testIp} from './network';
 import {KEY_SAMPLES,DEFAULT_KEY_SAMPLE} from '../public/audio/keyboard-samples.js';
 import {test,expect,type Page} from '@playwright/test';
 // Route-controlled ESV delays must reach Playwright, not a service-worker fetch.
@@ -25,7 +26,7 @@ function mockFeedback(){
   createGain(){return {gain:{value:0,setValueAtTime(){},linearRampToValueAtTime(){},exponentialRampToValueAtTime(){}},connect(){},disconnect(){}}}
  };
 }
-test.beforeEach(async({context})=>{await context.setExtraHTTPHeaders({'CF-Connecting-IP':'iphone-regression-'+crypto.randomUUID()})});
+test.beforeEach(async({context})=>{await context.setExtraHTTPHeaders({'CF-Connecting-IP':testIp()})});
 test('Sound preview works with defaults OFF and haptics stay silent until enabled',async({page})=>{
  await page.addInitScript(mockFeedback);await settings(page);
  await expect(page.getByLabel('Key sounds',{exact:true})).not.toBeChecked();await expect(page.getByLabel('Haptics',{exact:true})).not.toBeChecked();
@@ -81,7 +82,7 @@ test('signed-in default translation syncs from Settings and the single Discover 
  const exported=await(await page.request.get('/api/export')).json();const item=exported.items.find((i:any)=>i.translation==='ESV');expect(item.text).toBe('');expect(item.reference).toContain('Psalm 23');expect(item.esvVerseKeys).toHaveLength(6);
  expect(JSON.stringify(syncBodies)).not.toContain(text);for(const pushed of syncBodies.flatMap(body=>body.items||[]).filter((i:any)=>i.translation==='ESV'))expect(pushed.text).toBe('');expect(syncBodies.some(body=>body.items?.some((i:any)=>i.translation==='ESV'))).toBe(true);expect(requests.length).toBeGreaterThan(0);
  await page.getByRole('button',{name:/^Psalm 23:1[–-]6/}).click();await expect(page.locator('.practice .esv-attribution').getByRole('link',{name:'ESV',exact:true})).toBeVisible();await expect(page.locator('.practice')).toContainText(text);
- const context=await browser.newContext({baseURL,serviceWorkers:'block',viewport:{width:393,height:852},extraHTTPHeaders:{'CF-Connecting-IP':'translation-second-'+crypto.randomUUID()}});
+ const context=await browser.newContext({baseURL,serviceWorkers:'block',viewport:{width:393,height:852},extraHTTPHeaders:{'CF-Connecting-IP':testIp()}});
  let release=()=>{};
  try{
   let secondFetches=0;const held=new Promise<void>(resolve=>release=resolve);await context.route('**/api/esv?*',async route=>{secondFetches++;await held;await route.fulfill({contentType:'text/plain',body:text})});const second=await context.newPage();await settings(second);await signin(second,email);

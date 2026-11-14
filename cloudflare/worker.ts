@@ -1,3 +1,4 @@
+import { generateSignInCode, normalizeCode, validCode } from '../shared/sign-in-code';
 import { GroupsError, handleGroups, initializeGroupsRegistry, handleGroupsRegistry, cleanupGroups, scheduleGroups, dispatchGroupReminders } from './groups';
 export { GroupDO } from './groups';
 import { supportUrl } from '../shared/support';
@@ -32,7 +33,7 @@ export interface Env {
 type ObjectData = Record<string, unknown>;
 type Row = Record<string, string | number | null>;
 type Session = { uid: string; version: number; exp: number };
-type Challenge = { challenge: string; kind: 'google'; verifier: string };
+type Challenge = { challenge: string; kind: 'google'; verifier: string; uid?: string };
 const encoder = new TextEncoder();
 const SESSION_AGE = 30 * 86400;
 const cookieName = 'bh_session';
@@ -44,9 +45,31 @@ export function unb64(data: string): Uint8Array<ArrayBuffer> { return Uint8Array
 const random = (n = 32) => b64(crypto.getRandomValues(new Uint8Array(n)));
 async function digest(value: string) { return b64(new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(value)))); }
 async function hmac(secret: string, data: string) { const key = await crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']); return b64(new Uint8Array(await crypto.subtle.sign('HMAC', key, encoder.encode(data)))); }
+/** Stable auth limiter identity: IPv4 hosts, IPv6 /64s, and mapped IPv4 hosts.
+ * URL's IPv6 parser handles compressed/canonical and embedded IPv4 forms. Invalid
+ * or missing proxy addresses share one fallback rather than minting buckets.
+ */
+export function authIpBucket(address: string | null): string {
+  if (!address) return 'local';
+  const ipv4 = address.split('.');
+  if (ipv4.length === 4 && ipv4.every(part => /^(0|[1-9]\d{0,2})$/.test(part) && Number(part) <= 255)) return address;
+  if (!/^[0-9a-f:.]+$/i.test(address) || !address.includes(':')) return 'local';
+  try {
+    const canonical = new URL('http://[' + address + ']/').hostname.slice(1, -1);
+    const halves = canonical.split('::');
+    const left = halves[0] ? halves[0].split(':') : [];
+    const right = halves[1] ? halves[1].split(':') : [];
+    const words = (halves.length === 2 ? [...left, ...Array(8 - left.length - right.length).fill('0'), ...right] : left).map(word => parseInt(word, 16));
+    if (words.length !== 8) return 'local';
+    // Do not collapse all IPv4-mapped clients into the same ::/64.
+    if (words.slice(0, 5).every(word => word === 0) && words[5] === 0xffff) return [words[6] >> 8, words[6] & 255, words[7] >> 8, words[7] & 255].join('.');
+    return words.slice(0, 4).map(word => word.toString(16).padStart(4, '0')).join(':') + '::/64';
+  } catch { return 'local'; }
+}
 /** Rejection sampling keeps all million possible codes equally likely. */
 export function generateLoginCode() { const value = new Uint32Array(1); do { crypto.getRandomValues(value); } while (value[0] >= 4_294_000_000); return String(value[0] % 1_000_000).padStart(6, '0'); }
 export function normalizeEmail(value: unknown) { assert(typeof value === 'string', 'Enter a valid email address.'); const email = value.trim().toLowerCase(); assert(email.length <= 254 && /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email), 'Enter a valid email address.'); return email; }
+export const signInCodeKey = (env: Env, code: unknown) => hmac(env.SESSION_SECRET, 'signin-code:' + normalizeCode(code));
 export const emailKey = (env: Env, email: string) => hmac(env.SESSION_SECRET, 'email:' + normalizeEmail(email));
 export const loginCodeHash = (env: Env, key: string, code: string) => hmac(env.SESSION_SECRET, 'email-code:' + key + ':' + code);
 export function constantTimeEqual(a: string, b: string) { let diff = a.length ^ b.length; for (let i = 0; i < Math.max(a.length, b.length); i++) diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0); return diff === 0; }
@@ -146,7 +169,7 @@ function secure(response: Response) {
   headers.set('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
   return new Response(response.body, { status: response.status, headers });
 }
-async function issue(env: Env, uid: string, origin: string) { const me = await user(env, uid, '/me'); const token = await signSession({ uid, version: me.version, exp: Math.floor(Date.now() / 1000) + SESSION_AGE }, env.SESSION_SECRET); return json({ user: { ...me.user, ...await identityFlags(env, uid) } }, 200, { 'Set-Cookie': cookie(cookieName, token, SESSION_AGE, origin) }); }
+async function issue(env: Env, uid: string, origin: string, extra: ObjectData = {}) { const me = await user(env, uid, '/me'); const token = await signSession({ uid, version: me.version, exp: Math.floor(Date.now() / 1000) + SESSION_AGE }, env.SESSION_SECRET); return json({ user: { ...me.user, ...await identityFlags(env, uid) }, ...extra }, 200, { 'Set-Cookie': cookie(cookieName, token, SESSION_AGE, origin) }); }
 async function signedIn(request: Request, env: Env) { const s = await readSession(cookies(request)[cookieName], env.SESSION_SECRET); assert(s, 'Sign in required', 401); const me = await user(env, s.uid, '/me'); assert(me.version === s.version, 'Session expired', 401); return s; }
 function originFor(request: Request, env: Env) { const origin = new URL(request.url).origin; if (env.APP_ORIGIN) assert(origin === new URL(env.APP_ORIGIN).origin, 'Wrong host', 403); return origin; }
 async function authChallenge(env: Env, request: Request, kind: string) { const id = cookies(request).bh_flow; assert(id, 'Start sign-in again'); const flow = await registry(env, '/challenge/take', { id }); assert(flow && flow.kind === kind, 'Sign-in expired; start again'); return flow as Challenge; }
@@ -192,14 +215,57 @@ async function api(request: Request, env: Env): Promise<Response> {
     anonymousAllowed: async (limit, windowSeconds) => { try { await registry(env, '/limit', { key: 'esv:' + await digest(env.SESSION_SECRET + ':' + (request.headers.get('CF-Connecting-IP') || 'local')), limit, window: windowSeconds * 1000 }); return true; } catch (error) { if (error instanceof ApiError && error.status === 429) return false; throw error; } },
   });
   if (path.startsWith('/api/auth/')) {
-    await registry(env, '/limit', { key: await digest(env.SESSION_SECRET + ':' + (request.headers.get('CF-Connecting-IP') || 'local')), limit: 60, window: 900_000 });
+    try { await registry(env, '/limit', { key: await digest(env.SESSION_SECRET + ':' + authIpBucket(request.headers.get('CF-Connecting-IP'))), limit: 60, window: 900_000 }); }
+    catch (error) { if (error instanceof ApiError && error.status === 429 && ['/api/auth/code/create', '/api/auth/code/signin'].includes(path)) throw new ApiError(429, 'Unable to sign in with that code. Check it or try again later.'); throw error; }
+    if (path.startsWith('/api/auth/code/') && request.method === 'POST') {
+      const input = await body(request, 2048);
+      const ip = await hmac(env.SESSION_SECRET, 'signin-code-ip:' + authIpBucket(request.headers.get('CF-Connecting-IP')));
+      if (path.endsWith('/create') || path.endsWith('/signin')) {
+        // Code-specific failures share one generic response, including rate failures.
+        try { await registry(env, '/limit', { key: 'code-ip:' + ip, limit: 10, window: 900_000 }); }
+        catch (error) { if (error instanceof ApiError && error.status === 429) throw new ApiError(429, 'Unable to sign in with that code. Check it or try again later.'); throw error; }
+      }
+      if (path === '/api/auth/code/signin') {
+        const result = await registry(env, '/code/signin', { key: await signInCodeKey(env, input.code), valid: validCode(input.code) });
+        await user(env, result.uid, '/init', { name: 'Friend' });
+        return issue(env, result.uid, origin);
+      }
+      if (path === '/api/auth/code/create' || path === '/api/auth/code/regenerate') {
+        let uid: string;
+        if (path.endsWith('/create')) {
+          let existing = false;
+          try { await signedIn(request, env); existing = true; } catch (error) { if (!(error instanceof ApiError && error.status === 401)) throw error; }
+          assert(!existing, 'Sign out before creating another account.', 409);
+          try { await registry(env, '/limit', { key: 'code-global-create', limit: 1000, window: 900_000 }); }
+          catch (error) { if (error instanceof ApiError && error.status === 429) throw new ApiError(429, 'Unable to sign in with that code. Check it or try again later.'); throw error; }
+          uid = crypto.randomUUID();
+        } else uid = (await signedIn(request, env)).uid;
+        // Collisions are astronomically unlikely; never replace somebody else's mapping.
+        let code = '';
+        for (let attempt = 0; attempt < 5; attempt++) {
+          code = generateSignInCode();
+          const result = await registry(env, '/code/set', { uid, key: await signInCodeKey(env, code), revision: crypto.randomUUID() });
+          if (result.ok) break;
+          code = '';
+        }
+        assert(code, 'Unable to create a code. Try again.', 503);
+        await user(env, uid, '/init', { name: 'Friend' });
+        return issue(env, uid, origin, { code });
+      }
+      if (path === '/api/auth/code/remove') {
+        const session = await signedIn(request, env);
+        await registry(env, '/code/remove', { uid: session.uid });
+        return issue(env, session.uid, origin);
+      }
+      throw new ApiError(404, 'Route not found');
+    }
     if ((path === '/api/auth/email/start' || path === '/api/auth/email/verify') && request.method === 'POST') {
       assert(emailEnabled(env, request), 'Email sign-in is not enabled.', 404);
       const input = await body(request, 2048), email = normalizeEmail(input.email), key = await emailKey(env, email);
       const linkUid = input.link === true ? (await signedIn(request, env)).uid : undefined;
       if (path.endsWith('/start')) {
         const code = generateLoginCode(), hash = await loginCodeHash(env, key, code);
-        await registry(env, '/email/start', { key, hash, uid: linkUid, ip: await hmac(env.SESSION_SECRET, 'email-ip:' + (request.headers.get('CF-Connecting-IP') || 'local')), ...(emailTestMode(env, request) ? { testCode: code } : {}) });
+        await registry(env, '/email/start', { key, hash, uid: linkUid, ip: await hmac(env.SESSION_SECRET, 'email-ip:' + authIpBucket(request.headers.get('CF-Connecting-IP'))), ...(emailTestMode(env, request) ? { testCode: code } : {}) });
         if (!emailTestMode(env, request)) await sendLoginCode(env, email, code);
         return json({ ok: true, message: 'Check your email for a six-digit code.' });
       }
@@ -212,23 +278,31 @@ async function api(request: Request, env: Env): Promise<Response> {
     if (path === '/api/auth/logout-everywhere' && request.method === 'POST') { const session = await signedIn(request, env); await user(env, session.uid, '/revoke'); assert((await oauthCall(env,'/revoke-all',{origin,uid:session.uid})).ok,'Unable to disconnect apps. Please try again.',503); return json({ ok: true }, 200, { 'Set-Cookie': cookie(cookieName, '', 0, origin) }); }
     if (path === '/api/auth/logout' && request.method === 'POST') return json({ ok: true }, 200, { 'Set-Cookie': cookie(cookieName, '', 0, origin) });
     if (path === '/api/auth/google' && request.method === 'GET') {
-      assert(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET, 'Google sign-in is not enabled', 404); const state = random(), verifier = random(48);
-      await registry(env, '/challenge/set', { id: state, value: { kind: 'google', challenge: state, verifier } });
+      assert(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET, 'Google sign-in is not enabled', 404); const state = random(), verifier = random(48), uid = url.searchParams.get('link') === '1' ? (await signedIn(request, env)).uid : undefined;
+      await registry(env, '/challenge/set', { id: state, value: { kind: 'google', challenge: state, verifier, ...(uid ? { uid } : {}) } });
       const target = new URL('https://accounts.google.com/o/oauth2/v2/auth'); target.search = new URLSearchParams({ client_id: env.GOOGLE_CLIENT_ID, redirect_uri: origin + '/api/auth/google/callback', response_type: 'code', scope: 'openid profile email', state, code_challenge: await digest(verifier), code_challenge_method: 'S256' }).toString();
       return new Response(null, { status: 302, headers: { Location: target.href, 'Set-Cookie': cookie('bh_flow', state, 300, origin), 'Cache-Control': 'no-store' } });
     }
     if (path === '/api/auth/google/callback' && request.method === 'GET') {
-      assert(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET, 'Google sign-in is not enabled', 404); assert(url.searchParams.get('state') === cookies(request).bh_flow, 'Invalid OAuth state'); const flow = await authChallenge(env, request, 'google'); const code = url.searchParams.get('code'); assert(code, 'Google sign-in cancelled');
-      const tokens = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: new URLSearchParams({ client_id: env.GOOGLE_CLIENT_ID, client_secret: env.GOOGLE_CLIENT_SECRET, code, code_verifier: flow.verifier!, grant_type: 'authorization_code', redirect_uri: origin + '/api/auth/google/callback' }) }); assert(tokens.ok, 'Google sign-in failed', 401);
-      const token = await tokens.json<{ access_token: string }>(); const profileResponse = await fetch('https://openidconnect.googleapis.com/v1/userinfo', { headers: { Authorization: 'Bearer ' + token.access_token } }); assert(profileResponse.ok, 'Google sign-in failed', 401);
-      const profile = await profileResponse.json<{ sub: string; name?: string; email?: string; email_verified?: boolean; hd?: string }>(); assert(profile.sub, 'Google profile missing', 401);
-      // Google is authoritative only for Gmail or verified Workspace addresses.
-      // Other verified addresses may have changed owners since Google verified them.
-      const verifiedEmail = profile.email_verified === true && profile.email ? normalizeEmail(profile.email) : undefined;
-      const authoritativeEmail = verifiedEmail && (verifiedEmail.endsWith('@gmail.com') || (profile.hd && verifiedEmail.endsWith('@' + profile.hd.toLowerCase())));
-      const mapping = await registry(env, '/google', { sub: profile.sub, ...(authoritativeEmail ? { emailKey: await emailKey(env, verifiedEmail!) } : {}) }); await user(env, mapping.uid, '/init', { name: profile.name || 'Friend' });
-      const login = await issue(env, mapping.uid, origin);
-      return new Response(null, { status: 302, headers: { Location: '/?signedIn=1', 'Set-Cookie': login.headers.get('Set-Cookie')!, 'Cache-Control': 'no-store' } });
+      assert(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET, 'Google sign-in is not enabled', 404); assert(url.searchParams.get('state') === cookies(request).bh_flow, 'Invalid OAuth state'); const flow = await authChallenge(env, request, 'google');
+      try {
+        const code = url.searchParams.get('code'); assert(code, 'Google sign-in cancelled');
+        const tokens = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', body: new URLSearchParams({ client_id: env.GOOGLE_CLIENT_ID, client_secret: env.GOOGLE_CLIENT_SECRET, code, code_verifier: flow.verifier!, grant_type: 'authorization_code', redirect_uri: origin + '/api/auth/google/callback' }) }); assert(tokens.ok, 'Google sign-in failed', 401);
+        const token = await tokens.json<{ access_token: string }>(); const profileResponse = await fetch('https://openidconnect.googleapis.com/v1/userinfo', { headers: { Authorization: 'Bearer ' + token.access_token } }); assert(profileResponse.ok, 'Google sign-in failed', 401);
+        const profile = await profileResponse.json<{ sub: string; name?: string; email?: string; email_verified?: boolean; hd?: string }>(); assert(profile.sub, 'Google profile missing', 401);
+        // Google is authoritative only for Gmail or verified Workspace addresses.
+        // Other verified addresses may have changed owners since Google verified them.
+        const verifiedEmail = profile.email_verified === true && profile.email ? normalizeEmail(profile.email) : undefined;
+        const authoritativeEmail = verifiedEmail && (verifiedEmail.endsWith('@gmail.com') || (profile.hd && verifiedEmail.endsWith('@' + profile.hd.toLowerCase())));
+        if (flow.uid) assert((await signedIn(request, env)).uid === flow.uid, 'Sign-in account changed', 401);
+        const mapping = await registry(env, '/google', { sub: profile.sub, ...(flow.uid ? { uid: flow.uid } : {}), ...(authoritativeEmail ? { emailKey: await emailKey(env, verifiedEmail!) } : {}) }); await user(env, mapping.uid, '/init', { name: profile.name || 'Friend' });
+        const login = await issue(env, mapping.uid, origin);
+        return new Response(null, { status: 302, headers: { Location: '/?signedIn=1', 'Set-Cookie': login.headers.get('Set-Cookie')!, 'Cache-Control': 'no-store' } });
+      } catch (error) {
+        if (!flow.uid || !(error instanceof ApiError)) throw error;
+        const result = error.status === 409 ? 'collision' : error.status === 401 ? 'expired' : 'failed';
+        return new Response(null, { status: 302, headers: { Location: '/?googleLink=' + result, 'Set-Cookie': cookie('bh_flow', '', 0, origin), 'Cache-Control': 'no-store' } });
+      }
     }
     throw new ApiError(404, 'Route not found');
   }
@@ -332,6 +406,7 @@ export class RegistryDO {
     // references the registry actually retained, not by enumerating UserDO ids.
     // state: 0 active, 1 deletion claimed (no new identity links), 2 deleted.
     this.sql.exec('CREATE TABLE IF NOT EXISTS accounts(uid TEXT PRIMARY KEY,state INTEGER NOT NULL DEFAULT 0,claim_until INTEGER NOT NULL DEFAULT 0)');
+    this.sql.exec('CREATE TABLE IF NOT EXISTS code_revisions(uid TEXT PRIMARY KEY,revision TEXT NOT NULL)');
     this.indexAccounts();
   }
   private rows(query: string, ...args: (string | number)[]) { return [...this.sql.exec<Row>(query, ...args)]; }
@@ -350,7 +425,7 @@ export class RegistryDO {
     const data = await request.json<any>(), path = new URL(request.url).pathname, now = Date.now();
     if (path === '/maintenance/orphans') {
       this.indexAccounts();
-      const eligible = "FROM accounts a WHERE state<2 AND NOT EXISTS (SELECT 1 FROM mapping m WHERE m.uid=a.uid AND m.kind IN ('email','google'))";
+      const eligible = "FROM accounts a WHERE state<2 AND NOT EXISTS (SELECT 1 FROM mapping m WHERE m.uid=a.uid AND m.kind IN ('email','google','code'))";
       return json({ indexedAccounts: Number(this.rows('SELECT count(*) AS n FROM accounts WHERE state<2')[0].n),
         orphanAccounts: Number(this.rows('SELECT count(*) AS n ' + eligible)[0].n),
         users: this.rows('SELECT uid ' + eligible + ' ORDER BY state DESC,uid LIMIT ?', data.limit).map(r => r.uid) });
@@ -358,7 +433,7 @@ export class RegistryDO {
     if (path === '/maintenance/claim') {
       // This check and the durable claim are serialized with ALL mapping writes.
       // A claim survives failed cleanup and is retryable; linking cannot resurrect it.
-      const row = this.rows("SELECT uid FROM accounts WHERE uid=? AND state<2 AND claim_until<=? AND NOT EXISTS (SELECT 1 FROM mapping WHERE uid=? AND kind IN ('email','google'))", data.uid, now, data.uid)[0];
+      const row = this.rows("SELECT uid FROM accounts WHERE uid=? AND state<2 AND claim_until<=? AND NOT EXISTS (SELECT 1 FROM mapping WHERE uid=? AND kind IN ('email','google','code'))", data.uid, now, data.uid)[0];
       if (row) this.sql.exec('UPDATE accounts SET state=1,claim_until=? WHERE uid=?', now + 300_000, data.uid);
       return json({ claimed: !!row });
     }
@@ -375,7 +450,43 @@ export class RegistryDO {
     if (path === '/limit') { const row = this.rows('SELECT count FROM limits WHERE id=?', data.key)[0]; assert(!row || Number(row.count) < data.limit, 'Too many requests. Try again later.', 429); this.sql.exec('INSERT INTO limits VALUES(?,1,?) ON CONFLICT(id) DO UPDATE SET count=count+1', data.key, now + data.window); return json({ ok: true }); }
     if (path === '/challenge/set') { this.sql.exec('INSERT INTO challenges VALUES(?,?,?)', data.id, JSON.stringify(data.value), now + 300_000); return json({ ok: true }); }
     if (path === '/challenge/take') { const row = this.rows('SELECT value FROM challenges WHERE id=?', data.id)[0]; this.sql.exec('DELETE FROM challenges WHERE id=?', data.id); return json(row ? JSON.parse(String(row.value)) : null); }
-    if (path === '/identity') { const kinds = this.rows('SELECT DISTINCT kind FROM mapping WHERE uid=?', data.uid).map(r => r.kind); return json({ hasEmail: kinds.includes('email'), hasGoogle: kinds.includes('google') }); }
+    if (path === '/identity') { const kinds = this.rows('SELECT DISTINCT kind FROM mapping WHERE uid=?', data.uid).map(r => r.kind); const revision = this.rows('SELECT revision FROM code_revisions WHERE uid=?', data.uid)[0]; return json({ hasEmail: kinds.includes('email'), hasGoogle: kinds.includes('google'), hasCode: kinds.includes('code'), codeRevision: kinds.includes('code') ? revision?.revision || null : null }); }
+    if (path === '/code/set') {
+      this.assertActive(data.uid);
+      if (this.rows('SELECT uid FROM mapping WHERE kind=? AND id=?', 'code', data.key).length) return json({ ok: false });
+      this.ctx.storage.transactionSync(() => {
+        this.sql.exec('INSERT OR IGNORE INTO accounts(uid) VALUES(?)', data.uid);
+        this.sql.exec('DELETE FROM mapping WHERE kind=? AND uid=?', 'code', data.uid);
+        this.sql.exec('INSERT INTO mapping VALUES(?,?,?)', 'code', data.key, data.uid);
+        this.sql.exec('INSERT OR REPLACE INTO code_revisions VALUES(?,?)', data.uid, data.revision);
+      });
+      return json({ ok: true });
+    }
+    if (path === '/code/signin') {
+      const message = 'Unable to sign in with that code. Check it or try again later.';
+      const row = this.rows('SELECT id,uid FROM mapping WHERE kind=? AND id=?', 'code', data.key)[0];
+      // Always compare equal-length HMACs, even on a registry miss.
+      const match = constantTimeEqual(String(row?.id || '0'.repeat(43)), data.key);
+      const failed = this.rows('SELECT count FROM limits WHERE id=?', 'code-global-failed')[0];
+      // Global circuit breaker: at most 10,000 failures / 15 minutes across IPs.
+      // Successful lookups do not spend the failed-attempt budget.
+      assert(!failed || Number(failed.count) < 10_000, message, 429);
+      if (!row || !match || data.valid !== true) {
+        this.sql.exec('INSERT INTO limits VALUES(?,1,?) ON CONFLICT(id) DO UPDATE SET count=count+1', 'code-global-failed', now + 900_000);
+        throw new ApiError(401, message);
+      }
+      this.assertActive(String(row.uid));
+      return json({ uid: row.uid });
+    }
+    if (path === '/code/remove') {
+      this.assertActive(data.uid);
+      assert(this.rows("SELECT 1 FROM mapping WHERE uid=? AND kind IN ('email','google')", data.uid).length, 'Add email or Google before removing your code.', 409);
+      this.ctx.storage.transactionSync(() => {
+        this.sql.exec('DELETE FROM mapping WHERE kind=? AND uid=?', 'code', data.uid);
+        this.sql.exec('DELETE FROM code_revisions WHERE uid=?', data.uid);
+      });
+      return json({ ok: true });
+    }
     if (path === '/email/test-get') return json(this.rows('SELECT code FROM email_test WHERE id=? AND expires>?', data.key, now)[0] || {});
     if (path === '/email/start') {
       this.sql.exec('DELETE FROM email_codes WHERE expires<=?', now); this.sql.exec('DELETE FROM email_test WHERE expires<=?', now);
@@ -401,7 +512,8 @@ export class RegistryDO {
     if (path === '/google') {
       const old = this.rows('SELECT uid FROM mapping WHERE kind=? AND id=?', 'google', data.sub)[0];
       const email = data.emailKey ? this.rows('SELECT uid FROM mapping WHERE kind=? AND id=?', 'email', data.emailKey)[0] : undefined;
-      const uid = old?.uid || email?.uid || crypto.randomUUID();
+      assert(!data.uid || ((!old || old.uid === data.uid) && (!email || email.uid === data.uid)), 'That Google account already belongs to another account.', 409);
+      const uid = data.uid || old?.uid || email?.uid || crypto.randomUUID();
       this.assertActive(String(uid)); this.sql.exec('INSERT OR IGNORE INTO accounts(uid) VALUES(?)', uid);
       this.sql.exec('INSERT OR IGNORE INTO mapping VALUES(?,?,?)', 'google', data.sub, uid);
       // An existing Google identity wins; never steal another account's email.
@@ -410,7 +522,7 @@ export class RegistryDO {
     }
     if (path === '/schedule/set') { this.assertActive(data.uid); this.sql.exec('INSERT OR IGNORE INTO accounts(uid) VALUES(?)', data.uid); this.sql.exec('INSERT OR IGNORE INTO schedule VALUES(?,0)', data.uid); return json({ ok: true }); }
     if (path === '/schedule/due') { const users = this.rows('SELECT uid FROM schedule WHERE next_at<=? ORDER BY next_at LIMIT 200', now).map(row => row.uid); for (const uid of users) this.sql.exec('UPDATE schedule SET next_at=? WHERE uid=?', now + 15 * 60_000, uid); return json({ users }); }
-    if (path === '/delete') { this.sql.exec('INSERT INTO accounts(uid,state) VALUES(?,2) ON CONFLICT(uid) DO UPDATE SET state=2', data.uid); this.sql.exec('DELETE FROM mapping WHERE uid=?', data.uid); this.sql.exec("DELETE FROM challenges WHERE json_extract(value,'$.uid')=?", data.uid); this.sql.exec('DELETE FROM email_codes WHERE uid=?', data.uid); this.sql.exec('DELETE FROM schedule WHERE uid=?', data.uid); return json({ ok: true }); }
+    if (path === '/delete') { this.sql.exec('INSERT INTO accounts(uid,state) VALUES(?,2) ON CONFLICT(uid) DO UPDATE SET state=2', data.uid); this.sql.exec('DELETE FROM mapping WHERE uid=?', data.uid); this.sql.exec('DELETE FROM code_revisions WHERE uid=?', data.uid); this.sql.exec("DELETE FROM challenges WHERE json_extract(value,'$.uid')=?", data.uid); this.sql.exec('DELETE FROM email_codes WHERE uid=?', data.uid); this.sql.exec('DELETE FROM schedule WHERE uid=?', data.uid); return json({ ok: true }); }
     return json({ error: 'Not found' }, 404);
   } catch (e) { if (e instanceof ApiError || e instanceof GroupsError) return json({ error: e.message }, e.status); throw e; } }); }
 }

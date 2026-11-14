@@ -13,7 +13,7 @@ Incord is an offline-first app for memorizing Scripture, historic catechisms and
 - Four-step first-letter learning, followed by FSRS spaced repetition and a capped, gentle-return backlog.
 - BSB, KJV and WEB Bible packs; historic catechisms and creeds; custom text, whole passages and ten topical collections.
 - Offline practice, light/dark themes, adjustable text size, and Incord keys with optional key sounds/haptics.
-- Optional Google or email-code sign-in, cross-device sync, and Web Push reminders.
+- Optional Google, email-code or email-free sign-in-code accounts, cross-device sync, and Web Push reminders.
 - Small invite-only groups with shared goals, privacy-filtered practice rhythm and optional prayer encouragements.
 - Optional device-only ESV quotations through the Crossway API.
 - A remote MCP connection for compatible AI apps, with explicit authorization and revocation.
@@ -102,9 +102,15 @@ The maintained legacy host, `byheart.jesklabs.com`, uses the tiny, independent [
 
 There may be a short old-host gap between those deployments. Forks without a legacy hostname need only the main Worker; otherwise adapt both the legacy route and redirect destination. The main deploy script does not deploy the redirect Worker.
 
+### Email-free code accounts
+
+Account settings can create an account without email or Google. A sign-in code has three kid-safe compound words and four digits (46.28 bits of cryptographic entropy). Save it privately: without a linked email/Google method, a lost code cannot be recovered. Code sign-in accepts case-insensitive input with or without hyphens. Regeneration invalidates the old code but leaves existing device sessions signed in.
+
+The server stores only a domain-separated HMAC under `SESSION_SECRET`, never the code itself. The browser keeps a device-only copy after creation or code sign-in; Reveal requires a tap, and sign-out clears the copy. Codes are excluded from library sync and export. A device without a copy can regenerate a code, not retrieve it. Code creation and sign-in share a 10-attempt/IP/15-minute limit, with IPv6 clients grouped by /64, a global 10,000-failed-sign-in budget and a separate 1,000-new-account budget per 15 minutes. No email or Google provider credentials are needed for code accounts.
+
 ### Orphan-account maintenance
 
-After retiring a sign-in method, an operator can inspect accounts with **neither an email nor a Google mapping**. `POST /stats/maintenance/orphans` uses the same signed administrator cookie as `/stats`, or `Authorization: Bearer $STATS_TOKEN`. Send a matching `Origin` header and JSON. The default is a dry run; an empty body or `{}` does not delete anything.
+After retiring a sign-in method, an operator can inspect accounts with **no email, Google or sign-in-code mapping**. `POST /stats/maintenance/orphans` uses the same signed administrator cookie as `/stats`, or `Authorization: Bearer $STATS_TOKEN`. Send a matching `Origin` header and JSON. The default is a dry run; an empty body or `{}` does not delete anything.
 
 ```sh
 # Set ORIGIN to your instance and supply STATS_TOKEN in your shell environment.
@@ -113,7 +119,7 @@ curl --fail-with-body "$ORIGIN/stats/maintenance/orphans" \
   -H 'Content-Type: application/json' --data '{"limit":10}'
 ```
 
-The response includes counts and selected creation dates only (UTC dates, or `null` if unavailable), never account IDs or library contents. `limit` defaults to 10 and is capped at 25 to bound each request's work. Inspect the dry run before sending `{"confirm":true,"limit":10}` to permanently delete the selected orphans. Repeat bounded batches until none remain. Confirmation runs the same deletion path as the app: OAuth revocation, group removal, UserDO data and push subscriptions, then registry mappings. Mapping checks and durable deletion claims prevent an email/Google-linked account from being selected during a concurrent sign-in. A failed batch may have completed earlier deletions; retrying is safe.
+The response includes counts and selected creation dates only (UTC dates, or `null` if unavailable), never account IDs or library contents. `limit` defaults to 10 and is capped at 25 to bound each request's work. Inspect the dry run before sending `{"confirm":true,"limit":10}` to permanently delete the selected orphans. Repeat bounded batches until none remain. Confirmation runs the same deletion path as the app: OAuth revocation, group removal, UserDO data and push subscriptions, then registry mappings. Mapping checks and durable deletion claims prevent an email/Google/code-linked account from being selected during a concurrent sign-in. A failed batch may have completed earlier deletions; retrying is safe.
 
 Cloudflare does not enumerate named UserDOs. Maintenance discovers historical accounts from retained registry mappings, scheduling entries, pending identity challenges and group memberships, and maintains a durable index thereafter. A historical object with no surviving registry reference cannot be found by this endpoint. HTTP GET never performs maintenance. Keep the stats token private; do not put it in a URL or logs.
 

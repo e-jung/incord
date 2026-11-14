@@ -57,7 +57,7 @@ async function device(label) {
     viewport: { width: 393, height: 852 },
     colorScheme: 'light', reducedMotion: 'reduce', serviceWorkers: 'allow',
     // Local Wrangler accepts this edge-owned header; isolate concurrent QA callers.
-    ...(target.hostname==='localhost'?{extraHTTPHeaders:{'CF-Connecting-IP':'smoke-'+crypto.randomUUID()}}:{}),
+    ...(target.hostname==='localhost'?{extraHTTPHeaders:{'CF-Connecting-IP':'fd00:'+crypto.randomUUID().slice(0,4)+':'+crypto.randomUUID().slice(0,4)+':1::1'}}:{}),
   });
   contexts.push(context); // Retain immediately so finally can clean up partial flows.
   // Opt smoke browsers out of anonymous usage counts so test runs never pollute /stats.

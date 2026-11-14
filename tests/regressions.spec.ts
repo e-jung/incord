@@ -1,3 +1,4 @@
+import {testIp} from './network';
 import { test, expect, type Page } from '@playwright/test';
 
 async function tab(page: Page, name: string) {
@@ -66,7 +67,7 @@ async function signup(page: Page) {
 }
 
 test.beforeEach(async ({ page, context }) => {
-  await context.setExtraHTTPHeaders({ 'CF-Connecting-IP': `regression-${crypto.randomUUID()}` });
+  await context.setExtraHTTPHeaders({ 'CF-Connecting-IP': testIp() });
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Today', exact: true })).toBeVisible();
 });
