@@ -1,4 +1,5 @@
 <script lang="ts">
+import {onDestroy} from 'svelte';
 import {hapticOverlay} from '../haptic-overlay';
 import {ui} from '../config/copy';
 let {onkey,onpeek,disabled=false,hasNumbers=false,haptics=false}:{
@@ -6,7 +7,9 @@ let {onkey,onpeek,disabled=false,hasNumbers=false,haptics=false}:{
 }=$props();
 let pressed=$state<string>(ui.empty),numbers=$state(false);
 const rows=$derived(numbers&&hasNumbers?ui.keyboardDigitRows:[ui.keyboardTopRow,ui.keyboardMiddleRow,ui.keyboardBottomRow]);
-function press(key:string){pressed=key;onkey(key);setTimeout(()=>pressed=ui.empty,150)}
+let pressedTimer: ReturnType<typeof setTimeout>;
+function press(key:string){clearTimeout(pressedTimer);pressed=key;onkey(key);pressedTimer=setTimeout(()=>pressed=ui.empty,150)}
+onDestroy(()=>clearTimeout(pressedTimer));
 </script>
 <div class="keyboard" aria-label={ui.keyboardLabel}>
   {#each rows as row}

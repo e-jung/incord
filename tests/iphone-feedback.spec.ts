@@ -17,9 +17,10 @@ function mockFeedback(){
  (window as any).AudioContext=class {
   state='suspended';currentTime=0;sampleRate=48000;destination={};constructor(){calls.audio++}
   resume(){calls.resume++;this.state='running';return Promise.resolve()}close(){return Promise.resolve()}
-  createBuffer(_channels:number,length:number){return {getChannelData:()=>new Float32Array(length)}}
-  createBufferSource(){return {buffer:null,connect(){},disconnect(){},start(){},stop(){}}}
-  createOscillator(){return {type:'',frequency:{value:0,setValueAtTime(){}},connect(){},disconnect(){},start(){calls.tick++},stop(){}}}
+  createBuffer(_channels:number,length:number){return {length,getChannelData:()=>new Float32Array(length)}}
+  createBufferSource(){return {buffer:null as {length:number}|null,connect(){},disconnect(){},start(){if(this.buffer && this.buffer.length>1)calls.tick++},stop(){}}}
+  createOscillator(){return {type:'',frequency:{value:0,setValueAtTime(){}},connect(){},disconnect(){},start(){},stop(){}}}
+  createBiquadFilter(){return {type:'',frequency:{value:0},Q:{value:0},connect(){},disconnect(){}}}
   createGain(){return {gain:{value:0,setValueAtTime(){},linearRampToValueAtTime(){},exponentialRampToValueAtTime(){}},connect(){},disconnect(){}}}
  };
 }

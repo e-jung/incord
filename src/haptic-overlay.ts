@@ -6,39 +6,59 @@ export function usesHapticOverlay(settings: FeedbackSettings, platform = typeof 
     && (/iPhone|iPad|iPod/.test(platform.userAgent) || (platform.platform === 'MacIntel' && platform.maxTouchPoints > 1));
 }
 type Options = {enabled: boolean; onpress: () => void};
-/** The input keeps native appearance and default toggle activation; never prevent its click. */
+/** B: a native switch beside (never inside) the accessible button. */
 export function hapticOverlay(button: HTMLButtonElement, initial: Options) {
   let options = initial;
+  let wrapper: HTMLSpanElement | undefined;
   let input: HTMLInputElement | undefined;
   let focus: HTMLElement | null = null;
+  let pressedTimer: ReturnType<typeof setTimeout> | undefined;
   const remember = () => { focus = document.activeElement instanceof HTMLElement ? document.activeElement : null; };
-  const avoidMouseFocus = (event: MouseEvent) => event.preventDefault();
-  const click = (event: MouseEvent) => {
-    if (event.target !== input) return;
-    // Run the same action directly, not button.click(): otherwise it fires twice.
-    event.stopImmediatePropagation();
-    if (!button.disabled) options.onpress();
-    // Safari may focus the switch before click. Return to the original region,
-    // but don't steal focus after an action navigates away or removes the input.
-    if (focus?.isConnected) focus.focus({preventScroll:true});
+  const click = () => {
+    if (!input || button.disabled) return;
+    const switchInput = input;
+    button.classList.add('haptic-pressed');
+    clearTimeout(pressedTimer);
+    pressedTimer = setTimeout(() => button.classList.remove('haptic-pressed'), 150);
+    // The trusted native click toggles normally. A sibling cannot activate the
+    // button, so dispatch once directly, with no scripted click or cancellation.
+    options.onpress();
+    if (focus?.isConnected && (document.activeElement === switchInput || document.activeElement === document.body)) {
+      focus.focus({preventScroll:true});
+    }
+    focus = null;
   };
+  function remove() {
+    input?.removeEventListener('pointerdown', remember);
+    input?.removeEventListener('click', click);
+    input?.remove(); input = undefined;
+    // Put the original node back before Svelte removes/reconciles it. Do not
+    // clone the button: its listeners, bindings and accessibility stay intact.
+    if (wrapper) { wrapper.replaceWith(button); wrapper = undefined; }
+    clearTimeout(pressedTimer);
+    button.classList.remove('haptic-pressed');
+    focus = null;
+  }
   function update(next: Options) {
     options = next;
-    if (!usesHapticOverlay({haptics:next.enabled})) {
-      input?.remove(); input = undefined; button.classList.remove('haptic-target'); return;
-    }
-    if (!input) {
+    if (!usesHapticOverlay({haptics:next.enabled})) { remove(); return; }
+    if (!input && button.parentNode) {
+      wrapper = document.createElement('span');
+      wrapper.className = 'haptic-target';
+      if (button.classList.contains('key')) wrapper.classList.add('haptic-key');
+      if (button.classList.contains('number-key')) wrapper.classList.add('haptic-number-key');
+      button.before(wrapper);
+      wrapper.append(button);
       input = document.createElement('input');
       input.type = 'checkbox'; input.setAttribute('switch','');
       input.setAttribute('aria-hidden','true'); input.tabIndex = -1;
       input.className = 'haptic-overlay';
       input.addEventListener('pointerdown',remember);
-      input.addEventListener('mousedown',avoidMouseFocus);
-      button.append(input); button.classList.add('haptic-target');
+      input.addEventListener('click',click);
+      wrapper.append(input);
     }
-    input.disabled = button.disabled;
+    if (input) input.disabled = button.disabled;
   }
-  button.addEventListener('click',click,true);
   update(initial);
-  return {update,destroy(){button.removeEventListener('click',click,true);input?.remove();button.classList.remove('haptic-target');}};
+  return {update,destroy:remove};
 }

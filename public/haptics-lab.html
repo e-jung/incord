@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'">
+<title>Native switch haptics lab</title>
+<link rel="stylesheet" href="/haptics-lab.css">
+<script src="/haptics-lab.js" defer></script>
+</head>
+<body><main>
+<h1>Native switch haptics lab</h1>
+<p>Compare real taps on iPhone Safari. Haptics depend on device and browser support. Each counter records native switch clicks, not proof of vibration. No scripted activation or vibration API is used.</p>
+<section aria-labelledby="a-title"><h2 id="a-title">A · Visible native switch</h2>
+<label class="visible-switch"><input id="test-a" type="checkbox" switch> Tap the visible switch</label>
+<p>Clicks: <output id="count-a" aria-live="polite">0</output></p></section>
+<section aria-labelledby="b-title"><h2 id="b-title">B · Transparent sibling (app default)</h2>
+<span class="target"><button type="button" data-test="b">Tap sibling overlay</button><input id="test-b" class="overlay" type="checkbox" switch aria-hidden="true" tabindex="-1"></span>
+<p>Clicks: <output id="count-b" aria-live="polite">0</output></p></section>
+<section aria-labelledby="c-title"><h2 id="c-title">C · Nested overlay</h2>
+<button type="button" class="target" data-test="c">Tap nested overlay<input id="test-c" class="overlay" type="checkbox" switch aria-hidden="true" tabindex="-1"></button>
+<p>Clicks: <output id="count-c" aria-live="polite">0</output></p></section>
+<section aria-labelledby="d-title"><h2 id="d-title">D · Label-for overlay</h2>
+<span class="target"><button type="button" data-test="d">Tap label overlay</button><label class="label-overlay" for="test-d" aria-hidden="true"></label></span>
+<input id="test-d" class="label-switch" type="checkbox" switch aria-label="Label target switch">
+<p>Clicks: <output id="count-d" aria-live="polite">0</output></p></section>
+<section aria-labelledby="e-title"><h2 id="e-title">E · Large native switch</h2>
+<label class="visible-switch"><input id="test-e" class="large-switch" type="checkbox" switch> Tap the large switch</label>
+<p>Clicks: <output id="count-e" aria-live="polite">0</output></p></section>
+<p id="event-details" role="status">Waiting for a tap.</p>
+</main></body></html>

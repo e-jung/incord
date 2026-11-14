@@ -17,6 +17,7 @@ export function supportsHaptics() {
 
 export function createKeyboardFeedback() {
   let audio: AudioContext | undefined;
+  let noiseBuffer: AudioBuffer | undefined;
   let pendingTick: { play: () => void; queuedAt: number } | undefined;
   let soundEnabled = false;
   let generation = 0;
@@ -92,19 +93,44 @@ export function createKeyboardFeedback() {
     whenRunning(context, () => {
       if (destroyed || token !== generation || (!preview && !soundEnabled)) return;
       try {
-        const oscillator = context.createOscillator(), gain = context.createGain();
-        const now = context.currentTime, duration = slip ? 0.06 : 0.05;
-        oscillator.type = 'triangle';
-        oscillator.frequency.value = slip ? 280 : 520;
+        // A short filtered noise transient supplies the crisp key surface;
+        // the much quieter sine adds a little tactile body without a pitched beep.
+        const now = context.currentTime, duration = slip ? 0.028 : 0.024;
+        if (!noiseBuffer) {
+          noiseBuffer = context.createBuffer(1, Math.ceil(context.sampleRate * 0.03), context.sampleRate);
+          const samples = noiseBuffer.getChannelData(0);
+          for (let i = 0; i < samples.length; i++) samples[i] = Math.random() * 2 - 1;
+        }
+        const noise = context.createBufferSource(), high = context.createBiquadFilter(), low = context.createBiquadFilter();
+        const gain = context.createGain(), body = context.createOscillator(), bodyGain = context.createGain();
+        noise.buffer = noiseBuffer;
+        high.type = 'highpass'; high.frequency.value = slip ? 1400 : 2000; high.Q.value = 0.707;
+        low.type = 'lowpass'; low.frequency.value = slip ? 4200 : 6000; low.Q.value = 0.707;
         gain.gain.setValueAtTime(0, now);
-        gain.gain.linearRampToValueAtTime(slip ? 0.2 : 0.3, now + 0.002);
+        gain.gain.linearRampToValueAtTime(slip ? 0.18 : 0.22, now + 0.001);
         gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-        oscillator.connect(gain); gain.connect(context.destination);
-        const cleanup = () => { active.delete(stop); oscillator.disconnect(); gain.disconnect(); };
-        const stop = () => { try { oscillator.stop(); } catch { /* Already ended. */ } cleanup(); };
-        oscillator.onended = cleanup;
+        body.type = 'sine'; body.frequency.value = slip ? 150 : 175;
+        bodyGain.gain.setValueAtTime(0, now);
+        bodyGain.gain.linearRampToValueAtTime(slip ? 0.02 : 0.025, now + 0.001);
+        bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.01);
+        noise.connect(high); high.connect(low); low.connect(gain); gain.connect(context.destination);
+        body.connect(bodyGain); bodyGain.connect(context.destination);
+        let cleaned = false;
+        const cleanup = () => {
+          if (cleaned) return;
+          cleaned = true;
+          active.delete(stop);
+          noise.disconnect(); high.disconnect(); low.disconnect(); gain.disconnect(); body.disconnect(); bodyGain.disconnect();
+        };
+        const stop = () => {
+          try { noise.stop(); } catch { /* Already ended. */ }
+          try { body.stop(); } catch { /* Already ended. */ }
+          cleanup();
+        };
+        noise.onended = cleanup;
         active.add(stop);
-        oscillator.start(now); oscillator.stop(now + duration);
+        noise.start(now); noise.stop(now + duration);
+        body.start(now); body.stop(now + 0.01);
       } catch { /* Feedback cannot block input. */ }
     });
   }
@@ -133,6 +159,7 @@ export function createKeyboardFeedback() {
       setSettings({});
       if (audio) { try { void audio.close().catch(() => {}); } catch { /* Best effort. */ } }
       audio = undefined;
+      noiseBuffer = undefined;
       pendingTick = undefined;
     },
   };

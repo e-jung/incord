@@ -158,9 +158,31 @@ main.practicing{position:fixed;inset:0;width:100%;height:100dvh;min-height:0;ove
 .group-confirmation .feedback{font-size:14px;line-height:1.5;margin:0;overflow-wrap:anywhere}
 .group-confirmation .failed{color:var(--slip)}
 
-/* Real iOS switch activation: transparent but rendered, native appearance intact. */
-button.haptic-target{position:relative;overflow:hidden;isolation:isolate}
-button.haptic-target>input.haptic-overlay{position:absolute;inset:0;width:100%;height:100%;min-width:0;max-width:none;margin:0;padding:0;border:0;border-radius:inherit;opacity:0;z-index:1;touch-action:manipulation;cursor:pointer;appearance:auto;-webkit-appearance:auto}
+/* B: real iOS switch activation over a sibling accessible button. */
+span.haptic-target{position:relative;display:inline-flex;min-width:0;isolation:isolate;border-radius:8px}
+span.haptic-target>button{width:100%;height:100%;margin:0}
+span.haptic-key{width:calc((100% - 50px)/10);max-width:43px;height:47px;flex:none}
+span.haptic-key>button.key{width:100%;max-width:none}
+.digits span.haptic-number-key{width:auto;min-width:44px;max-width:100px;flex:1}
+span.haptic-target>input.haptic-overlay{position:absolute;inset:0;width:100%;height:100%;min-width:0;max-width:none;margin:0;padding:0;border:0;border-radius:inherit;opacity:0;z-index:1;touch-action:manipulation;cursor:pointer;appearance:auto;-webkit-appearance:auto}
+span.haptic-target>input.haptic-overlay:disabled{pointer-events:none}
+button.haptic-pressed{transform:translateY(2px)}
+button.key.haptic-pressed{background:var(--acc);color:var(--on-acc)}
+.feedback-controls>span.haptic-target{flex:none;min-height:44px}
+@media(max-height:700px){span.haptic-key{height:44px}}
 
-/* Document source-coordinate ranges share the Discover tactile controls. */
-.document-browser{scroll-margin-top:20px;margin-top:24px;min-width:0}.document-intro{gap:10px}.document-range-panel{padding:18px;border:1px solid var(--line);border-radius:20px;background:var(--bg)}.document-range-panel .segments{flex-wrap:wrap}.document-range-panel .segment{flex:1;min-width:100px;white-space:normal}.document-range-inputs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.document-range-hint,.document-range-summary{font-size:14px}.document-range-panel>button{width:100%;min-height:48px}.document-day-heading{margin:22px 0 4px}.document-row summary small{white-space:nowrap}.document-browser .document-row{min-width:0}.document-browser .document-intro h2{overflow-wrap:anywhere}
+/* The visual viewport shrinks/pans with a real mobile keyboard. Keep Peek and
+   the input inside it, rather than below the layout viewport's bottom. */
+.practice.native-practice{position:fixed;top:var(--visible-top,0px);left:50%;right:auto;transform:translateX(-50%);width:100%;max-width:520px;height:var(--visible-height,100dvh);padding-top:calc(8px + env(safe-area-inset-top))}
+.native-practice .prompt{padding-top:10px;padding-bottom:10px}
+.native-practice>header{min-height:40px}
+.native-practice .verse{padding-top:12px;padding-bottom:calc(var(--visible-height,100dvh) * .2)}
+.native-keyboard{display:flex;gap:12px;align-items:center;flex-shrink:0;padding:8px 16px max(8px,env(safe-area-inset-bottom));background:var(--kbd)}
+.native-keyboard .peek{flex-shrink:0;touch-action:manipulation}
+.native-keyboard .native-typing-input{font-size:16px;min-width:0;width:100%;padding:10px 12px;margin:0}
+.native-result{flex-shrink:1;min-height:0;margin-top:auto;padding:10px 20px;background:var(--bg);max-height:45%;overflow:auto}
+.native-result p{margin:4px 0}
+.native-result>button{display:inline-flex;margin:4px}
+/* Results keep the native input/keyboard alive. Release the completed prompt's
+   space so the result and Peek cannot push beneath a short visual viewport. */
+.native-practice:has(.native-result) .prompt,.native-practice:has(.native-result) .progress,.native-practice:has(.native-result) .verse{display:none}

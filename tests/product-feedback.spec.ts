@@ -33,7 +33,7 @@ test('feedback defaults off, toggles persist, enabled gestures invoke audio/vibr
  await page.addInitScript(()=>{
   const calls={audio:0,tick:0,vibrate:0};(window as any).__feedbackCalls=calls;
   Object.defineProperty(navigator,'vibrate',{configurable:true,value:()=>{calls.vibrate++;return true}});Object.defineProperty(navigator,'audioSession',{configurable:true,value:{type:'auto'}});
-  (window as any).AudioContext=class {state='suspended';currentTime=0;sampleRate=48000;destination={};constructor(){calls.audio++}resume(){this.state='running';return Promise.resolve()}close(){return Promise.resolve()}createBuffer(_channels:number,length:number){return {getChannelData:()=>new Float32Array(length)}}createBufferSource(){return {buffer:null,connect(){},disconnect(){},start(){},stop(){}}}createOscillator(){return {frequency:{value:0},connect(){},disconnect(){},start(){calls.tick++},stop(){}}}createGain(){return {gain:{setValueAtTime(){},linearRampToValueAtTime(){},exponentialRampToValueAtTime(){}},connect(){},disconnect(){}}}};
+  (window as any).AudioContext=class {state='suspended';currentTime=0;sampleRate=48000;destination={};constructor(){calls.audio++}resume(){this.state='running';return Promise.resolve()}close(){return Promise.resolve()}createBuffer(_channels:number,length:number){return {length,getChannelData:()=>new Float32Array(length)}}createBufferSource(){return {buffer:null as {length:number}|null,connect(){},disconnect(){},start(){if(this.buffer&&this.buffer.length>1)calls.tick++},stop(){}}}createOscillator(){return {frequency:{value:0},connect(){},disconnect(){},start(){},stop(){}}}createBiquadFilter(){return {type:'',frequency:{value:0},Q:{value:0},connect(){},disconnect(){}}}createGain(){return {gain:{setValueAtTime(){},linearRampToValueAtTime(){},exponentialRampToValueAtTime(){}},connect(){},disconnect(){}}}};
  });
  await account(page);await expect(page.getByLabel('Key sounds',{exact:true})).not.toBeChecked();await expect(page.getByLabel('Haptics',{exact:true})).not.toBeChecked();
  await longPassage(page);await typeWords(page,2);expect(await page.evaluate(()=>(window as any).__feedbackCalls)).toEqual({audio:0,tick:0,vibrate:0});
@@ -52,15 +52,16 @@ test('iOS direct switch taps dispatch once, preserve focus and physical input, a
   document.addEventListener('click',event=>{if(event.target instanceof HTMLInputElement&&event.target.hasAttribute('switch'))(window as any).__switchEvents.push({trusted:event.isTrusted})},true);
  });
  await account(page);
- const testButton=page.getByRole('button',{name:'Test haptic',exact:true});await expect(testButton.locator('input[switch]')).toHaveCount(0);await expect(testButton).toBeDisabled();
- await page.getByLabel('Haptics',{exact:true}).check();await expect(testButton.locator('input[switch]')).toHaveCount(1);await expect(testButton).toBeEnabled();await testButton.tap();
+ const testButton=page.getByRole('button',{name:'Test haptic',exact:true});await expect(testButton.locator('..').locator(':scope > input[switch]')).toHaveCount(0);await expect(testButton).toBeDisabled();
+ await page.getByLabel('Haptics',{exact:true}).check();await expect(testButton.locator('..').locator(':scope > input[switch]')).toHaveCount(1);await expect(testButton).toBeEnabled();await testButton.locator('..').locator(':scope > input[switch]').tap();
  await longPassage(page);const region=page.getByLabel('Practice',{exact:true});
- const key=page.getByRole('button',{name:'F',exact:true}),overlay=key.locator('input[switch]');
+ const key=page.getByRole('button',{name:'F',exact:true}),overlay=key.locator('..').locator(':scope > input[switch]');
  await expect(page.locator('.keyboard input[switch]')).toHaveCount(27);
+ await expect(key.locator('input')).toHaveCount(0);
  await expect(overlay).toHaveAttribute('aria-hidden','true');await expect(overlay).toHaveAttribute('tabindex','-1');
  expect(await overlay.evaluate(input=>({opacity:getComputedStyle(input).opacity,display:getComputedStyle(input).display,appearance:getComputedStyle(input).appearance}))).toMatchObject({opacity:'0',appearance:'auto'});
- await key.tap();await expect(page.locator('[data-word="1"]')).toHaveClass(/current/);await expect(region).toBeFocused();
- await page.getByRole('button',{name:'Peek',exact:true}).tap();await expect(page.locator('[data-word="2"]')).toHaveClass(/current/);await expect(region).toBeFocused();
+ await overlay.tap();await expect(overlay).toBeChecked();await expect(page.locator('[data-word="1"]')).toHaveClass(/current/);await expect(region).toBeFocused();
+ await page.getByRole('button',{name:'Peek',exact:true}).locator('..').locator(':scope > input[switch]').tap();await expect(page.locator('[data-word="2"]')).toHaveClass(/current/);await expect(region).toBeFocused();
  await page.keyboard.press('w');await expect(page.locator('[data-word="3"]')).toHaveClass(/current/);await expect(region).toBeFocused();
  expect(await page.evaluate(()=>(window as any).__switchEvents)).toEqual([{trusted:true},{trusted:true},{trusted:true}]);
  await page.getByRole('button',{name:'Close practice',exact:true}).click();await account(page);await page.getByLabel('Haptics',{exact:true}).uncheck();await expect(page.locator('input[switch]')).toHaveCount(0);
@@ -91,4 +92,18 @@ test('passage added from a collection stays in that collection',async({page})=>{
  await page.getByRole('button',{name:'Add items',exact:true}).click();
  await page.locator('.passage-cards').getByRole('button',{name:/Psalm 23/}).click();await page.getByRole('dialog').getByRole('button',{name:'Add to my library',exact:true}).click();
  await expect(page.getByRole('heading',{name:'The Gospel in 10 verses',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:/^Psalm 23:1–6/})).toBeVisible();
+});
+
+test('standalone haptics lab exposes five independent native-switch comparisons without inline assets',async({page})=>{
+ await page.goto('/haptics-lab.html');
+ await expect(page.getByRole('heading',{name:'Native switch haptics lab',exact:true})).toBeVisible();
+ await expect(page.locator('input[switch]')).toHaveCount(5);
+ await expect(page.locator('script:not([src]),[style],[onclick]')).toHaveCount(0);
+ for(const name of ['a','b','c','d','e']){
+  await page.locator(name==='d'?'.label-overlay':`#test-${name}`).tap();
+  await expect(page.locator(`#count-${name}`)).toHaveText('1');
+  await expect(page.locator(`#test-${name}`)).toBeChecked();
+ }
+ await expect(page.locator('#test-b').locator('..').locator(':scope > button')).toHaveCount(1);
+ await expect(page.locator('#test-c').locator('..')).toHaveJSProperty('tagName','BUTTON');
 });

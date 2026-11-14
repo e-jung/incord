@@ -14,18 +14,30 @@ function fixtures(running = true) {
   function gain() {
     return { gain: { setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() }, connect: vi.fn(), disconnect: vi.fn() };
   }
-  const source = { buffer: null, connect: vi.fn(), disconnect: vi.fn(), start: vi.fn(), onended: null as (() => void) | null };
+  const sources: ReturnType<typeof sourceNode>[] = [];
+  function sourceNode() {
+    return { buffer: null, connect: vi.fn(), disconnect: vi.fn(), start: vi.fn(), stop: vi.fn(), onended: null as (() => void) | null };
+  }
+  const filters: ReturnType<typeof filter>[] = [];
+  function filter() {
+    return { type: '', frequency: { value: 0 }, Q: { value: 0 }, connect: vi.fn(), disconnect: vi.fn() };
+  }
   const context = {
     state: running ? 'running' : 'suspended', currentTime: 1, sampleRate: 48000, destination: {},
     resume: vi.fn(() => resumed), close: vi.fn().mockResolvedValue(undefined),
     createOscillator: vi.fn(() => { const node = oscillator(); oscillators.push(node); return node; }),
     createGain: vi.fn(() => { const node = gain(); gains.push(node); return node; }),
-    createBuffer: vi.fn(() => ({})), createBufferSource: vi.fn(() => source),
+    createBuffer: vi.fn((_channels: number, length: number, _sampleRate: number) => {
+      const samples = new Float32Array(length);
+      return { getChannelData: () => samples };
+    }),
+    createBufferSource: vi.fn(() => { const node = sourceNode(); sources.push(node); return node; }),
+    createBiquadFilter: vi.fn(() => { const node = filter(); filters.push(node); return node; }),
   };
   const Audio = vi.fn(function () { return context; });
   vi.stubGlobal('navigator', { vibrate, audioSession, userAgent: 'Android' });
   vi.stubGlobal('window', { AudioContext: Audio });
-  return { vibrate, audioSession, Audio, context, oscillators, gains, source, resume() { context.state = 'running'; resolveResume(); } };
+  return { vibrate, audioSession, Audio, context, oscillators, gains, sources, filters, resume() { context.state = 'running'; resolveResume(); } };
 }
 
 function ios() {
@@ -43,18 +55,40 @@ describe('optional keyboard feedback', () => {
     feedback.unlockAudioContext({ keySounds: false });
     expect(f.Audio).not.toHaveBeenCalled(); expect(f.vibrate).not.toHaveBeenCalled(); feedback.destroy();
   });
-  it('uses an ambient soft triangle, 2ms attack and a lower softer slip', () => {
+  it('uses ambient 2–6kHz noise with a 1ms attack, short decay and very soft body; slips are duller', () => {
     const f = fixtures(), feedback = createKeyboardFeedback();
     feedback.play({ keySounds: true }); feedback.play({ keySounds: true }, true);
     expect(f.audioSession.type).toBe('ambient'); expect(f.Audio).toHaveBeenCalledTimes(1);
-    expect(f.oscillators.map(node => [node.type, node.frequency.value])).toEqual([['triangle', 520], ['triangle', 280]]);
-    expect(f.gains[0].gain.linearRampToValueAtTime).toHaveBeenCalledWith(0.3, 1.002);
-    expect(f.gains[1].gain.linearRampToValueAtTime).toHaveBeenCalledWith(0.2, 1.002);
-    expect(f.oscillators[0].stop).toHaveBeenCalledWith(1.05);
-    expect(f.oscillators[1].stop).toHaveBeenCalledWith(1.06);
+    expect(f.filters.map(node => [node.type, node.frequency.value, node.Q.value])).toEqual([
+      ['highpass', 2000, 0.707], ['lowpass', 6000, 0.707],
+      ['highpass', 1400, 0.707], ['lowpass', 4200, 0.707],
+    ]);
+    expect(f.sources[0].connect).toHaveBeenCalledWith(f.filters[0]);
+    expect(f.filters[0].connect).toHaveBeenCalledWith(f.filters[1]);
+    expect(f.filters[1].connect).toHaveBeenCalledWith(f.gains[0]);
+    expect(f.gains[0].gain.linearRampToValueAtTime).toHaveBeenCalledWith(0.22, 1.001);
+    expect(f.gains[2].gain.linearRampToValueAtTime).toHaveBeenCalledWith(0.18, 1.001);
+    expect(f.gains[0].gain.exponentialRampToValueAtTime).toHaveBeenCalledWith(0.0001, 1.024);
+    expect(f.gains[2].gain.exponentialRampToValueAtTime).toHaveBeenCalledWith(0.0001, 1.028);
+    expect(f.sources[0].stop).toHaveBeenCalledWith(1.024);
+    expect(f.sources[1].stop).toHaveBeenCalledWith(1.028);
+    expect(f.oscillators.map(node => [node.type, node.frequency.value])).toEqual([['sine', 175], ['sine', 150]]);
+    expect(f.gains[1].gain.linearRampToValueAtTime).toHaveBeenCalledWith(0.025, 1.001);
+    expect(f.gains[3].gain.linearRampToValueAtTime).toHaveBeenCalledWith(0.02, 1.001);
+    for (const body of f.oscillators) expect(body.stop).toHaveBeenCalledWith(1.01);
+    expect(f.context.createBuffer).toHaveBeenCalledExactlyOnceWith(1, 1440, 48000);
+    const samples = f.context.createBuffer.mock.results[0].value.getChannelData() as Float32Array;
+    expect(samples.some(value => value !== 0)).toBe(true);
+    expect(samples.every(value => value >= -1 && value <= 1)).toBe(true);
+    expect(f.sources[0].buffer).toBe(f.sources[1].buffer);
     feedback.setSettings({ keySounds: false });
-    expect(f.oscillators[0].stop).toHaveBeenCalledWith();
-    expect(f.oscillators[0].disconnect).toHaveBeenCalled();
+    for (const node of [...f.sources, ...f.oscillators]) {
+      expect(node.stop).toHaveBeenCalledWith();
+      expect(node.disconnect).toHaveBeenCalledTimes(1);
+    }
+    for (const node of [...f.filters, ...f.gains]) expect(node.disconnect).toHaveBeenCalledTimes(1);
+    f.sources[0].onended?.();
+    expect(f.sources[0].disconnect).toHaveBeenCalledTimes(1);
     feedback.destroy();
   });
   it('starts the silent unlock synchronously while retaining synchronous key haptics', async () => {
@@ -63,11 +97,11 @@ describe('optional keyboard feedback', () => {
     feedback.play({ keySounds: true, haptics: true });
     expect(f.vibrate).toHaveBeenCalledExactlyOnceWith(8);
     expect(f.context.resume).toHaveBeenCalledTimes(2);
-    expect(f.context.createOscillator).not.toHaveBeenCalled(); expect(f.source.start).toHaveBeenCalledTimes(1);
+    expect(f.context.createOscillator).not.toHaveBeenCalled(); expect(f.sources[0].start).toHaveBeenCalledTimes(1);
     f.resume(); await flush();
     expect(f.context.createBuffer).toHaveBeenCalledWith(1, 1, 48000);
-    expect(f.source.start).toHaveBeenCalledTimes(1); expect(f.oscillators[0].start).toHaveBeenCalledWith(1);
-    f.source.onended?.(); expect(f.source.disconnect).toHaveBeenCalled();
+    expect(f.sources[0].start).toHaveBeenCalledTimes(1); expect(f.oscillators[0].start).toHaveBeenCalledWith(1);
+    f.sources[0].onended?.(); expect(f.sources[0].disconnect).toHaveBeenCalled();
     feedback.destroy();
   });
   it('cancels pending playback when off, even if re-enabled before resume resolves', async () => {
@@ -75,14 +109,14 @@ describe('optional keyboard feedback', () => {
     feedback.unlockAudioContext({ keySounds: true }); feedback.play({ keySounds: true });
     feedback.setSettings({ keySounds: false }); feedback.setSettings({ keySounds: true });
     f.resume(); await flush();
-    expect(f.context.createOscillator).not.toHaveBeenCalled(); expect(f.source.start).toHaveBeenCalledTimes(1);
+    expect(f.context.createOscillator).not.toHaveBeenCalled(); expect(f.sources[0].start).toHaveBeenCalledTimes(1);
     feedback.play({ keySounds: true }); expect(f.oscillators).toHaveLength(1); feedback.destroy();
   });
   it('retries on a later gesture even if the first resume hangs forever', async () => {
     const f = fixtures(false), feedback = createKeyboardFeedback();
     f.context.resume.mockImplementationOnce(() => new Promise<void>(() => {}));
     feedback.unlockAudioContext({ keySounds: true });
-    expect(f.source.start).toHaveBeenCalledTimes(1);
+    expect(f.sources[0].start).toHaveBeenCalledTimes(1);
     feedback.play({ keySounds: true });
     expect(f.context.resume).toHaveBeenCalledTimes(2);
     expect(f.oscillators).toHaveLength(0);
@@ -98,7 +132,7 @@ describe('optional keyboard feedback', () => {
     expect(f.context.resume).toHaveBeenCalledTimes(3);
     f.resume(); await flush();
     expect(f.oscillators).toHaveLength(1);
-    expect(f.oscillators[0].frequency.value).toBe(280);
+    expect(f.oscillators[0].frequency.value).toBe(150);
     feedback.destroy();
   });
   it('drops stale queued ticks instead of playing them after a delayed unlock', async () => {
@@ -119,7 +153,7 @@ describe('optional keyboard feedback', () => {
     feedback.play({ keySounds: true }, true);
     await flush();
     expect(f.oscillators).toHaveLength(1);
-    expect(f.oscillators[0].frequency.value).toBe(280);
+    expect(f.oscillators[0].frequency.value).toBe(150);
     feedback.destroy();
   });
   it('does not play while suspended after a failed resume or after destruction', async () => {
