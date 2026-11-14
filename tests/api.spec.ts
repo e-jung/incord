@@ -1,5 +1,5 @@
 import {testIp} from './network';
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './accounts-playwright';
 
 const base = process.env.API_BASE_URL || 'http://localhost:8793';
 async function api(page: Page, path: string, data?: unknown, method = data === undefined ? 'GET' : 'POST') {

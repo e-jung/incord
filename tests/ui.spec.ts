@@ -1,5 +1,6 @@
+import {finishEmailSignin} from './email-handoff';
 import {testIp} from './network';
-import { test, expect, type Page, type TestInfo } from '@playwright/test';
+import { test, expect, type Page, type TestInfo } from './accounts-playwright';
 import { mkdir } from 'node:fs/promises';
 
 // Each test receives a fresh browser context/IndexedDB. Auth calls use the real
@@ -69,7 +70,7 @@ async function learned(page: Page) {
   await expect(page.getByRole('heading', { name: 'Learned', level: 1, exact: true })).toBeVisible();
   await expect(page.getByText(/Next review: /)).toBeVisible();
 }
-async function emailSignin(page: Page, email: string) {
+async function emailSignin(page: Page, email: string, addDeviceItems=false) {
   await page.getByLabel('Email address', { exact: true }).fill(email);
   await page.getByRole('button', { name: 'Email me a code', exact: true }).click();
   await expect(page.getByLabel('Six-digit code')).toBeVisible();
@@ -77,12 +78,15 @@ async function emailSignin(page: Page, email: string) {
   expect(response.ok()).toBe(true);
   const { code } = await response.json();
   expect(code).toMatch(/^\d{6}$/);
-  await page.getByLabel('Six-digit code').fill(code);
-  await expect(page.getByText('Signed in.',{exact:true})).toBeVisible();
+  await finishEmailSignin(page,code,addDeviceItems?async()=>{
+    const merge=page.getByRole('dialog').filter({hasText:/items? on this device/});
+    await expect(page.getByRole('button',{name:'Account settings',exact:true})).toBeVisible();
+    if(await merge.isVisible()){await merge.getByRole('button',{name:'Add',exact:true}).click();await expect(merge).toHaveCount(0)}
+  }:undefined);
 }
 async function register(page: Page, info?: TestInfo) {
   const email = `ui-${crypto.randomUUID()}@example.com`;
-  await emailSignin(page, email);
+  await emailSignin(page, email, true);
   const merge = page.getByRole('dialog').filter({ hasText: /items? on this device/ });
   if (await merge.count()) await merge.getByRole('button', { name: 'Add', exact: true }).click();
   if (info) await screen(page, info, 'account-email-created');
@@ -125,7 +129,8 @@ test('empty Today, every tab, settings persistence, local export, and own-text v
   await expect(page.getByRole('alert')).toHaveText('Add a title and some text.');
   await screen(page, info, 'discover-own-validation');
   await account(page);
-  await expect(page.getByRole('button', { name: 'Continue with Google' })).toHaveCount(0);
+  // The disposable Accounts harness enables its fake Google provider.
+  await expect(page.getByRole('button', { name: 'Continue with Google' })).toBeVisible();
   await expect(page.getByLabel('Email address', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Email me a code', exact: true })).toBeEnabled();
   expect(await page.getByLabel('Email address', { exact: true }).evaluate((input: HTMLInputElement) => input.validity.valueMissing)).toBe(true);
@@ -401,6 +406,8 @@ test('push permission, mock subscription, test notification and disable', async 
 });
 
 for (const choice of ['Start', 'Check what I remember']) test(`gentle return welcome caps the backlog before and after ${choice}`, async ({ page }, info) => {
+  // Seed from a static same-origin document so a late app persist cannot overwrite the fixture.
+  await page.goto('/privacy.html');
   await page.evaluate(async () => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => { const r = indexedDB.open('byheart', 1); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
     const last = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
@@ -412,7 +419,7 @@ for (const choice of ['Start', 'Check what I remember']) test(`gentle return wel
     await new Promise<void>((resolve, reject) => { const tx = db.transaction('state', 'readwrite'); tx.objectStore('state').put(state, 'current'); tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); });
     db.close();
   });
-  await page.reload();
+  await page.goto('/');
   await expect(page.getByRole('dialog', { name: 'Welcome back' })).toBeVisible();
   await expect(page.locator('.hero')).toContainText('3 to practice');
   await expect(page.locator('.hero')).toContainText('About 1 min');

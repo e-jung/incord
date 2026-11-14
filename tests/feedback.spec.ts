@@ -1,5 +1,6 @@
+import {finishEmailSignin} from './email-handoff';
 import {testIp} from './network';
-import {test,expect,type Page} from '@playwright/test';
+import {test,expect,type Page} from './accounts-playwright';
 
 const thanks='Thanks — Eric reads every one.';
 const form=(page:Page)=>page.getByRole('form',{name:'Send feedback',exact:true});
@@ -46,7 +47,7 @@ test('real sink email login never fills feedback contact; signed-in metadata sta
  await settings(page);const email=`feedback-${crypto.randomUUID()}@example.com`;
  await page.getByLabel('Email address',{exact:true}).fill(email);await page.getByRole('button',{name:'Email me a code',exact:true}).click();await expect(page.getByLabel('Six-digit code')).toBeVisible();
  const code=(await(await page.request.get('/api/test/last-code?email='+encodeURIComponent(email))).json()).code;
- await page.getByLabel('Six-digit code').fill(code);await expect(page.getByText('Signed in.',{exact:true})).toBeVisible();
+ await finishEmailSignin(page,code);
  const f=form(page);await expect(f.getByLabel('Email me back (optional)',{exact:true})).toHaveValue('');
  await f.getByLabel('Kind',{exact:true}).selectOption('Problem');
  const blankContact=await submit(page,'Signed-in blank contact '+crypto.randomUUID());

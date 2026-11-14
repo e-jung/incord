@@ -1,5 +1,6 @@
+import {finishEmailSignin} from './email-handoff';
 import {testIp} from './network';
-import { test, expect, type Page, type Locator } from '@playwright/test';
+import { test, expect, type Page, type Locator } from './accounts-playwright';
 async function tap(button:Locator){await button.waitFor({state:'visible'});await button.page().evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));const overlay=button.locator('xpath=following-sibling::*[1][self::input[contains(@class,"haptic-overlay")]]');if(await overlay.count())await overlay.tap();else await button.click()}
 async function account(page:Page){if(page.url()==='about:blank')await page.goto('/');else await tap(page.getByRole('navigation').getByRole('button',{name:'Today',exact:true}));await tap(page.getByRole('button',{name:'Account settings',exact:true}))}
 async function longPassage(page:Page){
@@ -81,7 +82,7 @@ test('keyboard feedback edited AFTER signing in syncs field clocks and survives 
  await page.addInitScript(enableVibrate);await account(page);
  const email=`feedback-sync-${crypto.randomUUID()}@example.com`;
  // Email and Google authenticate the same account/session/sync path; no live provider is needed.
- async function signin(p:Page){await p.getByLabel('Email address',{exact:true}).fill(email);await p.getByRole('button',{name:'Email me a code',exact:true}).click();await expect(p.getByLabel('Six-digit code')).toBeVisible();const {code}=await(await p.request.get('/api/test/last-code?email='+encodeURIComponent(email))).json();await p.getByLabel('Six-digit code').fill(code);await expect(p.getByText('Signed in.',{exact:true})).toBeVisible()}
+ async function signin(p:Page){await p.getByLabel('Email address',{exact:true}).fill(email);await p.getByRole('button',{name:'Email me a code',exact:true}).click();await expect(p.getByLabel('Six-digit code')).toBeVisible();const {code}=await(await p.request.get('/api/test/last-code?email='+encodeURIComponent(email))).json();await finishEmailSignin(p,code)}
  await signin(page);
  await page.getByLabel('Key sounds',{exact:true}).check();await page.getByLabel('Haptics',{exact:true}).check();
  await expect.poll(async()=>(await(await page.request.get('/api/export')).json()).settings).toMatchObject({keySounds:true,haptics:true,fieldUpdatedAt:{keySounds:expect.any(Number),haptics:expect.any(Number)}});

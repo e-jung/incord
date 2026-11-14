@@ -1,5 +1,5 @@
 import {testIp} from './network';
-import {test,expect,type Page,type APIResponse,type BrowserContext,type Locator,type Response} from '@playwright/test';
+import {test,expect,type Page,type APIResponse,type BrowserContext,type Locator,type Response} from './accounts-playwright';
 
 const groups=(page:Page)=>page.getByRole('region',{name:'Groups',exact:true});
 const groupArticle=(page:Page,name:string)=>groups(page).getByRole('article',{name,exact:true});
@@ -43,6 +43,17 @@ async function form(page:Page,kind:'create'|'join'){
  await expect(field).toBeVisible();
 }
 async function settings(page:Page){await page.getByRole('button',{name:'Account settings',exact:true}).click()}
+async function verifyEmail(page:Page,code:string){
+ const current=new URL(page.url()),invited=current.pathname.startsWith('/join/');
+ // The attach handoff navigates through Accounts before returning to a fresh app.
+ // Invite return paths use the normalized code; autojoin may replace that URL with /.
+ const returnPath=invited?'/join/'+current.pathname.slice('/join/'.length).replace(/-/g,'').toLowerCase():'/';
+ const returned=page.waitForResponse(response=>{const url=new URL(response.url());return url.origin===current.origin&&url.pathname===returnPath&&(invited||url.searchParams.get('signedIn')==='1')&&response.request().isNavigationRequest()});
+ await page.getByLabel('Six-digit code').fill(code);await returned;
+ await page.waitForURL(url=>url.origin===current.origin&&(invited?(url.pathname===returnPath||url.pathname==='/'):(url.pathname==='/'&&url.searchParams.get('signedIn')==='1')),{waitUntil:'domcontentloaded'});
+ if(invited)await expect(groups(page).getByText(/You have joined the group\.|Waiting for .* to approve\./)).toBeVisible();
+ await settings(page);await expect(page.getByText('Signed in.',{exact:true})).toBeVisible();
+}
 async function login(page:Page,name:string){
  const invited=new URL(page.url()==='about:blank'?'http://localhost/':page.url()).pathname.startsWith('/join/');
  if(!page.url()||page.url()==='about:blank')await page.goto('/');
@@ -50,7 +61,7 @@ async function login(page:Page,name:string){
  const email=`groups-${crypto.randomUUID()}@example.com`;
  await page.getByLabel('Email address',{exact:true}).fill(email);await page.getByRole('button',{name:'Email me a code',exact:true}).click();await expect(page.getByLabel('Six-digit code')).toBeVisible();
  const code=(await(await page.request.get('/api/test/last-code?email='+encodeURIComponent(email))).json()).code;
- await page.getByLabel('Six-digit code').fill(code);if(invited){await expect(groups(page).getByText(/You have joined the group\.|Waiting for .* to approve\./)).toBeVisible();await settings(page)}await expect(page.getByText('Signed in.',{exact:true})).toBeVisible();
+ await verifyEmail(page,code);
  await page.getByLabel('Display name',{exact:true}).fill(name);await page.getByLabel('Display name',{exact:true}).press('Tab');
  await expect.poll(async()=>(await(await page.request.get('/api/export')).json()).settings.name).toBe(name);
  if(invited)await openGroups(page);return email;
@@ -178,8 +189,8 @@ test('initial sign-in sync preserves a display-name edit made before blur',async
   held();await gate;await route.fulfill({response});
  });
  try{
-  await page.getByLabel('Six-digit code').fill(code);
-  await expect(page.getByText('Signed in.',{exact:true})).toBeVisible();
+  await verifyEmail(page,code);
+  // Hold the first sync in the returned app while editing the reopened settings.
   await initialHeld;
   const name=page.getByLabel('Display name',{exact:true});
   await name.fill('Friend');await expect(name).toBeFocused();

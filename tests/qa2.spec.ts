@@ -1,5 +1,6 @@
+import {finishEmailSignin} from './email-handoff';
 import {testIp} from './network';
-import {test,expect,type Page} from '@playwright/test';
+import {test,expect,type Page} from './accounts-playwright';
 import {mkdir} from 'node:fs/promises';
 async function emailSignin(page: Page, email: string) {
   await page.getByLabel('Email address', { exact: true }).fill(email);
@@ -9,8 +10,7 @@ async function emailSignin(page: Page, email: string) {
   expect(response.ok()).toBe(true);
   const { code } = await response.json();
   expect(code).toMatch(/^\d{6}$/);
-  await page.getByLabel('Six-digit code').fill(code);
-  await expect(page.getByText('Signed in.',{exact:true})).toBeVisible();
+  await finishEmailSignin(page,code);
 }
 test.beforeEach(async({context})=>{await context.setExtraHTTPHeaders({'CF-Connecting-IP':testIp()})});
 const shots='test-results/screens/qa5';

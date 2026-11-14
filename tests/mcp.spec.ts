@@ -1,5 +1,5 @@
 import {testIp} from './network';
-import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
+import { test, expect, type Page, type APIRequestContext } from './accounts-playwright';
 import {
   Client, StreamableHTTPClientTransport, discoverOAuthServerInfo,
   registerClient, startAuthorization, exchangeAuthorization,
@@ -38,6 +38,11 @@ async function flow(baseURL: string, scope?: string) {
 type Flow = Awaited<ReturnType<typeof flow>>;
 
 async function signIn(page: Page) {
+  const start = new URL(page.url());
+  const oauth = start.pathname === '/oauth/authorize';
+  const isReturn = (url: URL) => url.origin === start.origin && (oauth
+    ? url.pathname === start.pathname && url.search === start.search
+    : url.pathname === '/' && url.searchParams.get('signedIn') === '1');
   const email = `mcp-${crypto.randomUUID()}@example.com`;
   await page.getByLabel('Email address', { exact: true }).fill(email);
   await page.getByRole('button', { name: 'Email me a code', exact: true }).click();
@@ -46,7 +51,18 @@ async function signIn(page: Page) {
   expect(response.ok()).toBe(true);
   const { code } = await response.json();
   // Do not log codes or tokens; the test sink is available only in the local test Worker.
+  // Verification leaves the document for Accounts SSO attach. Wait for the
+  // actual return navigation, not the transient signed-in UI before departure.
+  const returned = page.waitForResponse(response =>
+    response.request().isNavigationRequest() && isReturn(new URL(response.url())));
   await page.getByLabel('Six-digit code').fill(code);
+  await returned;
+  await page.waitForURL(isReturn, { waitUntil: 'domcontentloaded' });
+  if (!oauth) {
+    // The home return deliberately closes Settings; restore it for callers.
+    await page.getByRole('button', { name: 'Account settings', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Account', exact: true })).toBeVisible();
+  }
 }
 async function settings(page: Page) {
   await page.goto('/');

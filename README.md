@@ -13,7 +13,7 @@ Incord is an offline-first app for memorizing Scripture, historic catechisms and
 - Four-step first-letter learning, followed by FSRS spaced repetition and a capped, gentle-return backlog.
 - BSB, KJV and WEB Bible packs; historic catechisms and creeds; custom text, whole passages and ten topical collections.
 - Offline practice, light/dark themes, adjustable text size, and Incord keys with optional key sounds/haptics.
-- Optional Google, email-code or email-free sign-in-code accounts, cross-device sync, and Web Push reminders.
+- Optional shared Jesklabs Google/email-code sign-in or app-local email-free sign-in-code accounts, cross-device sync, and Web Push reminders.
 - Small invite-only groups with shared goals, privacy-filtered practice rhythm and optional prayer encouragements.
 - Optional device-only ESV quotations through the Crossway API.
 - A remote MCP connection for compatible AI apps, with explicit authorization and revocation.
@@ -42,7 +42,7 @@ Edit the ignored `.dev.vars` with fresh local values, replacing the example plac
 npm run serve
 ```
 
-Open http://localhost:8793. Wrangler's build hook rebuilds the frontend automatically. Local Durable Object state stays in `.wrangler`; browser practice stays in IndexedDB. Local operation does not deploy anything. Google, email delivery, ESV and push require their optional configuration below.
+Open http://localhost:8793. Wrangler's build hook rebuilds the frontend automatically. Local Durable Object state stays in `.wrangler`; browser practice stays in IndexedDB. Local operation does not deploy anything. Shared email sign-in requires the Accounts service binding; legacy Google, ESV and push require their optional configuration below.
 
 ### Checks
 
@@ -57,7 +57,7 @@ npm run e2e
 
 E2E tests use disposable localhost accounts and mocked provider behavior. Stop an existing local Wrangler process before final E2E verification: Playwright may reuse it, including an older Worker bundle. Content refresh instructions and reproducible snapshots are in [content/SOURCES.md](content/SOURCES.md).
 
-For local email-code testing, set `EMAIL_TEST_SINK=1` only on localhost; `/api/test/last-code?email=person%40example.com` exposes the last unexpired test code there without sending mail. The sink is rejected on public hosts. Normal tests never make live ESV calls. The opt-in `ESV_LIVE_SMOKE=1 WORKER_URL=http://localhost:8793 npm run smoke:esv` makes one real request without retries and needs a valid ESV key.
+For local email-code testing, the Playwright configuration starts `cloudflare/test/serve.mjs`: a disposable local app configuration bound to the test-only Accounts fake. The adapter exposes `/api/test/last-code?email=person%40example.com` only on loopback with `EMAIL_TEST_SINK=1`. That flag alone does not enable sign-in in the production Worker. Never deploy the fake or adapter. Use `PLAYWRIGHT_BASE_URL=http://localhost:8893 npm run e2e -- --project=iPhone15-light` when the default port is busy. Normal tests never make live ESV calls. The opt-in `ESV_LIVE_SMOKE=1 WORKER_URL=http://localhost:8793 npm run smoke:esv` makes one real request without retries and needs a valid ESV key.
 
 ## Deploy your own instance
 
@@ -72,9 +72,11 @@ Configure secrets with `npx wrangler secret put NAME`; do not put secret values 
 | `SESSION_SECRET` | Required: strong random secret of at least 32 characters for sessions, identity hashes and OAuth encryption. Keep stable across releases. |
 | `APP_ORIGIN` | Required for deployment: your canonical HTTPS origin; set as a Wrangler variable or deploy-time `--var`. Leave unset for origin-agnostic local use. |
 | `STATS_TOKEN` | Optional private `/stats` dashboard and orphan-account maintenance access; use a separate strong random secret. Never put it in a URL. |
-| `RESEND_API_KEY` | Optional email-code sign-in and feedback email notifications via Resend. |
+| `RESEND_API_KEY` | Optional feedback email notifications via Resend (sign-in mail is sent by Accounts). |
 | `EMAIL_FROM` | Sender identity for Resend. Set your own verified sender; otherwise the maintained service's default sender is used. |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Optional Google sign-in. Register your origin's `/api/auth/google/callback` as the callback. |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Legacy Google sign-in, retained as the default until Accounts Google is verified in production. Register your origin's `/api/auth/google/callback`. |
+| `ACCOUNTS_SVC` | Cloudflare service binding to `jesklabs-accounts`, entrypoint `IncordClient`; enables shared email and explicit SSO sign-in. |
+| `ACCOUNTS_GOOGLE` | Public variable, `0` by default. Only `1` switches the Google button to Accounts. The direct `/api/auth/jesklabs?provider=google` route is always testable. |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Optional Web Push: matching P-256 public/private keys and operator contact URI. Private key is the base64url raw scalar. Keep keys stable. |
 | `DONATE_URL` | Optional public Wrangler variable: HTTPS support link, shown only in About and Connect. |
 | `ESV_API_KEY` | Optional server-side Crossway API access, subject to Crossway's conditions. ESV is never bundled. |
@@ -102,6 +104,18 @@ The maintained legacy host, `byheart.jesklabs.com`, uses the tiny, independent [
 
 There may be a short old-host gap between those deployments. Forks without a legacy hostname need only the main Worker; otherwise adapt both the legacy route and redirect destination. The main deploy script does not deploy the redirect Worker.
 
+### Shared Jesklabs sign-in
+
+Optional Jesklabs sign-in, shared by Jesklabs apps, stores your email and which Jesklabs apps you use at accounts.jesklabs.com. Persistent Incord identity records store only the existing keyed email fingerprint and a pairwise Jesklabs subject; no email column is added. SSO confirmation temporarily keeps the returned address in a server-side pending challenge valid for five minutes, consumed on confirmation or cancellation. Three-word sign-in codes remain app-local. Existing Incord sessions keep working unchanged.
+
+The primary Sign in action checks for an existing Jesklabs session only on a tap. It always asks “Continue as …” before creating an Incord session; choosing another account or a missing SSO session shows normal options. Browser hops are top-level navigations only, never cross-origin fetches. Email verification creates the Incord session first, then attaches SSO with a one-time ticket; a skipped/failed attach does not invalidate the Incord session.
+
+Google stays on the old callback by default. Before switching `ACCOUNTS_GOOGLE=1`, add `https://accounts.jesklabs.com/oauth/google/callback` in Google Cloud and verify an actual production sign-in through Accounts. This change does not perform those operator steps.
+
+Before enabling shared sign-in for new subjects, import all legacy Google mappings. A server guard returns a calm 503 for unknown shared subjects while any legacy Google uid lacks a jl mapping; existing sessions, known shared subjects, app-local codes and legacy Google remain usable. This avoids split accounts for old Google identities without email fingerprints. Resolve import errors/conflicts before exposing the new flows.
+
+Legacy Google mappings can be imported with authenticated `POST /stats/maintenance/accounts-import` (dry run by default, `confirm:true` to execute bounded, resumable batches). Counts only are returned. Existing email-only users link lazily on their next verified sign-in because their addresses cannot be recovered from fingerprints. Account deletion must successfully unlink Accounts before deleting local data; exports include Accounts identity metadata.
+
 ### Email-free code accounts
 
 Account settings can create an account without email or Google. A sign-in code has three kid-safe compound words and four digits (46.28 bits of cryptographic entropy). Save it privately: without a linked email/Google method, a lost code cannot be recovered. Code sign-in accepts case-insensitive input with or without hyphens. Regeneration invalidates the old code but leaves existing device sessions signed in.
@@ -110,7 +124,7 @@ The server stores only a domain-separated HMAC under `SESSION_SECRET`, never the
 
 ### Orphan-account maintenance
 
-After retiring a sign-in method, an operator can inspect accounts with **no email, Google or sign-in-code mapping**. `POST /stats/maintenance/orphans` uses the same signed administrator cookie as `/stats`, or `Authorization: Bearer $STATS_TOKEN`. Send a matching `Origin` header and JSON. The default is a dry run; an empty body or `{}` does not delete anything.
+After retiring a sign-in method, an operator can inspect accounts with **no email, Google, Jesklabs or sign-in-code mapping**. `POST /stats/maintenance/orphans` uses the same signed administrator cookie as `/stats`, or `Authorization: Bearer $STATS_TOKEN`. Send a matching `Origin` header and JSON. The default is a dry run; an empty body or `{}` does not delete anything.
 
 ```sh
 # Set ORIGIN to your instance and supply STATS_TOKEN in your shell environment.
@@ -119,7 +133,7 @@ curl --fail-with-body "$ORIGIN/stats/maintenance/orphans" \
   -H 'Content-Type: application/json' --data '{"limit":10}'
 ```
 
-The response includes counts and selected creation dates only (UTC dates, or `null` if unavailable), never account IDs or library contents. `limit` defaults to 10 and is capped at 25 to bound each request's work. Inspect the dry run before sending `{"confirm":true,"limit":10}` to permanently delete the selected orphans. Repeat bounded batches until none remain. Confirmation runs the same deletion path as the app: OAuth revocation, group removal, UserDO data and push subscriptions, then registry mappings. Mapping checks and durable deletion claims prevent an email/Google/code-linked account from being selected during a concurrent sign-in. A failed batch may have completed earlier deletions; retrying is safe.
+The response includes counts and selected creation dates only (UTC dates, or `null` if unavailable), never account IDs or library contents. `limit` defaults to 10 and is capped at 25 to bound each request's work. Inspect the dry run before sending `{"confirm":true,"limit":10}` to permanently delete the selected orphans. Repeat bounded batches until none remain. Confirmation runs the same deletion path as the app: OAuth revocation, group removal, UserDO data and push subscriptions, then registry mappings. Mapping checks and durable deletion claims prevent an email/Google/Jesklabs/code-linked account from being selected during a concurrent sign-in. A failed batch may have completed earlier deletions; retrying is safe.
 
 Cloudflare does not enumerate named UserDOs. Maintenance discovers historical accounts from retained registry mappings, scheduling entries, pending identity challenges and group memberships, and maintains a durable index thereafter. A historical object with no surviving registry reference cannot be found by this endpoint. HTTP GET never performs maintenance. Keep the stats token private; do not put it in a URL or logs.
 

@@ -1,0 +1,7 @@
+{
+  "name": "jesklabs-accounts-e2e",
+  "main": "accounts-fake.ts",
+  "compatibility_date": "2025-11-13",
+  "dev": { "port": 8794 },
+  "workers_dev": false
+}

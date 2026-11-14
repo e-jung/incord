@@ -1,5 +1,6 @@
+import {finishEmailSignin,waitEmailHandoff} from './email-handoff';
 import {testIp} from './network';
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './accounts-playwright';
 
 async function tab(page: Page, name: string) {
   await page.getByRole('navigation').getByRole('button', { name, exact: true }).click();
@@ -46,7 +47,7 @@ async function account(page: Page) {
   await tab(page, 'Today');
   await page.getByRole('button', { name: 'Account settings', exact: true }).click();
 }
-async function emailSignin(page: Page, email: string) {
+async function emailSignin(page: Page, email: string, pendingOwnership=false) {
   await page.getByLabel('Email address', { exact: true }).fill(email);
   await page.getByRole('button', { name: 'Email me a code', exact: true }).click();
   await expect(page.getByLabel('Six-digit code')).toBeVisible();
@@ -54,8 +55,7 @@ async function emailSignin(page: Page, email: string) {
   expect(response.ok()).toBe(true);
   const { code } = await response.json();
   expect(code).toMatch(/^\d{6}$/);
-  await page.getByLabel('Six-digit code').fill(code);
-  await expect(page.getByText('Signed in.',{exact:true})).toBeVisible();
+  if(pendingOwnership)await waitEmailHandoff(page,code);else await finishEmailSignin(page,code);
 }
 async function signup(page: Page) {
   const email=`regression-${crypto.randomUUID()}@example.com`;
@@ -239,7 +239,7 @@ for (const choice of ['Add', 'Keep separate']) {
     await own(page, 'Unclaimed device text');
     await tab(page, 'Today');
     await account(page);
-    await emailSignin(page,email);
+    await emailSignin(page,email,true);
     const merge = page.getByRole('dialog').filter({ hasText: /items? on this device/ });
     await expect(merge).toBeVisible();
     expect(JSON.stringify(await (await page.request.get('/api/export')).json())).not.toContain('Unclaimed device text');

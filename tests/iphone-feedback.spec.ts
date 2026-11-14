@@ -1,6 +1,7 @@
+import {finishEmailSignin} from './email-handoff';
 import {testIp} from './network';
 import {KEY_SAMPLES,DEFAULT_KEY_SAMPLE} from '../public/audio/keyboard-samples.js';
-import {test,expect,type Page} from '@playwright/test';
+import {test,expect,type Page} from './accounts-playwright';
 // Route-controlled ESV delays must reach Playwright, not a service-worker fetch.
 // Offline-shell behavior is covered by the existing device/UI suites.
 test.use({serviceWorkers:'block'});
@@ -10,7 +11,7 @@ async function settings(page:Page){if(page.url()==='about:blank')await page.goto
 async function signin(page:Page,email:string){
  await page.getByLabel('Email address',{exact:true}).fill(email);await page.getByRole('button',{name:'Email me a code',exact:true}).click();
  await expect(page.getByLabel('Six-digit code')).toBeVisible();const response=await page.request.get('/api/test/last-code?email='+encodeURIComponent(email));expect(response.ok()).toBe(true);
- await page.getByLabel('Six-digit code').fill((await response.json()).code);await expect(page.getByText('Signed in.',{exact:true})).toBeVisible();
+ await finishEmailSignin(page,(await response.json()).code);
 }
 function mockFeedback(){
  const calls={audio:0,tick:0,vibrate:0,resume:0};(window as any).__feedbackCalls=calls;

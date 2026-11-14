@@ -32,19 +32,19 @@
 
   <h2>With an account</h2>
   <p>You can create an account with a private sign-in code instead of email or Google. Three kid-safe words and four digits act as your key: anyone who knows the code can sign in. The server stores only a one-way keyed hash of it, never the readable code. A copy is kept only in browsers where you create or enter the code, so you can reveal it with a tap; it is not included in library sync or exports and is removed from this browser when you sign out. Regenerating a code invalidates the old one but does not sign out existing devices. Without another linked sign-in method, a lost code cannot be recovered. Save it privately, or add email or Google to the same account.</p>
-  <p>Email sign-in sends a short-lived, six-digit code through our email delivery provider. Your email address is used only to send sign-in codes, never for marketing. Incord stores only a one-way keyed hash of the address, not the address itself. Codes are stored as hashes, expire after 10 minutes, and can be used only once.</p>
+  <p>Optional Jesklabs sign-in is shared by Jesklabs apps; it stores your email and which Jesklabs apps you use. The shared sign-in service at accounts.jesklabs.com sends short-lived, six-digit codes through our email delivery provider and stores the verified address, not for marketing. Incord’s lasting account records contain only a one-way keyed fingerprint of the address and an app-specific Jesklabs identity. To ask you to confirm an existing Jesklabs session, Incord temporarily keeps the address in a pending sign-in record valid for five minutes, removed when you confirm or cancel or during expired-record cleanup. Codes are stored as hashes, expire after 10 minutes, and can be used only once. Signing in through another Jesklabs app always asks you to confirm before signing in to Incord. Signing out of Incord signs out this app only.</p>
   <p>Passkey and recovery-code sign-in have been retired. Dormant public keys or hashed recovery records from earlier versions may remain until account deletion; they are no longer used for authentication.</p>
   <p>If you create an account, Incord stores what it needs to sync your library across devices:</p>
   <ul>
     <li>the display name you choose and your app settings;</li>
     <li>your library (passage references and text you added yourself) and your practice history;</li>
-    <li>a one-way keyed hash of your email address if you choose email or Google sign-in;</li>
+    <li>a one-way keyed hash of your email address if you choose email or Google sign-in, and an app-specific identity from Jesklabs sign-in;</li>
     <li>if you turn on reminders, your reminder time, time zone and the push address your browser provides.</li>
   </ul>
   <p>ESV text is fetched on demand and kept only on your device. It is never stored on Incord's servers.</p>
 
   <h2>Sign in with Google</h2>
-  <p>If you choose Google sign-in, Incord receives your Google account ID, your name, and your verified email address. It uses them only to sign you in, including recognizing the same verified email used for email sign-in. Your email is stored only as the same one-way keyed hash, not as a readable address. Incord does not read your inbox, contacts, or files, and does not sell your Google information or use it for advertising.</p>
+  <p>If you choose Google sign-in, Incord receives your Google account ID, your name, and your verified email address. It uses them only to sign you in, including recognizing the same verified email used for email sign-in. Incord’s lasting account records store your email only as the same one-way keyed fingerprint; the temporary confirmation record is described above. The shared Jesklabs sign-in service stores your verified email and optional Google account ID to recognize you across participating Jesklabs apps. Incord does not read your inbox, contacts, or files, and does not sell your Google information or use it for advertising.</p>
 
   <h2>Groups you choose to join</h2>
   <p>Groups share the display name you choose, your practiced days this week and weekly goal, learned-item count, current streak, and progress toward the group’s shared goal. By default, members also see the titles or references and translations of items you are memorizing or have learned. Turn off “Show what I’m memorizing to my groups” in Settings to hide those titles from future group views immediately after sync. Item text, slips, grades, review details, email addresses and account IDs are never shared with group members.</p>

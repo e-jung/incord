@@ -1,3 +1,4 @@
+import { accountsCall, AccountsError, accountsReturnPath, maskedEmail, type AccountsService, type AccountsIdentity } from './accounts';
 import { generateSignInCode, normalizeCode, validCode } from '../shared/sign-in-code';
 import { GroupsError, handleGroups, initializeGroupsRegistry, handleGroupsRegistry, cleanupGroups, scheduleGroups, dispatchGroupReminders } from './groups';
 export { GroupDO } from './groups';
@@ -10,6 +11,8 @@ export { OAuthStorageDO } from './oauth-storage';
 import { oauthCall } from './oauth-storage';
 
 export interface Env {
+  ACCOUNTS_SVC?: AccountsService;
+  ACCOUNTS_GOOGLE?: string;
   ASSETS: Fetcher;
   GROUPS?: DurableObjectNamespace;
   OAUTH_STORAGE: DurableObjectNamespace;
@@ -66,21 +69,26 @@ export function authIpBucket(address: string | null): string {
     return words.slice(0, 4).map(word => word.toString(16).padStart(4, '0')).join(':') + '::/64';
   } catch { return 'local'; }
 }
-/** Rejection sampling keeps all million possible codes equally likely. */
-export function generateLoginCode() { const value = new Uint32Array(1); do { crypto.getRandomValues(value); } while (value[0] >= 4_294_000_000); return String(value[0] % 1_000_000).padStart(6, '0'); }
 export function normalizeEmail(value: unknown) { assert(typeof value === 'string', 'Enter a valid email address.'); const email = value.trim().toLowerCase(); assert(email.length <= 254 && /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email), 'Enter a valid email address.'); return email; }
 export const signInCodeKey = (env: Env, code: unknown) => hmac(env.SESSION_SECRET, 'signin-code:' + normalizeCode(code));
 export const emailKey = (env: Env, email: string) => hmac(env.SESSION_SECRET, 'email:' + normalizeEmail(email));
-export const loginCodeHash = (env: Env, key: string, code: string) => hmac(env.SESSION_SECRET, 'email-code:' + key + ':' + code);
 export function constantTimeEqual(a: string, b: string) { let diff = a.length ^ b.length; for (let i = 0; i < Math.max(a.length, b.length); i++) diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0); return diff === 0; }
 export function emailTestMode(env: Env, request: Request) { return env.EMAIL_TEST_SINK === '1' && ['localhost', '127.0.0.1'].includes(new URL(request.url).hostname); }
-function emailEnabled(env: Env, request: Request) { return !!(env.RESEND_API_KEY || emailTestMode(env, request)); }
-export async function sendLoginCode(env: Env, to: string, code: string) {
-  const message = { from: env.EMAIL_FROM || 'Incord <signin@incord.jesklabs.com>', reply_to: 'incord@jesklabs.com', to, subject: `Your Incord code: ${code}`, text: `Your Incord sign-in code is ${code}. It expires in 10 minutes. If you didn't ask for this code, ignore this email.`, html: `<p>Your Incord sign-in code is <strong>${code}</strong>.</p><p>It expires in 10 minutes. If you didn't ask for this code, ignore this email.</p>` };
-  if (env.RESEND_API_KEY) { try { const response = await fetch('https://api.resend.com/emails', { method: 'POST', redirect: 'manual', headers: { Authorization: 'Bearer ' + env.RESEND_API_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify(message) }); assert(response.ok, 'We couldn’t send your code. Please try again shortly.', 503); } catch { throw new ApiError(503, 'We couldn’t send your code. Please try again shortly.'); } }
-  else throw new ApiError(404, 'Email sign-in is not enabled.');
+function emailEnabled(env: Env, _request: Request) { return !!env.ACCOUNTS_SVC; }
+async function accountsUsers(env: Env, uid: string) {
+  const { subs } = await registry(env, '/jl/links', { uid });
+  return Promise.all((subs as string[]).map(sub => accountsCall(env.ACCOUNTS_SVC, 'getUser', { sub })));
 }
-async function identityFlags(env: Env, uid: string) { return registry(env, '/identity', { uid }); }
+async function identityFlags(env: Env, uid: string) {
+  const flags = await registry(env, '/identity', { uid });
+  // Existing sessions remain usable during an Accounts outage. Never invent flags.
+  try { for (const account of await accountsUsers(env, uid)) if (account) { flags.hasEmail ||= !!account.email; flags.hasGoogle ||= account.hasGoogle; } } catch { /* preserve local known methods */ }
+  return flags;
+}
+async function resolveAccounts(env: Env, identity: AccountsIdentity, uid?: string) {
+  const result = await registry(env, '/jl/resolve', { requireReady: true, sub: identity.sub, ...(identity.email ? { emailKey: await emailKey(env, identity.email) } : {}), ...(uid ? { uid } : {}) });
+  await user(env, result.uid, '/init', { name: 'Friend' }); return result.uid as string;
+}
 export async function signSession(session: Session, secret: string) { const value = b64(encoder.encode(JSON.stringify(session))); return value + '.' + await hmac(secret, value); }
 export async function readSession(value: string | undefined, secret: string): Promise<Session | null> {
   try { if (!value || value.length > 2048) return null; const [payload, signature, extra] = value.split('.'); if (extra || !signature) return null;
@@ -109,6 +117,8 @@ const user = (env: Env, uid: string, path: string, data: unknown = {}) => call(s
 /** Both self-service deletion and maintenance must revoke apps before any destructive work. */
 async function deleteAccount(env: Env, uid: string, origin: string) {
   assert((await oauthCall(env, '/revoke-all', { origin, uid })).ok, 'Unable to disconnect apps. Please try again.', 503);
+  const { subs } = await registry(env, '/jl/links', { uid });
+  try { for (const sub of subs) await accountsCall(env.ACCOUNTS_SVC, 'deleteLink', { sub }); } catch { console.log(JSON.stringify({ evt: 'accounts_delete_failed', count: subs.length })); throw new ApiError(503, 'Unable to disconnect Jesklabs sign-in. Please try again.'); }
   await cleanupGroups(env, uid);
   await user(env, uid, '/delete'); // Includes push subscriptions, events, settings and credentials.
   await registry(env, '/delete', { uid });
@@ -174,6 +184,113 @@ async function signedIn(request: Request, env: Env) { const s = await readSessio
 function originFor(request: Request, env: Env) { const origin = new URL(request.url).origin; if (env.APP_ORIGIN) assert(origin === new URL(env.APP_ORIGIN).origin, 'Wrong host', 403); return origin; }
 async function authChallenge(env: Env, request: Request, kind: string) { const id = cookies(request).bh_flow; assert(id, 'Start sign-in again'); const flow = await registry(env, '/challenge/take', { id }); assert(flow && flow.kind === kind, 'Sign-in expired; start again'); return flow as Challenge; }
 
+// Browser-bound, server-side PKCE and pending consent. No ticket is persisted.
+const jlCookie = (id: string, age: number) => `__Host-jl_auth=${id}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${age}`;
+function jlTarget(path: string, flags: Record<string, string>) {
+  const url = new URL(accountsReturnPath(path), 'https://incord.jesklabs.com');
+  for (const [key, value] of Object.entries(flags)) url.searchParams.set(key, value);
+  return url.pathname + url.search + url.hash;
+}
+function jlRedirect(location: string, id = '', age = 0, sessionCookie?: string) {
+  const headers = new Headers({ Location: location, 'Cache-Control': 'no-store' });
+  headers.append('Set-Cookie', jlCookie(id, age));
+  if (sessionCookie) headers.append('Set-Cookie', sessionCookie);
+  return new Response(null, { status: 302, headers });
+}
+async function jesklabsAuth(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url), path = url.pathname, origin = originFor(request, env);
+  assert(env.SESSION_SECRET?.length >= 32, 'Service secrets are not configured', 503);
+  if (!['GET', 'HEAD'].includes(request.method)) assert(request.headers.get('Origin') === origin, 'Cross-origin write denied', 403);
+  await registry(env, '/limit', { key: 'jl:' + await hmac(env.SESSION_SECRET, authIpBucket(request.headers.get('CF-Connecting-IP'))), limit: 60, window: 900_000 });
+  if (path === '/api/auth/jesklabs' && request.method === 'GET') {
+    const silent = url.searchParams.get('prompt') === 'none';
+    assert(silent || url.searchParams.get('provider') === 'google', 'Choose a sign-in method.');
+    assert(!(silent && url.searchParams.get('link') === '1'), 'Choose a sign-in method.');
+    const uid = url.searchParams.get('link') === '1' ? (await signedIn(request, env)).uid : undefined;
+    const id = random(), state = random(), verifier = random(48), returnPath = accountsReturnPath(url.searchParams.get('return'));
+    const previous = cookies(request)['__Host-jl_auth'];
+    if (previous) await registry(env, '/challenge/take', { id: previous });
+    await registry(env, '/challenge/set', { id, ttl: 600_000, value: { kind: 'jl', state, verifier, silent, returnPath, ...(uid ? { uid } : {}) } });
+    // A non-authorizing return breadcrumb outlives consumed/expired flows so
+    // callback retries can still recover MCP and group deep links.
+    await registry(env, '/challenge/set', { id: 'jl-return:' + state, ttl: 1_800_000, value: { kind: 'jl-return', returnPath } });
+    const target = new URL('https://accounts.jesklabs.com/authorize');
+    target.search = new URLSearchParams({ client: 'incord', redirect_uri: origin + '/auth/jesklabs/callback', state, code_challenge: await digest(verifier), code_challenge_method: 'S256', ...(silent ? { prompt: 'none' } : { provider: 'google' }) }).toString();
+    return jlRedirect(target.href, id, 600);
+  }
+  const id = cookies(request)['__Host-jl_auth'];
+  if (path === '/auth/jesklabs/callback' && request.method === 'GET') {
+    // Take before exchange: state and grant cannot be replayed, including failures.
+    let flow: any = null, returnPath = '/';
+    try {
+      flow = id ? await registry(env, '/challenge/take', { id }) : null;
+      returnPath = flow?.returnPath || '/';
+      const callbackState = url.searchParams.get('state') || '';
+      if (!flow && /^[A-Za-z0-9_-]{43}$/.test(callbackState)) {
+        const breadcrumb = await registry(env, '/challenge/peek', { id: 'jl-return:' + callbackState });
+        if (breadcrumb?.kind === 'jl-return') returnPath = breadcrumb.returnPath;
+      }
+      assert(flow?.kind === 'jl' && typeof flow.state === 'string' && constantTimeEqual(flow.state, url.searchParams.get('state') || ''), 'Sign-in expired. Please start again.', 401);
+      if (flow.uid) assert((await signedIn(request, env)).uid === flow.uid, 'Sign-in account changed', 401);
+      if (url.searchParams.has('error')) return jlRedirect(jlTarget(returnPath, { jlOptions: '1', ...(url.searchParams.get('error') === 'login_required' ? {} : { jlError: 'Sign-in was not completed. Please try again.' }) }));
+      const code = url.searchParams.get('code'); assert(code, 'Sign-in was not completed. Please try again.', 401);
+      const identity = await accountsCall(env.ACCOUNTS_SVC, 'exchangeCode', { code, codeVerifier: flow.verifier, redirectUri: origin + '/auth/jesklabs/callback' });
+      if (flow.silent) {
+        const pendingId = random();
+        await registry(env, '/challenge/set', { id: pendingId, value: { kind: 'jl-pending', sub: identity.sub, email: identity.email, returnPath } });
+        return jlRedirect(jlTarget(returnPath, { jlConfirm: '1' }), pendingId, 300);
+      }
+      const uid = await resolveAccounts(env, identity, flow.uid);
+      const login = await issue(env, uid, origin);
+      return jlRedirect(jlTarget(returnPath, flow.uid ? { googleLink: 'success' } : { signedIn: '1' }), '', 0, login.headers.get('Set-Cookie')!);
+    } catch (error) {
+      const message = error instanceof ApiError || error instanceof AccountsError ? error.message : 'Sign-in is temporarily unavailable. Please try again shortly.';
+      return jlRedirect(jlTarget(returnPath, { jlOptions: '1', jlError: message, ...(flow?.uid ? { googleLink: error instanceof ApiError && error.status === 409 ? 'collision' : 'failed' } : {}) }));
+    }
+  }
+  if (path === '/api/auth/jesklabs/pending' && request.method === 'GET') {
+    const pending = id ? await registry(env, '/challenge/peek', { id }) : null;
+    assert(pending?.kind === 'jl-pending', 'Sign-in expired. Please start again.', 401);
+    return json({ email: maskedEmail(pending.email) });
+  }
+  if ((path === '/api/auth/jesklabs/confirm' || path === '/api/auth/jesklabs/cancel') && request.method === 'POST') {
+    await body(request, 1024);
+    const pending = id ? await registry(env, '/challenge/take', { id }) : null;
+    if (path.endsWith('/cancel')) return json({ ok: true }, 200, { 'Set-Cookie': jlCookie('', 0) });
+    assert(pending?.kind === 'jl-pending', 'Sign-in expired. Please start again.', 401);
+    const uid = await resolveAccounts(env, { sub: pending.sub, email: pending.email, isNew: false });
+    const login = await issue(env, uid, origin, { returnPath: pending.returnPath });
+    login.headers.append('Set-Cookie', jlCookie('', 0)); return login;
+  }
+  throw new ApiError(404, 'Route not found');
+}
+
+async function maintainAccountsImport(request: Request, env: Env) {
+  assert(request.method === 'POST', 'Method not allowed', 405);
+  const origin = originFor(request, env);
+  assert(request.headers.get('Origin') === origin, 'Cross-origin write denied', 403);
+  assert(env.STATS_TOKEN && env.STATS_TOKEN.length >= 32, 'Stats are not configured', 503);
+  const stats = env.STATS.get(env.STATS.idFromName('stats'));
+  assert((await stats.fetch('https://stats/auth-limit', { method: 'POST' })).ok, 'Try again in a minute', 429);
+  const auth = request.headers.get('Authorization');
+  assert((auth?.startsWith('Bearer ') && constantTimeEqual(auth.slice(7), env.STATS_TOKEN)) || await verifyStatsCookie(cookies(request).incord_stats, env.STATS_TOKEN), 'Unauthorized', 401);
+  const input = await body(request, 4096), limit = input.limit ?? 25;
+  assert(input.confirm === undefined || typeof input.confirm === 'boolean', 'Invalid confirmation');
+  assert(Number.isInteger(limit) && Number(limit) >= 1 && Number(limit) <= 100, 'Limit must be 1–100');
+  const selected = await registry(env, '/jl/import-list', { limit, mark: input.confirm === true });
+  const report = { google: selected.google, imported: 0, alreadyLinked: selected.alreadyLinked, conflicts: 0, errors: 0, emailOnlyPendingLazy: selected.emailOnlyPendingLazy };
+  if (input.confirm === true) for (const row of selected.rows) {
+    try {
+      const metadata = await user(env, row.uid, '/maintenance/metadata');
+      const stored = metadata.createdAt;
+      const verifiedAt = typeof stored === 'number' && Number.isFinite(stored) && stored > 0 && stored <= Date.now() ? stored : Date.now();
+      const imported = await accountsCall(env.ACCOUNTS_SVC, 'importIdentity', { googleSub: row.id, verifiedAt });
+      await registry(env, '/jl/resolve', { sub: imported.sub, uid: row.uid }); report.imported++;
+    } catch (error) { if ((error instanceof ApiError || error instanceof AccountsError) && error.status === 409) report.conflicts++; else report.errors++; }
+  }
+  return json(report);
+}
+
 /** Telemetry is deliberately lossy: never forward arbitrary exception text or URLs. */
 export function clientErrorRecord(input: ObjectData, origin: string) {
   const message = typeof input.message === 'string' ? input.message : '';
@@ -193,10 +310,11 @@ export function clientErrorRecord(input: ObjectData, origin: string) {
 async function api(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url), path = url.pathname, origin = originFor(request, env);
   if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method)) assert(request.headers.get('Origin') === origin, 'Cross-origin write denied', 403);
-  if (path === '/api/config' && request.method === 'GET') return json({ donateUrl: supportUrl(env.DONATE_URL), email: emailEnabled(env, request), google: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET), googleEnabled: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET), push: !!(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY), vapidPublicKey: env.VAPID_PUBLIC_KEY || null });
-  if (path === '/api/test/last-code') assert(emailTestMode(env, request) && request.method === 'GET', 'Not found', 404);
+  if (path === '/api/auth/jesklabs' || path.startsWith('/api/auth/jesklabs/')) { assert(env.SESSION_SECRET?.length >= 32, 'Service secrets are not configured', 503); return jesklabsAuth(request, env); }
+  if (path === '/api/config' && request.method === 'GET') return json({ donateUrl: supportUrl(env.DONATE_URL), email: emailEnabled(env, request), google: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET), googleEnabled: env.ACCOUNTS_GOOGLE === '1' ? !!env.ACCOUNTS_SVC : !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET), accountsGoogle: env.ACCOUNTS_GOOGLE === '1', push: !!(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY), vapidPublicKey: env.VAPID_PUBLIC_KEY || null });
+  if (path === '/api/test/last-code') throw new ApiError(404, 'Not found');
   assert(env.SESSION_SECRET?.length >= 32, 'Service secrets are not configured', 503);
-  if (path === '/api/test/last-code') { assert(emailTestMode(env, request) && request.method === 'GET', 'Not found', 404); return json(await registry(env, '/email/test-get', { key: await emailKey(env, normalizeEmail(url.searchParams.get('email'))) })); }
+
   if (path === '/api/feedback') {
     assert(request.method === 'POST', 'Method not allowed', 405);
     const input = await body(request, 24000);
@@ -261,18 +379,17 @@ async function api(request: Request, env: Env): Promise<Response> {
     }
     if ((path === '/api/auth/email/start' || path === '/api/auth/email/verify') && request.method === 'POST') {
       assert(emailEnabled(env, request), 'Email sign-in is not enabled.', 404);
-      const input = await body(request, 2048), email = normalizeEmail(input.email), key = await emailKey(env, email);
+      const input = await body(request, 2048), email = normalizeEmail(input.email);
       const linkUid = input.link === true ? (await signedIn(request, env)).uid : undefined;
+      const ip = request.headers.get('CF-Connecting-IP') || '';
       if (path.endsWith('/start')) {
-        const code = generateLoginCode(), hash = await loginCodeHash(env, key, code);
-        await registry(env, '/email/start', { key, hash, uid: linkUid, ip: await hmac(env.SESSION_SECRET, 'email-ip:' + authIpBucket(request.headers.get('CF-Connecting-IP'))), ...(emailTestMode(env, request) ? { testCode: code } : {}) });
-        if (!emailTestMode(env, request)) await sendLoginCode(env, email, code);
+        await accountsCall(env.ACCOUNTS_SVC, 'startEmail', { email, ip });
         return json({ ok: true, message: 'Check your email for a six-digit code.' });
       }
       assert(typeof input.code === 'string' && /^\d{6}$/.test(input.code), 'Enter the six-digit code.');
-      const result = await registry(env, '/email/verify', { key, hash: await loginCodeHash(env, key, input.code), uid: linkUid });
-      await user(env, result.uid, '/init', { name: 'Friend' });
-      return issue(env, result.uid, origin);
+      const result = await accountsCall(env.ACCOUNTS_SVC, 'verifyEmail', { email, code: input.code, ip });
+      const uid = await resolveAccounts(env, result, linkUid);
+      return issue(env, uid, origin, { ssoTicket: result.ssoTicket });
     }
 
     if (path === '/api/auth/logout-everywhere' && request.method === 'POST') { const session = await signedIn(request, env); await user(env, session.uid, '/revoke'); assert((await oauthCall(env,'/revoke-all',{origin,uid:session.uid})).ok,'Unable to disconnect apps. Please try again.',503); return json({ ok: true }, 200, { 'Set-Cookie': cookie(cookieName, '', 0, origin) }); }
@@ -296,6 +413,8 @@ async function api(request: Request, env: Env): Promise<Response> {
         const authoritativeEmail = verifiedEmail && (verifiedEmail.endsWith('@gmail.com') || (profile.hd && verifiedEmail.endsWith('@' + profile.hd.toLowerCase())));
         if (flow.uid) assert((await signedIn(request, env)).uid === flow.uid, 'Sign-in account changed', 401);
         const mapping = await registry(env, '/google', { sub: profile.sub, ...(flow.uid ? { uid: flow.uid } : {}), ...(authoritativeEmail ? { emailKey: await emailKey(env, verifiedEmail!) } : {}) }); await user(env, mapping.uid, '/init', { name: profile.name || 'Friend' });
+        // Best effort convergence; infrastructure failure must not block old Google.
+        try { const imported = await accountsCall(env.ACCOUNTS_SVC, 'importIdentity', { googleSub: profile.sub, verifiedAt: Date.now() }); await registry(env, '/jl/resolve', { sub: imported.sub, uid: mapping.uid }); } catch { console.log(JSON.stringify({ evt: 'accounts_legacy_import_failed', count: 1 })); }
         const login = await issue(env, mapping.uid, origin);
         return new Response(null, { status: 302, headers: { Location: '/?signedIn=1', 'Set-Cookie': login.headers.get('Set-Cookie')!, 'Cache-Control': 'no-store' } });
       } catch (error) {
@@ -319,7 +438,7 @@ async function api(request: Request, env: Env): Promise<Response> {
   if(path==='/api/oauth/revoke'&&request.method==='POST'){const input=await body(request,4096);assert(typeof input.id==='string'&&input.id.length<=200,'Invalid connected app');return oauthCall(env,'/revoke',{origin,uid,id:input.id});}
   if (path === '/api/me' && request.method === 'GET') { const me = await user(env, uid, '/me'), flags = await identityFlags(env, uid); return json({ user: { ...me.user, ...flags } }); }
   if (path === '/api/sync' && request.method === 'POST') { const input = await body(request); const result = await user(env, uid, '/sync', input); await registry(env, '/schedule/set', { uid }); return json(result); }
-  if (path === '/api/export' && request.method === 'GET') return json(await user(env, uid, '/export'), 200, { 'Content-Disposition': 'attachment; filename="incord.json"' });
+  if (path === '/api/export' && request.method === 'GET') return json({ ...await user(env, uid, '/export'), jesklabsAccounts: await accountsUsers(env, uid) }, 200, { 'Content-Disposition': 'attachment; filename="incord.json"' });
   if (path === '/api/account' && request.method === 'DELETE') { await deleteAccount(env, uid, origin); return json({ ok: true }, 200, { 'Set-Cookie': cookie(cookieName, '', 0, origin) }); }
   if (path === '/api/push/subscribe' && request.method === 'POST') { const input = await body(request); assert(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY, 'Push is not configured', 503); const result = await user(env, uid, '/push/subscribe', { ...input, origin }); await registry(env, '/schedule/set', { uid }); return json(result); }
   if (path === '/api/push/status' && request.method === 'GET') {
@@ -341,9 +460,9 @@ export default {
         console.log(JSON.stringify({ evt: 'server_error', requestId, status: response.status, unexpected, ...(errorName ? { errorName } : {}) }));
       }
       if (response.status >= 400 && !/^\/(?:mcp(?:\/|$)|oauth(?:\/|$)|\.well-known\/oauth-)/.test(new URL(request.url).pathname) && (new URL(request.url).pathname.startsWith('/api/') || response.headers.get('Content-Type')?.includes('application/json'))) {
-        let error = 'Something went wrong. Please try again.';
-        try { const data = await response.json<{ error?: string }>(); if (data.error) error = data.error; } catch { /* Do not log response content. */ }
-        response = json({ error, requestId }, response.status);
+        let error = 'Something went wrong. Please try again.'; let retryAfter: number | undefined;
+        try { const data = await response.json<{ error?: string; retryAfter?: number }>(); if (data.error) error = data.error; retryAfter = data.retryAfter; } catch { /* Do not log response content. */ }
+        response = json({ error, requestId, ...(retryAfter ? { retryAfter } : {}) }, response.status, retryAfter ? { 'Retry-After': String(retryAfter) } : undefined);
       }
       const result = secure(response); result.headers.set('X-Request-ID', requestId); return result;
     };
@@ -351,14 +470,17 @@ export default {
       const url = new URL(request.url), path = url.pathname;
       if (url.hostname === 'byheart.jesklabs.com') {
         if (path === '/sw.js') return finish(new Response(legacyServiceWorker, { headers: { 'Content-Type': 'application/javascript', 'Cache-Control': 'no-store', 'Service-Worker-Allowed': '/' } }));
-        if (path.startsWith('/api/')) return finish(json({ error: 'Incord has moved. Update this app at https://incord.jesklabs.com.' }, 410));
+        if (path === '/auth/jesklabs/callback') return await finish(await jesklabsAuth(request, env));
+      if (path.startsWith('/api/')) return finish(json({ error: 'Incord has moved. Update this app at https://incord.jesklabs.com.' }, 410));
         url.hostname = 'incord.jesklabs.com'; url.protocol = 'https:'; url.port = ''; return finish(Response.redirect(url.href, 301));
       }
       const mcpResponse = /^\/(?:mcp(?:\/|$)|oauth\/(?:token|register)$|\.well-known\/oauth-)/.test(path) ? await (await import('./mcp')).handleMcpRequest(request,env,ctx) : null;
       if(mcpResponse)return await finish(mcpResponse);
+      if (path === '/stats/maintenance/accounts-import') return await finish(await maintainAccountsImport(request, env));
       if (path === '/stats/maintenance/orphans') return await finish(await maintainOrphans(request, env));
       const statsResponse = await handleStatsRequest(request, env);
       if (statsResponse) return await finish(statsResponse);
+      if (path === '/auth/jesklabs/callback') return await finish(await jesklabsAuth(request, env));
       if (path.startsWith('/api/')) return await finish(await api(request, env));
       let response = await env.ASSETS.fetch(request);
       // Static misses stay 404; only extensionless HTML app routes get the shell.
@@ -369,6 +491,7 @@ export default {
       }
       return await finish(response);
     } catch (error) {
+      if (error instanceof AccountsError) return finish(json({ error: error.message, ...(error.retryAfter ? { retryAfter: error.retryAfter } : {}) }, error.status, error.retryAfter ? { 'Retry-After': String(error.retryAfter) } : undefined));
       if (error instanceof ApiError || error instanceof FeedbackError || error instanceof GroupsError) return finish(json({ error: error.message }, error.status));
       return finish(json({ error: 'Something went wrong. Please try again.' }, 500), true,
         error instanceof Error && ['Error', 'TypeError', 'RangeError', 'SyntaxError', 'ReferenceError'].includes(error.name) ? error.name : 'Error');
@@ -407,6 +530,7 @@ export class RegistryDO {
     // state: 0 active, 1 deletion claimed (no new identity links), 2 deleted.
     this.sql.exec('CREATE TABLE IF NOT EXISTS accounts(uid TEXT PRIMARY KEY,state INTEGER NOT NULL DEFAULT 0,claim_until INTEGER NOT NULL DEFAULT 0)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS code_revisions(uid TEXT PRIMARY KEY,revision TEXT NOT NULL)');
+    this.sql.exec('CREATE TABLE IF NOT EXISTS accounts_import_attempts(uid TEXT PRIMARY KEY,attempted INTEGER NOT NULL)');
     this.indexAccounts();
   }
   private rows(query: string, ...args: (string | number)[]) { return [...this.sql.exec<Row>(query, ...args)]; }
@@ -425,7 +549,7 @@ export class RegistryDO {
     const data = await request.json<any>(), path = new URL(request.url).pathname, now = Date.now();
     if (path === '/maintenance/orphans') {
       this.indexAccounts();
-      const eligible = "FROM accounts a WHERE state<2 AND NOT EXISTS (SELECT 1 FROM mapping m WHERE m.uid=a.uid AND m.kind IN ('email','google','code'))";
+      const eligible = "FROM accounts a WHERE state<2 AND NOT EXISTS (SELECT 1 FROM mapping m WHERE m.uid=a.uid AND m.kind IN ('email','google','code','jl'))";
       return json({ indexedAccounts: Number(this.rows('SELECT count(*) AS n FROM accounts WHERE state<2')[0].n),
         orphanAccounts: Number(this.rows('SELECT count(*) AS n ' + eligible)[0].n),
         users: this.rows('SELECT uid ' + eligible + ' ORDER BY state DESC,uid LIMIT ?', data.limit).map(r => r.uid) });
@@ -433,7 +557,7 @@ export class RegistryDO {
     if (path === '/maintenance/claim') {
       // This check and the durable claim are serialized with ALL mapping writes.
       // A claim survives failed cleanup and is retryable; linking cannot resurrect it.
-      const row = this.rows("SELECT uid FROM accounts WHERE uid=? AND state<2 AND claim_until<=? AND NOT EXISTS (SELECT 1 FROM mapping WHERE uid=? AND kind IN ('email','google','code'))", data.uid, now, data.uid)[0];
+      const row = this.rows("SELECT uid FROM accounts WHERE uid=? AND state<2 AND claim_until<=? AND NOT EXISTS (SELECT 1 FROM mapping WHERE uid=? AND kind IN ('email','google','code','jl'))", data.uid, now, data.uid)[0];
       if (row) this.sql.exec('UPDATE accounts SET state=1,claim_until=? WHERE uid=?', now + 300_000, data.uid);
       return json({ claimed: !!row });
     }
@@ -448,8 +572,41 @@ export class RegistryDO {
     if (feedback) return feedback;
     this.sql.exec('DELETE FROM challenges WHERE expires < ?', now); this.sql.exec('DELETE FROM limits WHERE expires < ?', now);
     if (path === '/limit') { const row = this.rows('SELECT count FROM limits WHERE id=?', data.key)[0]; assert(!row || Number(row.count) < data.limit, 'Too many requests. Try again later.', 429); this.sql.exec('INSERT INTO limits VALUES(?,1,?) ON CONFLICT(id) DO UPDATE SET count=count+1', data.key, now + data.window); return json({ ok: true }); }
-    if (path === '/challenge/set') { this.sql.exec('INSERT INTO challenges VALUES(?,?,?)', data.id, JSON.stringify(data.value), now + 300_000); return json({ ok: true }); }
+    if (path === '/challenge/set') { this.sql.exec('INSERT INTO challenges VALUES(?,?,?)', data.id, JSON.stringify(data.value), now + (data.value?.kind === 'jl-return' && data.ttl === 1_800_000 ? 1_800_000 : data.ttl === 600_000 ? 600_000 : 300_000)); return json({ ok: true }); }
+    if (path === '/challenge/peek') { const row = this.rows('SELECT value FROM challenges WHERE id=?', data.id)[0]; return json(row ? JSON.parse(String(row.value)) : null); }
     if (path === '/challenge/take') { const row = this.rows('SELECT value FROM challenges WHERE id=?', data.id)[0]; this.sql.exec('DELETE FROM challenges WHERE id=?', data.id); return json(row ? JSON.parse(String(row.value)) : null); }
+    if (path === '/jl/links') return json({ subs: this.rows("SELECT id FROM mapping WHERE kind='jl' AND uid=?", data.uid).map(r => r.id) });
+    if (path === '/jl/resolve') {
+      assert(typeof data.sub === 'string' && /^jl1_[A-Za-z0-9_-]+$/.test(data.sub), 'Invalid Jesklabs identity');
+      const old = this.rows("SELECT uid FROM mapping WHERE kind='jl' AND id=?", data.sub)[0];
+      const email = data.emailKey ? this.rows("SELECT uid FROM mapping WHERE kind='email' AND id=?", data.emailKey)[0] : undefined;
+      // Until legacy Google subjects are imported we cannot distinguish them
+      // from new subjects: v1 intentionally does not disclose googleSub.
+      // Existing mapped subjects/sessions and legacy Google remain usable.
+      if (data.requireReady && !old) assert(!this.rows("SELECT 1 FROM mapping g WHERE g.kind='google' AND NOT EXISTS(SELECT 1 FROM mapping j WHERE j.kind='jl' AND j.uid=g.uid) LIMIT 1").length, 'Sign-in is temporarily unavailable. Please try again shortly.', 503);
+      assert(!data.uid || ((!old || old.uid === data.uid) && (!email || email.uid === data.uid)), 'That sign-in already belongs to another account.', 409);
+      const uid = data.uid || old?.uid || email?.uid || crypto.randomUUID();
+      this.assertActive(uid);
+      this.ctx.storage.transactionSync(() => {
+        this.sql.exec('INSERT OR IGNORE INTO accounts(uid) VALUES(?)', uid);
+        this.sql.exec('INSERT OR IGNORE INTO mapping VALUES(?,?,?)', 'jl', data.sub, uid);
+        if (data.emailKey) this.sql.exec('INSERT OR IGNORE INTO mapping VALUES(?,?,?)', 'email', data.emailKey, uid);
+      }); return json({ uid });
+    }
+    if (path === '/jl/import-list') {
+      const missing = "FROM mapping g LEFT JOIN accounts_import_attempts a ON a.uid=g.uid WHERE g.kind='google' AND NOT EXISTS(SELECT 1 FROM mapping j WHERE j.kind='jl' AND j.uid=g.uid)";
+      const google = Number(this.rows("SELECT count(*) n FROM mapping WHERE kind='google'")[0].n);
+      const unlinked = Number(this.rows('SELECT count(*) n ' + missing)[0].n);
+      // Rotate failures behind untouched rows so a conflicting first batch
+      // cannot starve the rest. Mark only confirmed batches, never dry runs.
+      const rows = this.rows('SELECT g.id,g.uid ' + missing + ' ORDER BY COALESCE(a.attempted,0),g.uid,g.id LIMIT ?', data.limit);
+      if (data.mark === true) this.ctx.storage.transactionSync(() => {
+        for (const row of rows) this.sql.exec('INSERT INTO accounts_import_attempts VALUES(?,?) ON CONFLICT(uid) DO UPDATE SET attempted=excluded.attempted', row.uid, now);
+      });
+      return json({ google, alreadyLinked: google - unlinked,
+        rows,
+        emailOnlyPendingLazy: Number(this.rows("SELECT count(DISTINCT uid) n FROM mapping e WHERE kind='email' AND NOT EXISTS(SELECT 1 FROM mapping m WHERE m.uid=e.uid AND m.kind IN ('google','jl'))")[0].n) });
+    }
     if (path === '/identity') { const kinds = this.rows('SELECT DISTINCT kind FROM mapping WHERE uid=?', data.uid).map(r => r.kind); const revision = this.rows('SELECT revision FROM code_revisions WHERE uid=?', data.uid)[0]; return json({ hasEmail: kinds.includes('email'), hasGoogle: kinds.includes('google'), hasCode: kinds.includes('code'), codeRevision: kinds.includes('code') ? revision?.revision || null : null }); }
     if (path === '/code/set') {
       this.assertActive(data.uid);
@@ -480,34 +637,12 @@ export class RegistryDO {
     }
     if (path === '/code/remove') {
       this.assertActive(data.uid);
-      assert(this.rows("SELECT 1 FROM mapping WHERE uid=? AND kind IN ('email','google')", data.uid).length, 'Add email or Google before removing your code.', 409);
+      assert(this.rows("SELECT 1 FROM mapping WHERE uid=? AND kind IN ('email','google','jl')", data.uid).length, 'Add email or Google before removing your code.', 409);
       this.ctx.storage.transactionSync(() => {
         this.sql.exec('DELETE FROM mapping WHERE kind=? AND uid=?', 'code', data.uid);
         this.sql.exec('DELETE FROM code_revisions WHERE uid=?', data.uid);
       });
       return json({ ok: true });
-    }
-    if (path === '/email/test-get') return json(this.rows('SELECT code FROM email_test WHERE id=? AND expires>?', data.key, now)[0] || {});
-    if (path === '/email/start') {
-      this.sql.exec('DELETE FROM email_codes WHERE expires<=?', now); this.sql.exec('DELETE FROM email_test WHERE expires<=?', now);
-      // Both counters and replacement are one synchronous transaction.
-      this.ctx.storage.transactionSync(() => {
-        for (const [id, limit] of [['email:' + data.key, 3], ['email-ip:' + data.ip, 10]] as const) { const row = this.rows('SELECT count FROM limits WHERE id=?', id)[0]; assert(!row || Number(row.count) < limit, 'Too many codes requested. Please try again in 15 minutes.', 429); }
-        for (const id of ['email:' + data.key, 'email-ip:' + data.ip]) this.sql.exec('INSERT INTO limits VALUES(?,1,?) ON CONFLICT(id) DO UPDATE SET count=count+1', id, now + 900_000);
-        this.sql.exec('INSERT OR REPLACE INTO email_codes VALUES(?,?,?,0,?)', data.key, data.hash, now + 600_000, data.uid || null);
-        if (data.testCode) this.sql.exec('INSERT OR REPLACE INTO email_test VALUES(?,?,?)', data.key, data.testCode, now + 600_000);
-      }); return json({ ok: true });
-    }
-    if (path === '/email/verify') {
-      if (data.uid) this.assertActive(data.uid);
-      const row = this.rows('SELECT * FROM email_codes WHERE id=?', data.key)[0];
-      assert(row && Number(row.expires) > now && Number(row.attempts) < 5, 'That code is invalid or expired. Request a new code.', 401);
-      const valid = constantTimeEqual(String(row.hash), data.hash) && (row.uid || undefined) === data.uid;
-      if (!valid) { this.sql.exec('UPDATE email_codes SET attempts=attempts+1 WHERE id=?', data.key); if (Number(row.attempts) >= 4) this.sql.exec('DELETE FROM email_codes WHERE id=?', data.key); throw new ApiError(401, 'That code is invalid or expired. Request a new code.'); }
-      this.sql.exec('DELETE FROM email_codes WHERE id=?', data.key); this.sql.exec('DELETE FROM email_test WHERE id=?', data.key);
-      const old = this.rows('SELECT uid FROM mapping WHERE kind=? AND id=?', 'email', data.key)[0];
-      assert(!data.uid || !old || old.uid === data.uid, 'That email already belongs to another account.', 409);
-      const uid = data.uid || old?.uid || crypto.randomUUID(); this.assertActive(uid); this.sql.exec('INSERT OR IGNORE INTO accounts(uid) VALUES(?)', uid); this.sql.exec('INSERT OR IGNORE INTO mapping VALUES(?,?,?)', 'email', data.key, uid); return json({ uid });
     }
     if (path === '/google') {
       const old = this.rows('SELECT uid FROM mapping WHERE kind=? AND id=?', 'google', data.sub)[0];
@@ -522,7 +657,7 @@ export class RegistryDO {
     }
     if (path === '/schedule/set') { this.assertActive(data.uid); this.sql.exec('INSERT OR IGNORE INTO accounts(uid) VALUES(?)', data.uid); this.sql.exec('INSERT OR IGNORE INTO schedule VALUES(?,0)', data.uid); return json({ ok: true }); }
     if (path === '/schedule/due') { const users = this.rows('SELECT uid FROM schedule WHERE next_at<=? ORDER BY next_at LIMIT 200', now).map(row => row.uid); for (const uid of users) this.sql.exec('UPDATE schedule SET next_at=? WHERE uid=?', now + 15 * 60_000, uid); return json({ users }); }
-    if (path === '/delete') { this.sql.exec('INSERT INTO accounts(uid,state) VALUES(?,2) ON CONFLICT(uid) DO UPDATE SET state=2', data.uid); this.sql.exec('DELETE FROM mapping WHERE uid=?', data.uid); this.sql.exec('DELETE FROM code_revisions WHERE uid=?', data.uid); this.sql.exec("DELETE FROM challenges WHERE json_extract(value,'$.uid')=?", data.uid); this.sql.exec('DELETE FROM email_codes WHERE uid=?', data.uid); this.sql.exec('DELETE FROM schedule WHERE uid=?', data.uid); return json({ ok: true }); }
+    if (path === '/delete') { this.sql.exec('INSERT INTO accounts(uid,state) VALUES(?,2) ON CONFLICT(uid) DO UPDATE SET state=2', data.uid); this.sql.exec('DELETE FROM mapping WHERE uid=?', data.uid); this.sql.exec('DELETE FROM code_revisions WHERE uid=?', data.uid); this.sql.exec('DELETE FROM accounts_import_attempts WHERE uid=?', data.uid); this.sql.exec("DELETE FROM challenges WHERE json_extract(value,'$.uid')=?", data.uid); this.sql.exec('DELETE FROM email_codes WHERE uid=?', data.uid); this.sql.exec('DELETE FROM schedule WHERE uid=?', data.uid); return json({ ok: true }); }
     return json({ error: 'Not found' }, 404);
   } catch (e) { if (e instanceof ApiError || e instanceof GroupsError) return json({ error: e.message }, e.status); throw e; } }); }
 }

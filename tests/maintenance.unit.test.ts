@@ -119,8 +119,7 @@ describe('administrator orphan account maintenance', () => {
 
   it('rechecks mappings at claim time and blocks linking during and after cleanup', async () => {
     const f = fixture(); await f.init('newly-mapped');
-    await f.reg('/email/start', { uid: 'newly-mapped', key: 'new-email', hash: 'test-hash', ip: 'local' });
-    expect((await f.reg('/email/verify', { uid: 'newly-mapped', key: 'new-email', hash: 'test-hash' })).status).toBe(200);
+    expect((await f.reg('/jl/resolve', { uid: 'newly-mapped', sub: 'jl1_newemail' })).status).toBe(200);
     expect(await (await f.reg('/maintenance/claim', { uid: 'newly-mapped' })).json()).toEqual({ claimed: false });
     await f.init('orphan');
     let entered!: () => void, release!: () => void;
@@ -130,10 +129,10 @@ describe('administrator orphan account maintenance', () => {
     const deletion = f.request({ confirm: true }); await ready;
     // Registry stays available while cleanup awaits other DOs; a durable claim
     // denies links and duplicate maintenance instead of racing the deletion.
-    expect((await f.reg('/email/verify', { uid: 'orphan', key: 'key', hash: 'hash' })).status).toBe(401);
+    expect((await f.reg('/jl/resolve', { uid: 'orphan', sub: 'jl1_orphan' })).status).toBe(401);
     expect(await (await f.reg('/maintenance/claim', { uid: 'orphan' })).json()).toEqual({ claimed: false });
     release(); expect((await deletion).status).toBe(200);
-    expect((await f.reg('/email/verify', { uid: 'orphan', key: 'key', hash: 'hash' })).status).toBe(401);
+    expect((await f.reg('/jl/resolve', { uid: 'orphan', sub: 'jl1_orphan' })).status).toBe(401);
     expect((await f.reg('/schedule/set', { uid: 'orphan' })).status).toBe(401);
     expect(f.calls.some(c => c.uid === 'newly-mapped' && c.path !== '/init')).toBe(false);
   });
@@ -161,7 +160,7 @@ describe('administrator orphan account maintenance', () => {
     expect((await f.request({ confirm: true })).status).toBe(503);
     expect(f.calls.some(c => c.path === '/delete')).toBe(false);
     expect(f.users.get('orphan')!.db.prepare('SELECT count(*) n FROM subscriptions').get()).toMatchObject({ n: 1 });
-    expect((await f.reg('/email/verify', { uid: 'orphan' })).status).toBe(401);
+    expect((await f.reg('/jl/resolve', { uid: 'orphan', sub: 'jl1_orphan' })).status).toBe(401);
     f.oauth.fail = false; f.reload();
     expect(await (await f.request({ confirm: true })).json()).toMatchObject({ deletedAccounts: 1 });
   });

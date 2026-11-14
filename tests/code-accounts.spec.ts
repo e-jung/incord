@@ -1,5 +1,5 @@
 import {testIp} from './network';
-import {test, expect, type Page, type Locator, type APIResponse, type Browser, type BrowserContext} from '@playwright/test';
+import {test, expect, type Page, type Locator, type APIResponse, type Browser, type BrowserContext} from './accounts-playwright';
 import {createHash, randomBytes} from 'node:crypto';
 
 // Real local Worker identities and sync. Only native copy/share/print are stubbed.
@@ -46,7 +46,7 @@ async function linkEmail(page:Page,email:string){
  await tap(page.getByRole('button',{name:'Add email sign-in',exact:true}));const form=page.getByRole('form',{name:'Add email sign-in',exact:true});
  await form.getByLabel('Email address',{exact:true}).fill(email);await tap(form.getByRole('button',{name:'Email me a code',exact:true}));await expect(form.getByLabel('Six-digit code')).toBeVisible();
  const {code}=await checked(await page.request.get('/api/test/last-code?email='+encodeURIComponent(email)));
- await form.getByLabel('Six-digit code').fill(code);await expect(form).toHaveCount(0);await expect.poll(async()=>(await me(page)).hasEmail).toBe(true);
+ await form.getByLabel('Six-digit code').fill(code);await page.waitForURL(/googleLink=linked/);await expect(page.getByRole('heading',{name:'Account',exact:true})).toBeVisible();await expect(form).toHaveCount(0);await expect.poll(async()=>(await me(page)).hasEmail).toBe(true);
 }
 
 test.use({serviceWorkers:'block'});
@@ -117,7 +117,7 @@ test('adding email keeps UID and library and permits removing code without losin
  expect((await exported(page)).items.filter((i:any)=>i.title===title)).toHaveLength(1);await signout(page);
  await signinForm(page).getByLabel('Your sign-in code',{exact:true}).fill(code);await tap(signinForm(page).getByRole('button',{name:'Sign in with a code',exact:true}));await expect(signinForm(page).getByRole('alert')).toBeVisible();await noBanner(page);
  const emailForm=page.getByRole('form',{name:'Sign in with email',exact:true});await emailForm.getByLabel('Email address',{exact:true}).fill(email);await tap(emailForm.getByRole('button',{name:'Email me a code',exact:true}));await expect(emailForm.getByLabel('Six-digit code')).toBeVisible();
- const sent=await checked(await page.request.get('/api/test/last-code?email='+encodeURIComponent(email)));await emailForm.getByLabel('Six-digit code').fill(sent.code);
+ const sent=await checked(await page.request.get('/api/test/last-code?email='+encodeURIComponent(email)));await emailForm.getByLabel('Six-digit code').fill(sent.code);await page.waitForURL(/signedIn=1/);await settings(page);
  await expect(codeSection(page)).toBeVisible();expect((await me(page)).id).toBe(user.id);await seeOwn(page,title);
 });
 
