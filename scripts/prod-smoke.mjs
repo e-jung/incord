@@ -277,6 +277,15 @@ try {
     await account(page);
     creationAttempted = true;
     await emailSignin(page);
+    // An interrupted earlier run can leave the smoke account behind. Delete it
+    // and sign up fresh so later checks always start from an empty account.
+    if ((await api(context, '/export')).items?.length) {
+      console.log('INFO Removing a smoke account left by an interrupted run');
+      await api(context, '/account', 'DELETE');
+      await page.reload();
+      await account(page);
+      await emailSignin(page);
+    }
     const me = await api(context, '/me');
     expect(typeof me.user?.id).toBe('string');
     expect(me.user?.hasEmail).toBe(true);
