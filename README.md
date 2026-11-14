@@ -12,7 +12,7 @@ Incord is an offline-first app for memorizing Scripture, historic catechisms and
 
 - Four-step first-letter learning, followed by FSRS spaced repetition and a capped, gentle-return backlog.
 - BSB, KJV and WEB Bible packs; historic catechisms and creeds; custom text, whole passages and ten topical collections.
-- Offline practice, light/dark themes, adjustable text size, and Incord keys or your device’s native keyboard. Optional key sounds/haptics for Incord keys.
+- Offline practice, light/dark themes, adjustable text size, and Incord keys with optional key sounds/haptics.
 - Optional Google or email-code sign-in, cross-device sync, and Web Push reminders.
 - Small invite-only groups with shared goals, privacy-filtered practice rhythm and optional prayer encouragements.
 - Optional device-only ESV quotations through the Crossway API.

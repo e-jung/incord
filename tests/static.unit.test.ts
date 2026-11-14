@@ -1,3 +1,4 @@
+import {DEFAULT_KEY_SAMPLE} from '../public/audio/keyboard-samples.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -111,12 +112,15 @@ describe('N17 font bundle and precache', () => {
     try {
       mkdirSync(join(root, 'public')); mkdirSync(join(root, 'dist/assets'), { recursive: true });
       writeFileSync(join(root, 'public/sw.js'), readFileSync('public/sw.js'));
+      mkdirSync(join(root,'dist/audio'));writeFileSync(join(root,`dist/audio/${DEFAULT_KEY_SAMPLE}.mp3`),'recorded-click');
       for (const file of ['app-abc.js', 'app-def.css', 'figtree-latin-400-normal-a.woff2', 'figtree-latin-ext-400-normal-b.woff2', 'figtree-latin-400-normal-c.woff', 'literata-greek-400-normal-d.woff2', 'font.ttf', 'font.otf']) writeFileSync(join(root, 'dist/assets', file), '');
       const build = () => { execFileSync(process.execPath, [resolve('scripts/build-sw.mjs')], { cwd: root }); return readFileSync(join(root, 'dist/sw.js'), 'utf8'); };
       const result = build();
       const shell = JSON.parse(result.match(/c\.addAll\((\[[^\]]+\])\)/)![1]) as string[];
-      expect(shell).toEqual(['/', '/manifest.webmanifest', '/icon-192.png', '/assets/app-abc.js', '/assets/app-def.css', '/assets/figtree-latin-400-normal-a.woff2', '/assets/figtree-latin-ext-400-normal-b.woff2']);
+      expect(shell).toEqual(['/', '/manifest.webmanifest', '/icon-192.png', `/audio/${DEFAULT_KEY_SAMPLE}.mp3`, '/assets/app-abc.js', '/assets/app-def.css', '/assets/figtree-latin-400-normal-a.woff2', '/assets/figtree-latin-ext-400-normal-b.woff2']);
       expect(build()).toBe(result);
+      writeFileSync(join(root,`dist/audio/${DEFAULT_KEY_SAMPLE}.mp3`),'updated-click');
+      expect(build().match(/const CACHE='([^']+)'/)![1]).not.toBe(result.match(/const CACHE='([^']+)'/)![1]);
       writeFileSync(join(root, 'dist/assets', 'app-new.js'), '');
       expect(build().match(/const CACHE='([^']+)'/)![1]).not.toBe(result.match(/const CACHE='([^']+)'/)![1]);
     } finally { rmSync(root, { recursive: true, force: true }); }

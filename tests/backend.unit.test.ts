@@ -253,3 +253,10 @@ describe('Incord ESV server boundaries',()=>{
   expect((await worker.fetch(new Request('https://app.test/api/esv?q=John%203:16'),env)).status).toBe(429);
  });
 });
+
+it('ignores removed typing preference even when its retired field clock is invalid',()=>{
+ const legacy={typingMode:'native',haptics:true,updatedAt:20,fieldUpdatedAt:{typingMode:Infinity,haptics:20}};
+ const validated=settingsRecord(legacy);expect(validated).not.toHaveProperty('typingMode');expect(validated.fieldUpdatedAt).not.toHaveProperty('typingMode');
+ const merged=mergeServerSettings({...legacy,keySounds:true},{updatedAt:30,haptics:false,fieldUpdatedAt:{haptics:30}});
+ expect(merged).toMatchObject({haptics:false,keySounds:true});expect(merged).not.toHaveProperty('typingMode');expect(merged.fieldUpdatedAt).not.toHaveProperty('typingMode');
+});

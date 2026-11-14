@@ -1,3 +1,4 @@
+import { createKeySampleLoader } from './keyboard-sample';
 /** Best-effort gesture feedback. Normal playback allocates nothing while off. */
 export type FeedbackSettings = { keySounds?: boolean; haptics?: boolean };
 
@@ -17,7 +18,9 @@ export function supportsHaptics() {
 
 export function createKeyboardFeedback() {
   let audio: AudioContext | undefined;
-  let noiseBuffer: AudioBuffer | undefined;
+  let loadSample: ReturnType<typeof createKeySampleLoader> | undefined;
+  let sample: AudioBuffer | undefined;
+  let latestTick = 0;
   let pendingTick: { play: () => void; queuedAt: number } | undefined;
   let soundEnabled = false;
   let generation = 0;
@@ -44,6 +47,7 @@ export function createKeyboardFeedback() {
       const session = (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
       if (session) { try { session.type = 'ambient'; } catch { /* Optional WebKit API. */ } }
       audio = new Audio();
+      loadSample = createKeySampleLoader(audio);
       return audio;
     } catch { /* Unsupported/blocked audio must never interrupt practice. */ }
   }
@@ -74,6 +78,7 @@ export function createKeyboardFeedback() {
     const context = getAudio();
     if (!context) return;
     whenRunning(context);
+    void loadSample?.().then(buffer => { if (!destroyed) sample = buffer; });
     // Start inside this gesture, even when resume is still pending. Waiting for
     // its promise loses the transient user activation on affected iOS versions.
     try {
@@ -89,49 +94,37 @@ export function createKeyboardFeedback() {
     if (destroyed || (!preview && !soundEnabled)) return;
     const context = getAudio();
     if (!context) return;
-    const token = generation;
-    whenRunning(context, () => {
-      if (destroyed || token !== generation || (!preview && !soundEnabled)) return;
+    const token = generation, tick = ++latestTick, queuedAt = Date.now();
+    const playSample = (buffer: AudioBuffer | undefined) => {
+      if (!buffer || destroyed || token !== generation || tick !== latestTick
+        || (!preview && !soundEnabled) || context.state !== 'running'
+        || (!preview && Date.now() - queuedAt > 100)) return;
       try {
-        // A short filtered noise transient supplies the crisp key surface;
-        // the much quieter sine adds a little tactile body without a pitched beep.
-        const now = context.currentTime, duration = slip ? 0.028 : 0.024;
-        if (!noiseBuffer) {
-          noiseBuffer = context.createBuffer(1, Math.ceil(context.sampleRate * 0.03), context.sampleRate);
-          const samples = noiseBuffer.getChannelData(0);
-          for (let i = 0; i < samples.length; i++) samples[i] = Math.random() * 2 - 1;
-        }
-        const noise = context.createBufferSource(), high = context.createBiquadFilter(), low = context.createBiquadFilter();
-        const gain = context.createGain(), body = context.createOscillator(), bodyGain = context.createGain();
-        noise.buffer = noiseBuffer;
-        high.type = 'highpass'; high.frequency.value = slip ? 1400 : 2000; high.Q.value = 0.707;
-        low.type = 'lowpass'; low.frequency.value = slip ? 4200 : 6000; low.Q.value = 0.707;
-        gain.gain.setValueAtTime(0, now);
-        gain.gain.linearRampToValueAtTime(slip ? 0.18 : 0.22, now + 0.001);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-        body.type = 'sine'; body.frequency.value = slip ? 150 : 175;
-        bodyGain.gain.setValueAtTime(0, now);
-        bodyGain.gain.linearRampToValueAtTime(slip ? 0.02 : 0.025, now + 0.001);
-        bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.01);
-        noise.connect(high); high.connect(low); low.connect(gain); gain.connect(context.destination);
-        body.connect(bodyGain); bodyGain.connect(context.destination);
+        const source = context.createBufferSource(), gain = context.createGain();
+        source.buffer = buffer;
+        source.playbackRate.value = slip ? 0.85 : 1;
+        gain.gain.setValueAtTime(slip ? 0.26 : 0.34, context.currentTime);
+        source.connect(gain); gain.connect(context.destination);
         let cleaned = false;
         const cleanup = () => {
           if (cleaned) return;
-          cleaned = true;
-          active.delete(stop);
-          noise.disconnect(); high.disconnect(); low.disconnect(); gain.disconnect(); body.disconnect(); bodyGain.disconnect();
+          cleaned = true; active.delete(stop); source.disconnect(); gain.disconnect();
         };
         const stop = () => {
-          try { noise.stop(); } catch { /* Already ended. */ }
-          try { body.stop(); } catch { /* Already ended. */ }
+          try { source.stop(); } catch { /* Already ended. */ }
           cleanup();
         };
-        noise.onended = cleanup;
+        source.onended = cleanup;
         active.add(stop);
-        noise.start(now); noise.stop(now + duration);
-        body.start(now); body.stop(now + 0.01);
+        try { source.start(context.currentTime); } catch { cleanup(); }
       } catch { /* Feedback cannot block input. */ }
+    };
+    whenRunning(context, () => {
+      if (sample) { playSample(sample); return; }
+      void loadSample?.().then(buffer => {
+        if (!destroyed) sample = buffer;
+        playSample(buffer);
+      });
     });
   }
 
@@ -159,7 +152,8 @@ export function createKeyboardFeedback() {
       setSettings({});
       if (audio) { try { void audio.close().catch(() => {}); } catch { /* Best effort. */ } }
       audio = undefined;
-      noiseBuffer = undefined;
+      sample = undefined;
+      loadSample = undefined;
       pendingTick = undefined;
     },
   };

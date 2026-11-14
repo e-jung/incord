@@ -3,7 +3,7 @@ import {ui} from '../config/copy';
 import {onMount,type Snippet} from 'svelte';
 let {title,children,close}:{title:string,children:Snippet,close?:()=>void}=$props();
 let node:HTMLDivElement;
-const focusable=()=>Array.from(node.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),a[href],[tabindex="0"]'));
+const focusable=()=>Array.from(node.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),a[href],[tabindex="0"]')).filter(element=>element.getAttribute('aria-hidden')!=='true'&&element.tabIndex!==-1);
 onMount(()=>{const before=document.activeElement as HTMLElement; (focusable()[0]||node).focus({preventScroll:true});return()=>before?.isConnected&&before.focus({preventScroll:true})});
 function keyboard(event:KeyboardEvent){
  if(event.key==='Escape'&&close){event.preventDefault();event.stopPropagation();close()}

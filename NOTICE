@@ -55,3 +55,13 @@ are preserved without modification in public/licenses/figtree-OFL.txt and
 public/licenses/literata-OFL.txt. Keep these notices with redistributed fonts.
 
 Other dependencies retain their respective package licenses.
+
+RECORDED KEY SOUNDS
+
+Five key-click recordings are adapted from Kenney's Interface Sounds 1.0
+and original UI Audio / UI SFX set, released under Creative Commons Zero
+(CC0 1.0). They are not Apple recordings. MP3 derivatives retain CC0;
+the project's AGPL designation does not relicense these recordings.
+Creator notices: public/licenses/kenney-CC0.txt
+License: https://creativecommons.org/publicdomain/zero/1.0/
+Exact pack downloads, file mapping and conversion details: content/SOURCES.md

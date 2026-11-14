@@ -1,3 +1,4 @@
+import {KEY_SAMPLES,DEFAULT_KEY_SAMPLE} from '../public/audio/keyboard-samples.js';
 import {test,expect,type Page} from '@playwright/test';
 // Route-controlled ESV delays must reach Playwright, not a service-worker fetch.
 // Offline-shell behavior is covered by the existing device/UI suites.
@@ -18,26 +19,26 @@ function mockFeedback(){
   state='suspended';currentTime=0;sampleRate=48000;destination={};constructor(){calls.audio++}
   resume(){calls.resume++;this.state='running';return Promise.resolve()}close(){return Promise.resolve()}
   createBuffer(_channels:number,length:number){return {length,getChannelData:()=>new Float32Array(length)}}
-  createBufferSource(){return {buffer:null as {length:number}|null,connect(){},disconnect(){},start(){if(this.buffer && this.buffer.length>1)calls.tick++},stop(){}}}
+  decodeAudioData(){return Promise.resolve({length:1600})}createBufferSource(){return {buffer:null as {length:number}|null,playbackRate:{value:1},connect(){},disconnect(){},start(){if(this.buffer && this.buffer.length>1)calls.tick++},stop(){}}}
   createOscillator(){return {type:'',frequency:{value:0,setValueAtTime(){}},connect(){},disconnect(){},start(){},stop(){}}}
   createBiquadFilter(){return {type:'',frequency:{value:0},Q:{value:0},connect(){},disconnect(){}}}
   createGain(){return {gain:{value:0,setValueAtTime(){},linearRampToValueAtTime(){},exponentialRampToValueAtTime(){}},connect(){},disconnect(){}}}
  };
 }
 test.beforeEach(async({context})=>{await context.setExtraHTTPHeaders({'CF-Connecting-IP':'iphone-regression-'+crypto.randomUUID()})});
-test('Test buttons give synchronous feedback with defaults OFF without enabling practice feedback',async({page})=>{
+test('Sound preview works with defaults OFF and haptics stay silent until enabled',async({page})=>{
  await page.addInitScript(mockFeedback);await settings(page);
  await expect(page.getByLabel('Key sounds',{exact:true})).not.toBeChecked();await expect(page.getByLabel('Haptics',{exact:true})).not.toBeChecked();
  // Read counters in the same JS stack as click: deferring playback loses iOS user activation.
  const sound=await page.getByRole('button',{name:'Test sound',exact:true}).evaluate(button=>{(button as HTMLButtonElement).click();return {...(window as any).__feedbackCalls}});
  await expect(page.getByRole('status').filter({hasText:'Hear nothing?'})).toHaveText('Hear nothing? Your iPhone may be on Silent — key sounds follow the Silent switch, like the keyboard.');
  expect(sound.audio).toBe(1);expect(sound.resume).toBe(1);expect(sound.vibrate).toBe(0);expect(await page.evaluate(()=>(navigator as any).audioSession.type)).toBe('ambient');await expect.poll(()=>page.evaluate(()=>(window as any).__feedbackCalls.tick)).toBe(1);
- const haptic=await page.getByRole('button',{name:'Test haptic',exact:true}).evaluate(button=>{(button as HTMLButtonElement).click();return {...(window as any).__feedbackCalls}});
- expect(haptic.vibrate).toBe(1);expect(haptic.tick).toBe(1);
+ await expect(page.getByRole('button',{name:'Test haptic',exact:true})).toBeDisabled();
+ const afterPreview=await page.evaluate(()=>(window as any).__feedbackCalls);
  await expect(page.getByLabel('Key sounds',{exact:true})).not.toBeChecked();await expect(page.getByLabel('Haptics',{exact:true})).not.toBeChecked();
  await tab(page,'Discover');await page.locator('.passage-cards').getByRole('button',{name:/Romans 8:31–39/}).click();await page.getByRole('dialog').getByRole('button',{name:'Add to my library',exact:true}).click();await page.getByRole('button',{name:/^Romans 8:31–39/}).click();
  const words=await page.locator('[data-word]').allTextContents();for(const word of words.slice(0,2))await page.keyboard.press(Array.from(word.replace(/^[^\p{L}\p{N}]+/u,''))[0].toLowerCase());
- expect(await page.evaluate(()=>(window as any).__feedbackCalls)).toEqual(haptic);
+ expect(await page.evaluate(()=>(window as any).__feedbackCalls)).toEqual(afterPreview);
 });
 test('signed-in default translation syncs from Settings and the single Discover picker, with reference-only ESV passages',async({page,browser,baseURL})=>{
  const email=`translation-sync-${crypto.randomUUID()}@example.com`;
@@ -84,4 +85,15 @@ test('signed-in default translation syncs from Settings and the single Discover 
   await page.getByRole('combobox',{name:'Default translation',exact:true}).selectOption('WEB');await expect.poll(async()=>(await(await page.request.get('/api/export')).json()).settings.defaultTranslation).toBe('WEB');await receivePreference('WEB');await expect(second.getByRole('dialog')).toBeVisible();
   expect((await(await second.request.get('/api/export')).json()).items.find((i:any)=>i.id===item.id).text).toBe('');
  }finally{release();await context.close()}
+});
+test('sound lab compares five CC0 recordings and the prior synth as single taps and five-tap bursts',async({page})=>{
+ await page.addInitScript(mockFeedback);await page.goto('/sound-lab.html');
+ await expect(page.getByRole('heading',{name:'Key sound lab',exact:true})).toBeVisible();await expect(page.locator('.candidate')).toHaveCount(6);
+ await expect(page.locator('script:not([src]),[style],[onclick]')).toHaveCount(0);await expect(page.getByRole('heading',{name:KEY_SAMPLES.find(sample=>sample.id===DEFAULT_KEY_SAMPLE)!.label+' · app default',exact:true})).toBeVisible();
+ for(let index=0;index<6;index++){
+  const candidate=page.locator('.candidate').nth(index),before=await page.evaluate(()=>(window as any).__feedbackCalls.tick);
+  await candidate.getByRole('button',{name:/Single tap$/}).click();await expect.poll(()=>page.evaluate(()=>(window as any).__feedbackCalls.tick)).toBe(before+1);
+  await candidate.getByRole('button',{name:/5-tap burst$/}).click();await expect.poll(()=>page.evaluate(()=>(window as any).__feedbackCalls.tick)).toBe(before+6);
+ }
+ expect(await page.evaluate(()=>(navigator as any).audioSession.type)).toBe('ambient');expect(await page.evaluate(()=>(window as any).__feedbackCalls.vibrate)).toBe(0);
 });

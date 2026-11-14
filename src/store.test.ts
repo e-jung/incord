@@ -77,3 +77,10 @@ it('group privacy choices sync per field and are not overwritten by another devi
  expect(mergeSettings(quietDevice,privateDevice)).toEqual(merged);
  expect(mergeSettings(merged,{...defaults,updatedAt:99,fieldUpdatedAt:{groupShareTitles:0,groupReceivePrayer:0}})).toMatchObject({groupShareTitles:false,groupReceivePrayer:false});
 });
+
+it('ignores removed typing preferences and clocks while preserving independent settings edits',()=>{
+ const legacy={...defaults,typingMode:'native',keySounds:true,updatedAt:20,fieldUpdatedAt:{typingMode:999999999999999,keySounds:20}};
+ for(const value of [stampSettings(legacy,defaults,30),mergeSettings(defaults,legacy),mergeSettings(legacy,{...defaults,haptics:true,updatedAt:30,fieldUpdatedAt:{haptics:30}})]){
+  expect(value).not.toHaveProperty('typingMode');expect(value.fieldUpdatedAt).not.toHaveProperty('typingMode');expect(value.keySounds).toBe(true);
+ }
+});

@@ -1,4 +1,5 @@
 <script lang="ts">
+import {hapticOverlay} from '../haptic-overlay';
 import EsvAttribution from './EsvAttribution.svelte';
 import {ui} from '../config/copy';
 import type {Snippet} from 'svelte';
@@ -10,7 +11,7 @@ let {title,subtitle=ui.empty,onclick,children,trailing,translation}:{title:strin
  {#if onclick}<span aria-hidden="true">›</span>{/if}
 {/snippet}
 {#if translation==='ESV'}
- <div class="row source-row"><span class="row-copy">{#if onclick}<button class="row-title" {onclick}><b>{title}</b></button>{:else}<b>{title}</b>{/if}<EsvAttribution {translation}/>{#if subtitle}<small>{subtitle}</small>{/if}</span>{#if children}{@render children()}{/if}{#if trailing}{@render trailing()}{/if}</div>
-{:else if onclick&&trailing}<div class="row"><button class="row-main" {onclick}>{@render body()}</button>{@render trailing()}</div>
-{:else if onclick}<button class="row" {onclick}>{@render body()}</button>
+ <div class="row source-row"><span class="row-copy">{#if onclick}<button use:hapticOverlay class="row-title" {onclick}><b>{title}</b></button>{:else}<b>{title}</b>{/if}<EsvAttribution {translation}/>{#if subtitle}<small>{subtitle}</small>{/if}</span>{#if children}{@render children()}{/if}{#if trailing}{@render trailing()}{/if}</div>
+{:else if onclick&&trailing}<div class="row"><button use:hapticOverlay class="row-main" {onclick}>{@render body()}</button>{@render trailing()}</div>
+{:else if onclick}<button use:hapticOverlay class="row" {onclick}>{@render body()}</button>
 {:else}<div class="row">{@render body()}</div>{/if}
