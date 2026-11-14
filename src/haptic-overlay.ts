@@ -81,12 +81,20 @@ function attach(button: HTMLButtonElement, scope: Scope): Controller {
     // Keep the Svelte-owned button in place: only its sibling switch is injected.
     // Both share a positioned ancestor, including local scroll/clipping surfaces.
     const box = button.getBoundingClientRect(), parent = input.offsetParent as HTMLElement | null;
+    // Cover each half-gap with the actual trusted native switch, so a forgiving
+    // key hit area still produces one native activation (never a synthetic one).
+    const row = button.classList.contains('key') ? button.parentElement : null;
+    const rowBox = row?.getBoundingClientRect();
+    const halfGap = row ? (parseFloat(getComputedStyle(row).columnGap) || 0)/2 : 0;
+    const keys = row?.querySelectorAll('button.key');
+    const left = rowBox ? keys?.[0]===button ? rowBox.left : Math.max(rowBox.left,box.left-halfGap) : box.left;
+    const right = rowBox ? keys?.[keys.length-1]===button ? rowBox.right : Math.min(rowBox.right,box.right+halfGap) : box.right;
     const origin = parent?.getBoundingClientRect();
     const scaleX = origin && parent!.offsetWidth ? origin.width / parent!.offsetWidth : 1;
     const scaleY = origin && parent!.offsetHeight ? origin.height / parent!.offsetHeight : 1;
-    input.style.left = `${origin ? (box.left-origin.left)/scaleX+parent!.scrollLeft-parent!.clientLeft : box.left+window.scrollX}px`;
+    input.style.left = `${origin ? (left-origin.left)/scaleX+parent!.scrollLeft-parent!.clientLeft : left+window.scrollX}px`;
     input.style.top = `${origin ? (box.top-origin.top)/scaleY+parent!.scrollTop-parent!.clientTop : box.top+window.scrollY}px`;
-    input.style.width = `${box.width/scaleX}px`; input.style.height = `${box.height/scaleY}px`;
+    input.style.width = `${(right-left)/scaleX}px`; input.style.height = `${box.height/scaleY}px`;
     const style = getComputedStyle(button);
     input.style.borderRadius = style.borderRadius; input.style.zIndex = style.zIndex;
     input.style.display = button.offsetWidth && button.offsetHeight ? 'block' : 'none';

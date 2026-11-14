@@ -256,15 +256,21 @@ try {
         if (step === 2) await page.getByLabel('Practice keyboard').getByRole('button', { name: key.toUpperCase(), exact: true }).click();
         else await page.keyboard.press(key);
       }
-      const result = page.getByRole('dialog', { name: step === 4 ? 'Learned' : `Step ${step} passed`, exact: true });
-      await expect(result).toBeVisible();
-      if (step > 1 && step < 4) await expect(result).toContainText(`${hidden} of ${hidden} from memory · 0 slips`);
-      await result.getByRole('button', { name: step === 4 ? 'Finish' : 'Continue', exact: true }).click();
+      if (step === 4) {
+        await expect(page.locator('.learned .keepsake')).toBeVisible();
+        await expect(page.getByRole('dialog')).toHaveCount(0);
+      } else {
+        const result = page.getByRole('dialog', { name: `Step ${step} passed`, exact: true });
+        await expect(result).toBeVisible();
+        if (step > 1) await expect(result).toContainText(`${hidden} of ${hidden} from memory · 0 slips`);
+        await result.getByRole('button', { name: 'Continue', exact: true }).click();
+      }
     });
   }
   await check('Learned screen and four saved attempts', async () => {
     await expect(first.page.getByRole('heading', { name: 'Learned', exact: true })).toBeVisible();
     await expect(first.page.locator('.keepsake')).toContainText('John 3:16');
+    await expect(first.page.locator('.learned')).toContainText(/Next review: (?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)/);
     await expect.poll(async () => learned(await state(first.page))).toBe(true);
     const saved = await state(first.page);
     learnedItem = john(saved);

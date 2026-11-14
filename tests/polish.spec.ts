@@ -16,7 +16,7 @@ test('ESV source links stay with references in Discover, Library, Practice and L
  await expect(page.locator('.prompt .esv-attribution')).toBeVisible();await expect(page.locator('.practice>.esv-attribution')).toHaveCount(0);await shot(page,info,'practice-attribution');
  await page.getByRole('button',{name:'I know this',exact:true}).click();
  for(const word of await page.locator('[data-word]').allTextContents())await page.keyboard.press(word.replace(/^[^\p{L}\p{N}]+/u,'')[0].toLowerCase());
- await page.getByRole('button',{name:'Finish',exact:true}).click();
+ await expect(page.locator('.learned')).toBeVisible();await expect(page.getByRole('dialog')).toHaveCount(0);
  await expect(page.locator('.keepsake footer .esv-attribution')).toBeVisible();await shot(page,info,'learned-esv');
 });
 test('stats uses app fonts and theme, newest-first days and card-scoped horizontal scrolling at 393px',async({page},info)=>{

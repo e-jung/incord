@@ -23,4 +23,4 @@ $effect(()=>{
   return()=>{cancelled=true};
 });
 </script>
-<div bind:this={viewport} class="verse" aria-label={copy.memoryText}>{#each words as word,i}<span class:hidden={mask[i]&&i>=index} class:current={i===index} class:done={i<index} class:slip={slipped.includes(i)} data-word={i} data-hidden={mask[i]&&i>=index}>{rendered[i]?.text??word}</span>{rendered[i]?.separator??' '}{/each}</div>
+<div bind:this={viewport} class="verse" aria-label={copy.memoryText}>{#each words as word,i}<span class:hidden={mask[i]&&i>=index} class:current={i===index} class:done={i<index} class:slip={slipped.includes(i)} aria-hidden={mask[i]&&i>=index?true:undefined} data-word={i} data-hidden={mask[i]&&i>=index}>{rendered[i]?.text??word}</span>{rendered[i]?.separator??' '}{/each}</div>

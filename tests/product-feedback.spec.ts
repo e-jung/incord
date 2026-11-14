@@ -31,20 +31,22 @@ test('curated whole passage is one item and active word remains in viewport midd
  expect(saved.items.filter((i:any)=>!i.deleted)).toHaveLength(1);
 });
 test('feedback defaults off, toggles persist, enabled gestures invoke audio/vibration and off takes effect',async({page})=>{
- await page.addInitScript(()=>{
+ await page.context().addInitScript(()=>{
   const calls={audio:0,tick:0,vibrate:0};(window as any).__feedbackCalls=calls;
   Object.defineProperty(navigator,'vibrate',{configurable:true,value:()=>{calls.vibrate++;return true}});Object.defineProperty(navigator,'audioSession',{configurable:true,value:{type:'auto'}});
   (window as any).AudioContext=class {state='suspended';currentTime=0;sampleRate=48000;destination={};constructor(){calls.audio++}resume(){this.state='running';return Promise.resolve()}close(){return Promise.resolve()}createBuffer(_channels:number,length:number){return {length,getChannelData:()=>new Float32Array(length)}}decodeAudioData(){return Promise.resolve({length:1600})}createBufferSource(){return {buffer:null as {length:number}|null,playbackRate:{value:1},connect(){},disconnect(){},start(){if(this.buffer&&this.buffer.length>1)calls.tick++},stop(){}}}createOscillator(){return {frequency:{value:0},connect(){},disconnect(){},start(){},stop(){}}}createBiquadFilter(){return {type:'',frequency:{value:0},Q:{value:0},connect(){},disconnect(){}}}createGain(){return {gain:{setValueAtTime(){},linearRampToValueAtTime(){},exponentialRampToValueAtTime(){}},connect(){},disconnect(){}}}};
  });
  await account(page);await expect(page.getByLabel('Key sounds',{exact:true})).not.toBeChecked();await expect(page.getByLabel('Haptics',{exact:true})).not.toBeChecked();
  await longPassage(page);await typeWords(page,2);expect(await page.evaluate(()=>(window as any).__feedbackCalls)).toEqual({audio:0,tick:0,vibrate:0});
- await tap(page.getByRole('button',{name:'Close practice',exact:true}));await account(page);
- await page.getByLabel('Key sounds',{exact:true}).check();await page.getByLabel('Haptics',{exact:true}).check();await page.reload();await account(page);
+ await tap(page.getByRole('button',{name:'Close practice',exact:true}));await tap(page.getByRole('dialog',{name:'Leave this practice?',exact:true}).getByRole('button',{name:'Leave',exact:true}));await account(page);
+ await page.getByLabel('Key sounds',{exact:true}).check();await page.getByLabel('Haptics',{exact:true}).check();
+ // Reopen in the same context to check durable preferences without MiniBrowser's history/reload crash.
+ const context=page.context();await page.close();page=await context.newPage();await account(page);
  await expect(page.getByLabel('Key sounds',{exact:true})).toBeChecked();await expect(page.getByLabel('Haptics',{exact:true})).toBeChecked();
  await longPassage(page);await page.evaluate(()=>(window as any).__feedbackCalls.vibrate=0);
  const enabledWords=await page.locator('[data-word]').allTextContents();for(const word of enabledWords.slice(0,2)){const letter=Array.from(word.replace(/^[^\p{L}\p{N}]+/u,''))[0].toUpperCase();await tap(page.locator('.keyboard').getByRole('button',{name:letter,exact:true}))}
  await expect.poll(()=>page.evaluate(()=>(window as any).__feedbackCalls.tick)).toBe(2);expect(await page.evaluate(()=>(window as any).__feedbackCalls)).toEqual({audio:1,tick:2,vibrate:2});
- await tap(page.getByRole('button',{name:'Close practice',exact:true}));await account(page);await page.getByLabel('Key sounds',{exact:true}).uncheck();await page.getByLabel('Haptics',{exact:true}).uncheck();
+ await tap(page.getByRole('button',{name:'Close practice',exact:true}));await tap(page.getByRole('dialog',{name:'Leave this practice?',exact:true}).getByRole('button',{name:'Leave',exact:true}));await account(page);await page.getByLabel('Key sounds',{exact:true}).uncheck();await page.getByLabel('Haptics',{exact:true}).uncheck();
  await page.evaluate(()=>Object.assign((window as any).__feedbackCalls,{audio:0,tick:0,vibrate:0}));
  await longPassage(page);await typeWords(page,2);expect(await page.evaluate(()=>(window as any).__feedbackCalls)).toEqual({audio:0,tick:0,vibrate:0});
 });
@@ -67,7 +69,7 @@ test('iOS direct switch taps dispatch once, preserve focus and physical input, a
  await page.getByRole('button',{name:'Peek',exact:true}).locator('xpath=following-sibling::*[1][self::input[contains(@class,"haptic-overlay")]]').tap();await expect(page.locator('[data-word="2"]')).toHaveClass(/current/);await expect(region).toBeFocused();
  await page.keyboard.press('w');await expect(page.locator('[data-word="3"]')).toHaveClass(/current/);await expect(region).toBeFocused();
  expect(await page.evaluate(()=>(window as any).__switchEvents)).toEqual([{trusted:true},{trusted:true}]);
- await tap(page.getByRole('button',{name:'Close practice',exact:true}));await account(page);await page.getByLabel('Haptics',{exact:true}).uncheck();await expect(page.locator('input[switch]')).toHaveCount(0);
+ await tap(page.getByRole('button',{name:'Close practice',exact:true}));await tap(page.getByRole('dialog',{name:'Leave this practice?',exact:true}).getByRole('button',{name:'Leave',exact:true}));await account(page);await page.getByLabel('Haptics',{exact:true}).uncheck();await expect(page.locator('input[switch]')).toHaveCount(0);
  await longPassage(page);await expect(page.locator('input[switch]')).toHaveCount(0);
 });
 test('keyboard feedback edited AFTER signing in syncs field clocks and survives both devices reloading',async({page,browser,baseURL})=>{

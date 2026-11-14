@@ -23,7 +23,7 @@ async function state(page: Page): Promise<any> {
     db.close(); return value;
   });
 }
-async function type(page: Page, checkScroll = false) {
+async function type(page: Page, checkScroll = false, keepsake = false) {
   const words = await page.locator('[data-word]').allTextContents();
   for (let i = 0; i < words.length; i++) {
     if (checkScroll) {
@@ -35,7 +35,10 @@ async function type(page: Page, checkScroll = false) {
     }
     await page.keyboard.press(words[i].replace(/^[^\p{L}\p{N}]+/u, '').slice(0, 1).toLowerCase());
   }
-  await expect(page.getByRole('dialog')).toBeVisible();
+  if (keepsake) {
+    await expect(page.locator('.learned .keepsake')).toBeVisible();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+  } else await expect(page.getByRole('dialog')).toBeVisible();
 }
 async function account(page: Page) {
   await tab(page, 'Today');
@@ -114,8 +117,7 @@ test('P1-3/4 completed rehearsal leaves the learned item, review schedule and hi
   await own(page, 'Rehearsal regression');
   await openOwn(page, 'Rehearsal regression');
   await page.getByRole('button', { name: 'I know this', exact: true }).click();
-  await type(page);
-  await page.getByRole('button', { name: 'Finish', exact: true }).click();
+  await type(page, false, true);
   await expect(page.getByRole('heading', { name: 'Learned', exact: true })).toBeVisible();
   const before = await state(page);
   expect(Date.parse(before.items[0].due)).toBeGreaterThan(Date.now() + 23 * 3600000);
@@ -279,26 +281,33 @@ test('P1-23 long absence without learned items never opens an empty welcome-back
   await expect(page.getByRole('button', { name: /Still learning/ })).toBeVisible();
 });
 
-for (const [mistakes, title] of [[0, 'Solid'], [1, 'Remembered'], [3, 'Got there'], [10, "Let's relearn this"]] as const) {
-  test(`P1-6 review ${title}: friendly title, next date and immediate save`, async ({ page }) => {
+for (const [mistakes, title, grade] of [[0, 'Solid', 'Easy'], [1, 'Remembered', 'Good'], [3, 'Got there', 'Hard'], [10, "Let's relearn this", 'Again']] as const) {
+  test(`P1-6 review ${title}: keepsake or relearn sheet, next date and immediate save`, async ({ page }) => {
     await own(page, 'Review feedback', Array(20).fill('Grace').join(' '));
     await openOwn(page, 'Review feedback');
     await page.getByRole('button', { name: 'I know this', exact: true }).click();
-    await type(page);
-    await page.getByRole('button', { name: 'Finish', exact: true }).click();
+    await type(page, false, true);
     await page.getByRole('button', { name: 'Back to Today', exact: true }).click();
     await openOwn(page, 'Review feedback');
     for (let i = 0; i < 20; i++) await page.keyboard.press(i < mistakes ? 'z' : 'g');
-    const result = page.getByRole('dialog', { name: title, exact: true });
-    await expect(result).toBeVisible();
-    await expect(result).toContainText(mistakes===10?'Starting again with a few words showing':/Back (?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)/);
-    await expect(result).not.toContainText(/^(?:Again|Hard|Good|Easy)$/);
+    if (mistakes === 10) {
+      const result = page.getByRole('dialog', { name: title, exact: true });
+      await expect(result).toBeVisible();
+      await expect(result).toContainText('Starting again with a few words showing');
+      await result.getByRole('button', { name: 'Later', exact: true }).click();
+    } else {
+      await expect(page.getByRole('heading', { name: 'Reviewed', exact: true })).toBeVisible();
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await expect(page.locator('.learned .keepsake')).toContainText('Review feedback');
+      await expect(page.locator('.learned')).toContainText(/Next review: (?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)/);
+      await page.getByRole('button', { name: 'Back to Today', exact: true }).click();
+    }
     await expect.poll(async () => (await state(page)).events.length).toBe(2);
-    await result.getByRole('button', { name: mistakes===10?'Later':'Close practice', exact: true }).click();
     await page.reload();
     const saved = await state(page);
     expect(saved.items[0].learned).toBe(mistakes < 10);
     expect(saved.events).toHaveLength(2);
+    expect(saved.events[1]).toMatchObject({ mode: 'review', grade, slips: mistakes, hidden: 20 });
   });
 }
 

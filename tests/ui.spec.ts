@@ -42,7 +42,7 @@ async function step(page: Page, n: number) {
 }
 // Read token labels as a person reads the prompt. This does not import the
 // engine's masking, grading, or transition implementation into the assertions.
-async function typePassage(page: Page, options: { wrong?: boolean; onscreen?: boolean; peek?: boolean } = {}) {
+async function typePassage(page: Page, options: { wrong?: boolean; onscreen?: boolean; peek?: boolean; learned?: boolean } = {}) {
   const words = await page.locator('[data-word]').allTextContents();
   expect(words.length).toBeGreaterThan(0);
   for (const word of words) {
@@ -56,11 +56,14 @@ async function typePassage(page: Page, options: { wrong?: boolean; onscreen?: bo
     }
     else await page.keyboard.press(key);
   }
-  await expect(page.getByRole('dialog')).toBeVisible();
+  if (options.learned) {
+    await expect(page.locator('.learned .keepsake')).toBeVisible();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+  } else await expect(page.getByRole('dialog')).toBeVisible();
 }
 async function learned(page: Page) {
   await expect(page.getByRole('heading', { name: 'Learned', level: 1, exact: true })).toBeVisible();
-  await expect(page.getByText(/Next review ·/)).toBeVisible();
+  await expect(page.getByText(/Next review: /)).toBeVisible();
 }
 async function emailSignin(page: Page, email: string) {
   await page.getByLabel('Email address', { exact: true }).fill(email);
@@ -101,7 +104,9 @@ test.beforeEach(async ({ page, context }) => {
 test('empty Today, every tab, settings persistence, local export, and own-text validation', async ({ page }, info) => {
   await expect(page.getByText('No items yet')).toBeVisible();
   await screen(page, info, 'today-empty');
-  await page.getByRole('button', { name: 'Browse Library' }).click();
+  await page.getByRole('button', { name: 'Find something to memorize', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Discover', exact: true })).toBeVisible();
+  await tab(page, 'Library');
   await expect(page.getByText('No items yet.')).toBeVisible();
   await screen(page, info, 'library-empty');
   await page.getByRole('button', { name: '+ Add', exact: true }).click();
@@ -205,11 +210,11 @@ test('add BSB verse by reference and complete all four ladder steps', async ({ p
     expect(Math.abs(keyboard!.y + keyboard!.height - page.viewportSize()!.height)).toBeLessThanOrEqual(1);
     expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(page.viewportSize()!.height);
     await screen(page, info, `verse-step-${n}`);
-    await typePassage(page, { onscreen: n === 2 });
-    await expect(page.getByRole('dialog')).toHaveAccessibleName(n === 4 ? 'Learned' : `Step ${n} passed`);
+    await typePassage(page, { onscreen: n === 2, learned: n === 4 });
+    if (n < 4) await expect(page.getByRole('dialog')).toHaveAccessibleName(`Step ${n} passed`);
     if (n > 1 && n < 4) await expect(page.getByRole('dialog')).toContainText(`${hidden} of ${hidden} from memory · 0 slips`);
     await screen(page, info, `verse-result-${n}`);
-    await page.getByRole('button', { name: n === 4 ? 'Finish' : 'Continue', exact: true }).click();
+    if (n < 4) await page.getByRole('button', { name: 'Continue', exact: true }).click();
   }
   await learned(page);
   await expect(page.locator('.keepsake')).toContainText('For God so loved the world');
@@ -223,10 +228,9 @@ test('add BSB verse by reference and complete all four ladder steps', async ({ p
   await page.getByRole('button', { name: /^John 3:16/ }).click();
   await expect(page.getByText('Review · blank recall')).toBeVisible();
   await screen(page, info, 'review-recall');
-  await typePassage(page);
-  await expect(page.getByRole('dialog')).toHaveAccessibleName('Solid');
+  await typePassage(page, { learned: true });
+  await expect(page.locator('.learned')).toContainText(/Next review: /);
   await screen(page, info, 'review-easy');
-  await page.getByRole('button', { name: 'Finish', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Reviewed', exact: true })).toBeVisible();
   await screen(page, info, 'review-remembered');
   await page.getByRole('button', { name: 'Practice once more', exact: true }).click();
@@ -251,14 +255,14 @@ test('catechism browse and complete a full ladder', async ({ page }, info) => {
   for (let n = 1; n <= 4; n++) {
     await step(page, n);
     await screen(page, info, `catechism-step-${n}`);
-    await typePassage(page, { onscreen: n === 4 });
-    await page.getByRole('button', { name: n === 4 ? 'Finish' : 'Continue', exact: true }).click();
+    await typePassage(page, { onscreen: n === 4, learned: n === 4 });
+    if (n < 4) await page.getByRole('button', { name: 'Continue', exact: true }).click();
   }
   await learned(page);
   await screen(page, info, 'catechism-learned');
 });
 
-test('failed step repeats, peek is a slip, result-close exits, shortcut fails to step 3 and then passes', async ({ page }, info) => {
+test('failed step repeats, peek is a slip, result-close continues, shortcut fails to step 3 and then passes', async ({ page }, info) => {
   await addOwn(page);
   await beginOwn(page);
   await typePassage(page);
@@ -270,7 +274,9 @@ test('failed step repeats, peek is a slip, result-close exits, shortcut fails to
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
   await step(page, 2);
   await typePassage(page);
-  await page.getByRole('dialog').getByRole('button', { name: 'Close practice', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Close dialog', exact: true }).click();
+  await step(page, 3);
+  await page.getByRole('button', { name: 'Close practice', exact: true }).click();
   await tab(page, 'Today');
   await addOwn(page, 'Shortcut challenge', 'Love is patient and love is kind.');
   await beginOwn(page, 'Shortcut challenge');
@@ -283,8 +289,7 @@ test('failed step repeats, peek is a slip, result-close exits, shortcut fails to
   await screen(page, info, 'shortcut-fallback');
   await typePassage(page);
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
-  await typePassage(page);
-  await page.getByRole('button', { name: 'Finish', exact: true }).click();
+  await typePassage(page, { learned: true });
   await learned(page);
 });
 
@@ -292,8 +297,7 @@ test('shortcut success and failed blank review returns to step 3', async ({ page
   await addOwn(page);
   await beginOwn(page);
   await page.getByRole('button', { name: 'I know this', exact: true }).click();
-  await typePassage(page, { onscreen: true });
-  await page.getByRole('button', { name: 'Finish', exact: true }).click();
+  await typePassage(page, { onscreen: true, learned: true });
   await learned(page);
   await page.getByRole('button', { name: 'Back to Today', exact: true }).click();
   await tab(page, 'Library');
@@ -435,8 +439,7 @@ test('all featured covers and document choices, collection sessions and Next ite
     if (index === 0) {
       const title = await page.getByRole('heading', { level: 1 }).innerText();
       await page.getByRole('button', { name: 'I know this', exact: true }).click();
-      await typePassage(page);
-      await page.getByRole('button', { name: 'Finish', exact: true }).click();
+      await typePassage(page, { learned: true });
       await learned(page);
       await expect(page.getByRole('button', { name: 'Next item', exact: true })).toBeVisible();
       await page.getByRole('button', { name: 'Next item', exact: true }).click();
