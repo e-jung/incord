@@ -37,8 +37,8 @@ describe('serialized Groups membership and authorization',()=>{
   const listed=await f.api('requester','',{},'GET');expect(listed.groups).toEqual([]);expect(listed.pending).toHaveLength(5);
   expect(listed.pending[0]).toEqual({id,name:'Renamed while pending',ownerName:'Host 0',requestedAt:expect.any(Number)});
   for(const request of listed.pending)expect(Object.keys(request).sort()).toEqual(['id','name','ownerName','requestedAt']);
-  expect(f.root.calls).toBe(6);expect(f.invocations.some(i=>['/project','/view'].includes(i.path))).toBe(false);
-  const mcp=await runMcpTool('get_groups',{}, {groups:()=>getGroups(f.env,'requester')} as any);expect(mcp).toEqual(listed);
+  expect(f.root.calls).toBe(7);expect(f.invocations.some(i=>['/project','/view'].includes(i.path))).toBe(false);
+  const mcp=await runMcpTool('get_groups',{}, {groups:()=>getGroups(f.env,'requester')} as any);const {attention,...lists}=listed;expect(attention).toEqual({pendingRequests:0,prayersToday:0,goalsNearlyDone:0});expect(mcp).toEqual(lists);
   for(const secret of ['members','goal','host0','uid','revision','invite','Psalm 23'])expect(JSON.stringify(mcp)).not.toContain(secret);
   await expect(f.api('requester','/'+id,{},'GET')).rejects.toMatchObject({status:404});
   await expect(f.api('requester','/'+id+'/goal/add')).rejects.toMatchObject({status:404});

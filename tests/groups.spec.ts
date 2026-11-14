@@ -1,10 +1,46 @@
-import {test,expect,type Page,type APIResponse,type BrowserContext} from '@playwright/test';
+import {test,expect,type Page,type APIResponse,type BrowserContext,type Locator,type Response} from '@playwright/test';
 
 const groups=(page:Page)=>page.getByRole('region',{name:'Groups',exact:true});
 const groupArticle=(page:Page,name:string)=>groups(page).getByRole('article',{name,exact:true});
 const headers=(base:string)=>({Origin:new URL(base).origin});
 async function checked(response:APIResponse){expect(response.ok(),await response.text()).toBe(true);return response.json()}
-async function today(page:Page){await page.getByRole('navigation').filter({has:page.getByRole('button',{name:'Today',exact:true})}).getByRole('button',{name:'Today',exact:true}).click();await expect(groups(page)).toBeVisible()}
+const navigation=(page:Page)=>page.getByRole('navigation',{name:'Main navigation',exact:true});
+async function tap(button:Locator){
+ await button.waitFor({state:'visible'});
+ await button.page().evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
+ const overlay=button.locator('xpath=following-sibling::*[1][self::input[contains(@class,"haptic-overlay")]]');
+ if(await overlay.count())await overlay.tap();else await button.click();
+}
+async function tab(page:Page,name:string){const button=navigation(page).getByRole('button',{name,exact:true});await tap(button);await expect(button).toHaveAttribute('aria-current','page');if(name==='Today')await expect(groups(page)).toHaveCount(0)}
+// Signed-in entry always fetches the list and, when present, its selected detail.
+async function openGroups(page:Page){
+ if(await navigation(page).getByRole('button',{name:'Groups',exact:true}).getAttribute('aria-current')==='page')await tab(page,'Today');
+ const details:Response[]=[];
+ const observe=(response:Response)=>{if(response.request().method()==='GET'&&/^\/api\/groups\/[^/]+$/.test(new URL(response.url()).pathname))details.push(response)};
+ page.on('response',observe);
+ try{
+  const listed=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/groups'&&r.request().method()==='GET');
+  await tab(page,'Groups');
+  const response=await listed;expect(response.ok()).toBe(true);const result=await response.json();await response.finished();
+  await expect(groups(page).getByText('Loading your groups…',{exact:true})).toHaveCount(0);
+  await expect(page.getByRole('heading',{name:'Groups',exact:true,level:1})).toBeVisible();await expect(groups(page)).toBeVisible();
+  if(result.groups.length){
+   await expect.poll(()=>details.length).toBeGreaterThan(0);
+   for(const detail of details){expect(detail.ok()).toBe(true);await detail.finished()}
+   await expect(groups(page).getByRole('article')).toHaveCount(1);await expect(groups(page).getByRole('article')).toHaveAttribute('aria-busy','false');
+  }
+ }finally{page.off('response',observe)}
+}
+async function form(page:Page,kind:'create'|'join'){
+ const field=groups(page).getByLabel(kind==='create'?'Group name':'Invite code',{exact:true});
+ const emptyAction=groups(page).getByRole('button',{name:kind==='create'?'Create a group':'Join with a code',exact:true});
+ const summary=groups(page).getByText('Create or join a group',{exact:true});
+ await expect.poll(async()=>await field.isVisible()||await emptyAction.isVisible()||await summary.isVisible()).toBe(true);
+ if(!await field.isVisible()){
+  if(await emptyAction.isVisible())await tap(emptyAction);else await summary.click();
+ }
+ await expect(field).toBeVisible();
+}
 async function settings(page:Page){await page.getByRole('button',{name:'Account settings',exact:true}).click()}
 async function login(page:Page,name:string){
  const invited=new URL(page.url()==='about:blank'?'http://localhost/':page.url()).pathname.startsWith('/join/');
@@ -16,10 +52,10 @@ async function login(page:Page,name:string){
  await page.getByLabel('Six-digit code').fill(code);if(invited){await expect(groups(page).getByText(/You have joined the group\.|Waiting for .* to approve\./)).toBeVisible();await settings(page)}await expect(page.getByText('Signed in.',{exact:true})).toBeVisible();
  await page.getByLabel('Display name',{exact:true}).fill(name);await page.getByLabel('Display name',{exact:true}).press('Tab');
  await expect.poll(async()=>(await(await page.request.get('/api/export')).json()).settings.name).toBe(name);
- if(invited)await today(page);return email;
+ if(invited)await openGroups(page);return email;
 }
 async function create(page:Page,name:string,approval=false){
- await today(page);await groups(page).getByText('Create or join a group',{exact:true}).click();
+ await openGroups(page);await form(page,'create');
  await groups(page).getByLabel('Group name',{exact:true}).fill(name);if(approval)await groups(page).getByLabel('Approve new members',{exact:true}).check();
  const response=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/groups'&&r.request().method()==='POST');
  await groups(page).getByRole('button',{name:'Create group',exact:true}).click();const result=await checked(await response);
@@ -31,7 +67,7 @@ async function invite(page:Page,name:string){
  const generated=page.waitForResponse(r=>new URL(r.url()).pathname.endsWith('/invite')&&r.request().method()==='POST');await article.getByRole('button',{name:'Generate invite',exact:true}).click();const result=await checked(await generated);await expect(article.getByLabel('Invite code',{exact:true})).toHaveValue(result.code);await expect(article.getByLabel('Invite link',{exact:true})).toBeVisible();
  return {url:await article.getByLabel('Invite link',{exact:true}).inputValue(),code:await article.getByLabel('Invite code',{exact:true}).inputValue()};
 }
-async function refresh(page:Page){await groups(page).getByRole('button',{name:'Refresh group',exact:true}).click();await expect(groups(page).getByRole('button',{name:'Refresh group',exact:true})).toBeEnabled()}
+async function refresh(page:Page){await openGroups(page)}
 async function fits(page:Page,width:number){
  await page.setViewportSize({width,height:852});
  const outside=await groups(page).locator('button,input,select,textarea').evaluateAll((nodes,width)=>nodes.filter(node=>{const rect=node.getBoundingClientRect();return rect.width>0&&(rect.left<-.5||rect.right>Number(width)+.5)}).map(node=>node.outerHTML.slice(0,160)),width);
@@ -52,20 +88,24 @@ test('three isolated members: link/code invites, Discover goal sync, prayer, tit
   await page.goto('/');await login(page,'Eric');const created=await create(page,name);groupId=created.group.id;
   const link=await invite(page,name);expect(link.code).toMatch(/^[abcdefghjkmnpqrstuvwxyz23456789]{4}(?:-[abcdefghjkmnpqrstuvwxyz23456789]{4}){3}$/);
   // Link is opened signed out, then survives a full reload before email sign-in.
-  await anna.goto(link.url);await expect(groups(anna).getByText('Sign in to accept your group invite.')).toBeVisible();
+  await anna.goto(link.url);await expect(anna.getByRole('heading',{name:'Groups',exact:true,level:1})).toBeVisible();await expect(groups(anna).getByText('Sign in to accept your group invite.')).toBeVisible();
   await anna.reload();await login(anna,'Anna');
   await expect(groupArticle(anna,name)).toBeVisible();
   expect(new URL(anna.url()).pathname).toBe('/');
-  await ben.goto('/');await login(ben,'Ben');await today(ben);await groups(ben).getByText('Create or join a group',{exact:true}).click();
+  await ben.goto('/');await login(ben,'Ben');await openGroups(ben);await form(ben,'join');
   await groups(ben).getByLabel('Invite code',{exact:true}).fill(link.code.toUpperCase());await groups(ben).getByRole('button',{name:'Join group',exact:true}).click();await expect(groupArticle(ben,name)).toBeVisible();
   await refresh(page);await expect(groupArticle(page,name).getByText('3 members · You are the owner')).toBeVisible();
   await groupArticle(page,name).getByRole('button',{name:'Choose goal in Discover',exact:true}).click();
   await expect(page.getByRole('heading',{name:'Choose a group goal',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Passages',exact:true}).click();await page.locator('.featured-cards').getByRole('button',{name:/Psalm 23/}).click();
   await page.getByRole('dialog').getByRole('button',{name:'Use as group goal',exact:true}).click();
-  await expect(groupArticle(page,name).getByRole('region',{name:'Group goal'})).toContainText('Psalm 23');
-  await page.route('**/api/groups/'+groupId+'/goal/add',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({results:[{status:'invalid reference',reason:'ESV content limit reached'}]})}),{times:1});
+  await expect(page.getByRole('heading',{name:'Groups',exact:true,level:1})).toBeVisible();await expect(groupArticle(page,name).getByRole('region',{name:'Group goal'})).toContainText('Psalm 23');
+  // Keep interception installed until the follow-up sync and inline result settle.
+  // Removing a one-shot Chromium route during that immediate fetch can strand it.
+  const rejectedGoal='**/api/groups/'+groupId+'/goal/add';
+  await page.route(rejectedGoal,route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({results:[{status:'invalid reference',reason:'ESV content limit reached'}]})}));
   await groupArticle(page,name).getByRole('button',{name:'Add goal to my library',exact:true}).click();await expect(groupArticle(page,name).getByRole('alert')).toContainText('1 item was not added. ESV content limit reached');await expect(groupArticle(page,name).getByText('Goal added to your library.',{exact:true})).toHaveCount(0);
+  await page.unroute(rejectedGoal);
   await groupArticle(page,name).getByRole('button',{name:'Add goal to my library',exact:true}).click();
   await expect(groupArticle(page,name).getByText('Goal added to your library.',{exact:true})).toBeVisible();
   let exported=await(await page.request.get('/api/export')).json();const goalItem=exported.items.find((i:any)=>i.origin==='group');expect(goalItem.id).toBe('bsb-psa-23-1--bsb-psa-23-6');
@@ -74,7 +114,7 @@ test('three isolated members: link/code invites, Discover goal sync, prayer, tit
   await groupArticle(page,name).getByRole('button',{name:'Add goal to my library',exact:true}).click();await expect(groupArticle(page,name).getByRole('button',{name:'Add goal to my library',exact:true})).toBeEnabled();
   exported=await(await page.request.get('/api/export')).json();expect(exported.items.filter((i:any)=>i.id===goalItem.id)).toHaveLength(1);expect(exported.items.find((i:any)=>i.id===goalItem.id).step).toBe(3);
   await refresh(anna);await groupArticle(anna,name).getByRole('button',{name:'Add goal to my library',exact:true}).click();await expect(groupArticle(anna,name).getByText('Goal added to your library.',{exact:true})).toBeVisible();
-  await anna.getByRole('navigation').filter({has:anna.getByRole('button',{name:'Library',exact:true})}).getByRole('button',{name:'Library',exact:true}).click();await anna.getByRole('button',{name:/^My verses/}).click();await expect(anna.getByText(/Psalm 23:1.*6/).first()).toBeVisible();await today(anna);
+  await tab(anna,'Library');await anna.getByRole('button',{name:/^My verses/}).click();await expect(anna.getByText(/Psalm 23:1.*6/).first()).toBeVisible();await openGroups(anna);
   // Seed a chosen title and private body. Only the title may be projected.
   const privateBody='THIS PRIVATE BODY MUST NEVER BE SHARED',privateId='own-'+crypto.randomUUID(),privateEvent=crypto.randomUUID();
   await checked(await page.request.post('/api/sync',{headers:headers(baseURL!),data:{items:[{id:privateId,title:'My chosen memory title',text:privateBody,collection:'personal',learned:true,step:4,due:new Date().toISOString(),updatedAt:Date.now()+20000}],events:[{id:privateEvent,itemId:privateId,at:new Date().toISOString(),grade:'Good',slips:7,hidden:10}],settings:{updatedAt:0}}}));
@@ -86,7 +126,7 @@ test('three isolated members: link/code invites, Discover goal sync, prayer, tit
   await settings(page);await page.getByRole('checkbox',{name:"Show what I'm memorizing to my groups",exact:true}).uncheck();await expect.poll(async()=>(await(await page.request.get('/api/export')).json()).settings.groupShareTitles).toBe(false);
   view=(await checked(await anna.request.get('/api/groups/'+groupId))).group;expect(view.members.find((m:any)=>m.name==='Eric')).not.toHaveProperty('titles');
   await refresh(anna);const ericRow=groupArticle(anna,name).locator('.member').filter({has:anna.getByText('Eric',{exact:true})});await expect(ericRow.getByText('Item titles',{exact:true})).toHaveCount(0);
-  await page.reload();await settings(page);await expect(page.getByRole('checkbox',{name:"Show what I'm memorizing to my groups",exact:true})).not.toBeChecked();await today(page);
+  await page.reload();await settings(page);await expect(page.getByRole('checkbox',{name:"Show what I'm memorizing to my groups",exact:true})).not.toBeChecked();await openGroups(page);
   for(const width of [320,393]){await fits(page,width);await fits(anna,width)}
   await groupArticle(ben,name).getByRole('button',{name:'Leave group',exact:true}).click();await expect(ben.getByRole('dialog',{name:'Leave group?'})).toBeVisible();await ben.goBack();await expect(ben.getByRole('dialog',{name:'Leave group?'})).toHaveCount(0);await groupArticle(ben,name).getByRole('button',{name:'Leave group',exact:true}).click();await ben.getByRole('dialog',{name:'Leave group?'}).getByRole('button',{name:'Leave group',exact:true}).click();await expect(groupArticle(ben,name)).toHaveCount(0);expect([403,404]).toContain((await ben.request.get('/api/groups/'+groupId)).status());
   await refresh(page);const annaRow=groupArticle(page,name).locator('.member').filter({has:page.getByText('Anna',{exact:true})});await annaRow.getByText('Manage Anna',{exact:true}).click();await annaRow.getByRole('button',{name:'Remove member',exact:true}).click();await page.getByRole('dialog',{name:'Remove member?'}).getByRole('button',{name:'Remove member',exact:true}).click();await expect(groupArticle(page,name).getByText('Anna',{exact:true})).toHaveCount(0);
@@ -98,18 +138,18 @@ test('approval, invite rotation/revocation, Discover catechism range, admin and 
  test.setTimeout(browser.browserType().name()==='webkit'?300000:150000);await page.goto('/');await login(page,'Owner');const name='Approval circle '+crypto.randomUUID().slice(0,8);const created=await create(page,name,true);const id=created.group.id;
  const context=await browser.newContext({baseURL,viewport:{width:320,height:852},serviceWorkers:'block',extraHTTPHeaders:{'CF-Connecting-IP':'groups-approval-'+crypto.randomUUID()}}),friend=await context.newPage();
  try{
-  const old=created.invite;const current=await invite(page,name);await friend.goto('/');await login(friend,'Friend');await today(friend);await groups(friend).getByText('Create or join a group',{exact:true}).click();
+  const old=created.invite;const current=await invite(page,name);await friend.goto('/');await login(friend,'Friend');await openGroups(friend);await form(friend,'join');
   await groups(friend).getByLabel('Invite code',{exact:true}).fill(old.code);await groups(friend).getByRole('button',{name:'Join group',exact:true}).click();await expect(groups(friend).getByRole('alert')).toBeVisible();
   await groups(friend).getByLabel('Invite code',{exact:true}).fill(current.code);await groups(friend).getByRole('button',{name:'Join group',exact:true}).click();await expect(groups(friend).getByText('Waiting for Owner to approve.',{exact:true}).first()).toBeVisible();await expect(groupArticle(friend,name)).toHaveCount(0);
-  await friend.reload();await today(friend);const requests=groups(friend).getByRole('region',{name:'Your join requests',exact:true});await expect(requests).toContainText(name);await requests.getByRole('button',{name:'Withdraw request',exact:true}).click();await expect(requests).toHaveCount(0);await expect(groups(friend).getByText('Join request withdrawn.',{exact:true})).toBeVisible();await groups(friend).getByText('Create or join a group',{exact:true}).click();await groups(friend).getByLabel('Invite code',{exact:true}).fill(current.code);await groups(friend).getByRole('button',{name:'Join group',exact:true}).click();await expect(groups(friend).getByRole('region',{name:'Your join requests',exact:true})).toContainText(name);
-  await refresh(page);await expect(groups(page).getByLabel('1 pending request',{exact:true})).toHaveCount(2);
-  await groupArticle(page,name).getByRole('button',{name:'Decline Friend',exact:true}).click();await expect(groupArticle(page,name).getByText('Request declined.',{exact:true})).toBeVisible();await expect(groups(page).getByLabel('1 pending request',{exact:true})).toHaveCount(0);
+  await friend.reload();await openGroups(friend);const requests=groups(friend).getByRole('region',{name:'Your join requests',exact:true});await expect(requests).toContainText(name);await requests.getByRole('button',{name:'Withdraw request',exact:true}).click();await expect(requests).toHaveCount(0);await expect(groups(friend).getByText('Join request withdrawn.',{exact:true})).toBeVisible();await form(friend,'join');await groups(friend).getByLabel('Invite code',{exact:true}).fill(current.code);await groups(friend).getByRole('button',{name:'Join group',exact:true}).click();await expect(groups(friend).getByRole('region',{name:'Your join requests',exact:true})).toContainText(name);
+  await refresh(page);await expect(navigation(page).getByRole('button',{name:'Groups',exact:true})).toHaveAccessibleDescription('1 pending request');await expect(groups(page).getByLabel('1 pending request',{exact:true})).toHaveCount(1);
+  await groupArticle(page,name).getByText('Manage group',{exact:true}).click();await groupArticle(page,name).getByRole('button',{name:'Decline Friend',exact:true}).click();await expect(groupArticle(page,name).getByText('Request declined.',{exact:true})).toBeVisible();await expect(navigation(page).getByRole('button',{name:'Groups',exact:true})).toHaveAccessibleDescription('');await expect(groups(page).getByLabel('1 pending request',{exact:true})).toHaveCount(0);
   await refresh(friend);await expect(groups(friend).getByRole('region',{name:'Your join requests',exact:true})).toHaveCount(0);await expect(groupArticle(friend,name)).toHaveCount(0);
-  await groups(friend).getByLabel('Invite code',{exact:true}).fill(current.code);await groups(friend).getByRole('button',{name:'Join group',exact:true}).click();await expect(groups(friend).getByText('Waiting for Owner to approve.',{exact:true}).first()).toBeVisible();
-  await refresh(page);await expect(groups(page).getByLabel('1 pending request',{exact:true})).toHaveCount(2);const article=groupArticle(page,name);await article.getByRole('button',{name:'Approve Friend',exact:true}).click();await expect(article.getByText('Member approved.',{exact:true})).toBeVisible();await expect(groups(page).getByLabel('1 pending request',{exact:true})).toHaveCount(0);await refresh(friend);await expect(groupArticle(friend,name)).toBeVisible();
+  await form(friend,'join');await groups(friend).getByLabel('Invite code',{exact:true}).fill(current.code);await groups(friend).getByRole('button',{name:'Join group',exact:true}).click();await expect(groups(friend).getByText('Waiting for Owner to approve.',{exact:true}).first()).toBeVisible();
+  await refresh(page);await expect(navigation(page).getByRole('button',{name:'Groups',exact:true})).toHaveAccessibleDescription('1 pending request');await expect(groups(page).getByLabel('1 pending request',{exact:true})).toHaveCount(1);const article=groupArticle(page,name);await article.getByText('Manage group',{exact:true}).click();await article.getByRole('button',{name:'Approve Friend',exact:true}).click();await expect(article.getByText('Member approved.',{exact:true})).toBeVisible();await expect(navigation(page).getByRole('button',{name:'Groups',exact:true})).toHaveAccessibleDescription('');await expect(groups(page).getByLabel('1 pending request',{exact:true})).toHaveCount(0);await refresh(friend);await expect(groupArticle(friend,name)).toBeVisible();
   await article.getByRole('button',{name:'Choose goal in Discover',exact:true}).click();await page.getByRole('button',{name:'Catechisms & creeds',exact:true}).click();await page.locator('.document-cards').getByRole('button',{name:/Westminster Shorter Catechism/}).click();
   const goal=page.getByRole('form',{name:'Choose a group goal',exact:true});await goal.getByLabel('From question or article').fill('1');await goal.getByLabel('Through question or article').fill('3');await goal.getByRole('button',{name:'Use as group goal',exact:true}).click();
-  await expect(groupArticle(page,name).getByRole('region',{name:'Group goal'})).toContainText('3 items');await groupArticle(page,name).getByRole('button',{name:'Add goal to my library',exact:true}).click();await expect(groupArticle(page,name).getByText('Goal added to your library.',{exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Groups',exact:true,level:1})).toBeVisible();await expect(groupArticle(page,name).getByRole('region',{name:'Group goal'})).toContainText('3 items');await groupArticle(page,name).getByRole('button',{name:'Add goal to my library',exact:true}).click();await expect(groupArticle(page,name).getByText('Goal added to your library.',{exact:true})).toBeVisible();
   const row=groupArticle(page,name).locator('.member').filter({has:page.getByText('Friend',{exact:true})});await row.getByText('Manage Friend',{exact:true}).click();await row.getByRole('combobox',{name:'Role for Friend',exact:true}).selectOption('admin');await expect(row.getByText('Role updated.',{exact:true})).toBeVisible();
   await row.getByRole('button',{name:'Transfer ownership to Friend',exact:true}).click();await page.getByRole('dialog',{name:'Transfer ownership?'}).getByRole('button',{name:'Transfer ownership',exact:true}).click();await expect(groupArticle(page,name).getByText('2 members · You are a member')).toBeVisible();await refresh(friend);
   await fits(friend,320);await groupArticle(friend,name).getByText('Manage group',{exact:true}).click();await groupArticle(friend,name).getByRole('button',{name:'Revoke invite',exact:true}).click();await expect(groupArticle(friend,name).getByText('Invite revoked.',{exact:true})).toBeVisible();

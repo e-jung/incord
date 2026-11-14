@@ -101,10 +101,30 @@ export async function handleGroupsRegistry(sql:SqlStorage,env:Env,path:string,da
 function groupName(name:any){check(typeof name==='string'&&name.trim().length>0&&name.trim().length<=80,'Enter a group name (1–80 characters)');return name.trim()}
 async function inviteFor(g:Group,data:any){const days=data.expiresDays??14,uses=data.maxUses??20;check(Number.isInteger(days)&&days>=1&&days<=90&&Number.isInteger(uses)&&uses>=1&&uses<=100,'Invalid invite limits');const raw=generateInviteCode(),expiresAt=Date.now()+days*86400000;g.invite={hash:await groupHash(raw),expiresAt,maxUses:uses,uses:0};return {code:raw.match(/.{4}/g)!.join('-'),url:'/join/'+raw,expiresAt,maxUses:uses}}
 export async function getGroups(env:Env,uid:string):Promise<{groups:any[];pending:{id:string;name:string;ownerName:string;requestedAt:number}[]}>{if(!env.GROUPS)return {groups:[],pending:[]};const result=await registry(env,'/groups/list',{uid});const groups=[],pending=[];for(const g of result.groups)groups.push(await groupView(env,g,uid));for(const g of result.pending||[])pending.push(await groupsCall(groupObject(env,g.id),'/pending-view',{uid,revision:g.revision}));return {groups,pending}}
+export type GroupsAttention={pendingRequests:number;prayersToday:number;goalsNearlyDone:number;groupId?:string};
+/** Reuse authorized list projections: no additional member/library reads.
+ * Nearly done means the current user's started goal is >=80% learned,
+ * with exactly one or two items remaining (completed goals do not qualify). */
+export function projectGroupsAttention(groups:any[],prayersToday:number):GroupsAttention{
+ let pendingRequests=0,goalsNearlyDone=0,pendingGroup:string|undefined,goalGroup:string|undefined;
+ for(const g of groups){
+  const requests=g.role==='owner'||g.role==='admin'?(g.pending?.length||0):0;
+  pendingRequests+=requests;if(requests&&!pendingGroup)pendingGroup=g.id;
+  const me=g.members.find((m:any)=>m.self),total=me?.goalTotal||0,learned=me?.goalLearned||0,remaining=total-learned;
+  if(g.goal&&me?.goalStatus==='learning'&&learned/total>=0.8&&remaining>=1&&remaining<=2){goalsNearlyDone++;goalGroup??=g.id}
+ }
+ const groupId=pendingGroup??goalGroup;
+ return {pendingRequests,prayersToday,goalsNearlyDone,...(groupId?{groupId}:{})};
+}
 export async function cleanupGroups(env:Env,uid:string){if(env.GROUPS)await registry(env,'/groups/cleanup',{uid})}
 export async function handleGroups(request:Request,env:Env,uid:string,input:any={}){
  check(env.GROUPS,'Groups unavailable',503);const path=new URL(request.url).pathname;
- if(path==='/api/groups'&&request.method==='GET')return json(await getGroups(env,uid));
+ if(path==='/api/groups'&&request.method==='GET'){
+  const result=await getGroups(env,uid);
+  // One scalar-only account read, independent of group count and push setup.
+  const {prayersToday}=await user(env,uid,'/groups/attention');
+  return json({...result,attention:projectGroupsAttention(result.groups,prayersToday)});
+ }
  const parts=path.slice('/api/groups'.length).split('/').filter(Boolean);let action:string,id:string|undefined;
  if(!parts.length&&request.method==='POST')action='create';else if(parts.length===1&&parts[0]==='join'&&request.method==='POST')action='join';else {id=parts.shift();check(id&&/^[a-f0-9-]{36}$/.test(id),'Group not found',404);action=parts.join('/')||(request.method==='GET'?'get':request.method==='DELETE'?'delete':'');check((action==='get'&&request.method==='GET')||(action==='delete'&&request.method==='DELETE')||(!!parts.length&&request.method==='POST'),'Method not allowed',405)}
  const result=await registry(env,'/groups/'+action,{...input,uid,id,ip:request.headers.get('CF-Connecting-IP')||'local'});

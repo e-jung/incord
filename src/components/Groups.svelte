@@ -14,17 +14,17 @@ type Group = Summary & {members:Member[]; pending?:{id:string; name:string}[]; a
 type Invite = {code:string; url:string; expiresAt:number; maxUses:number};
 type Note = {text:string; error?:boolean};
 type Confirmation = {kind:'delete'|'leave'|'remove'|'transfer'; member?:Member; groupName:string; done?:boolean};
-let {account, settings, onSync, onChooseGoal, onSignIn, pendingCode='', onJoined, initialGroupId='', onSave, onDialogChange=()=>{}}: {
+let {account, settings, onSync, onChooseGoal, onSignIn, pendingCode='', onJoined, initialGroupId='', onSave, onDialogChange=()=>{}, onSelect=()=>{}, onAttention=()=>{}}: {
  account:any|null; settings:Settings; onSync:()=>Promise<void>; onChooseGoal:(groupId:string)=>void;
- onSignIn:()=>void; pendingCode?:string; onJoined:()=>void; initialGroupId?:string; onSave?:()=>Promise<void>; onDialogChange?:(close:(()=>void)|null)=>void;
+ onSignIn:()=>void; pendingCode?:string; onJoined:()=>void; initialGroupId?:string; onSave?:()=>Promise<void>; onDialogChange?:(close:(()=>void)|null)=>void; onSelect?:(id:string)=>void; onAttention?:(attention?:{pendingRequests:number;prayersToday:number;goalsNearlyDone:number;groupId?:string})=>void;
 } = $props();
 let pendingMemberships = $state<Pending[]>([]);
 let groups = $state<Summary[]>([]), group = $state<Group|null>(null), selected = $state('');
-let activeIdentity = $state(''), loading = $state(false), detailLoading = $state(false);
+let activeIdentity = $state(''), loading = $state(false), listed = $state(false), detailLoading = $state(false);
 let busy = $state(''), notes = $state<Record<string,Note>>({}), invite = $state<Invite|null>(null);
 let name = $state(''), code = $state(''), approval = $state(false), expiresDays = $state(14), maxUses = $state(20);
 let confirmation = $state<Confirmation|null>(null);
-let inviteInput = $state<HTMLInputElement>();
+let inviteInput = $state<HTMLInputElement>(),nameInput=$state<HTMLInputElement>(),codeInput=$state<HTMLInputElement>(),panel=$state<HTMLElement>();
 let formsOpen = $state(false);
 let pendingReceipts = $state<Record<string,{member:{id:string;name:string};index:number}>>({});
 const pendingRows = $derived.by(()=>{
@@ -36,7 +36,6 @@ const noteTimers = new Map<string,ReturnType<typeof setTimeout>>();
 let copyRequest = 0;
 let epoch = 0, listRequest = 0, detailRequest = 0, alive = true, attemptedInvite = '';
 const manager = $derived(group?.role === 'owner' || group?.role === 'admin');
-const pendingCount = $derived(groups.reduce((sum,item)=>sum+(item.pending?.length||0),0));
 const owner = $derived(group?.role === 'owner');
 const visible = $derived(!!account && String(account.id) === activeIdentity);
 const clearNote = (key:string) => {
@@ -69,7 +68,7 @@ const path = (id:string, suffix='') => `/groups/${encodeURIComponent(id)}${suffi
 const errorText = (error:unknown) => error instanceof Error ? error.message : ui.groups.retry;
 function clearDetail(){group=null;invite=null;copyRequest++;if(busy!=='confirm')confirmation=null;detailRequest++;detailLoading=false;}
 function reset(identity:string){
- epoch++;listRequest++;clearDetail();groups=[];pendingMemberships=[];selected='';clearNotes();confirmation=null;busy='';loading=false;
+ epoch++;listRequest++;clearDetail();groups=[];pendingMemberships=[];selected='';clearNotes();confirmation=null;busy='';loading=false;listed=false;
  name='';code='';formsOpen=!!pendingCode;approval=false;expiresDays=14;maxUses=20;activeIdentity=identity;attemptedInvite='';
 }
 $effect(()=>{
@@ -86,11 +85,17 @@ $effect(()=>{
  const id=initialGroupId, identity=account ? String(account.id) : '';
  untrack(()=>{if(id && identity && identity===activeIdentity && selected!==id){clearDetail();clearNotes();selected=id;void loadDetail(id)}});
 });
+$effect(()=>{const id=selected;if(id)onSelect(id)});
+async function openForms(mode:'create'|'join'){if(!account){onSignIn();return}formsOpen=true;await tick();(mode==='create'?nameInput:codeInput)?.focus()}
 $effect(()=>{const open=confirmation;onDialogChange(open?()=>{if(!busy)confirmation=null}:null)});
 onMount(()=>{
- const focus=()=>{if(document.visibilityState==='visible' && visible && !busy)void refresh()};
- window.addEventListener('focus',focus);document.addEventListener('visibilitychange',focus);
- return()=>{onDialogChange(null);alive=false;epoch++;clearNotes();window.removeEventListener('focus',focus);document.removeEventListener('visibilitychange',focus)};
+ const focus=()=>{if(document.visibilityState==='visible' && visible && !busy && !loading)void refresh()};
+ let pull:{id:number;x:number;y:number}|null=null;
+ const start=(event:TouchEvent)=>{pull=null;if(event.touches.length!==1||window.scrollY>0||!visible||busy||confirmation)return;const target=event.target;if(!(target instanceof Element)||!panel?.closest('.page')?.contains(target)||target.closest('.tabbar,.sheet,input,textarea,select'))return;const touch=event.touches[0];pull={id:touch.identifier,x:touch.clientX,y:touch.clientY}};
+ const end=(event:TouchEvent)=>{const origin=pull;pull=null;if(!origin||event.touches.length||window.scrollY>0||!visible||busy)return;const touch=Array.from(event.changedTouches).find(touch=>touch.identifier===origin.id);if(touch&&touch.clientY-origin.y>=72&&Math.abs(touch.clientX-origin.x)<(touch.clientY-origin.y)/2)void refresh()};
+ const cancel=()=>pull=null;
+ window.addEventListener('focus',focus);document.addEventListener('visibilitychange',focus);window.addEventListener('touchstart',start,{passive:true});window.addEventListener('touchend',end,{passive:true});window.addEventListener('touchcancel',cancel,{passive:true});
+ return()=>{onDialogChange(null);alive=false;epoch++;clearNotes();window.removeEventListener('focus',focus);document.removeEventListener('visibilitychange',focus);window.removeEventListener('touchstart',start);window.removeEventListener('touchend',end);window.removeEventListener('touchcancel',cancel)};
 });
 async function loadDetail(id:string){
  const version=epoch, request=++detailRequest;detailLoading=true;clearNote('detail');
@@ -103,7 +108,7 @@ async function refresh(first=false){
  const version=epoch,request=++listRequest;loading=true;clearNote('list');
  try{
   const out=await api('/groups');if(!current(version)||request!==listRequest)return;
-  groups=out.groups;pendingMemberships=out.pending||[];
+  listed=true;groups=out.groups;pendingMemberships=out.pending||[];onAttention(out.attention||{pendingRequests:groups.reduce((sum,item)=>sum+(item.pending?.length||0),0),prayersToday:0,goalsNearlyDone:0});
   if(selected&&!groups.some(g=>g.id===selected)){clearDetail();selected=''}
   if(!selected&&groups.length)selected=(first&&initialGroupId&&groups.some(g=>g.id===initialGroupId))?initialGroupId:groups[0].id;
   if(selected)await loadDetail(selected);
@@ -154,7 +159,7 @@ async function mutate(key:string,suffix:string,body:unknown={},success:string=ui
   if(options.sync){try{await onSync()}catch{if(current(version)&&selected===id)message(key,ui.groups.syncIncomplete,true);return}}
   if(suffix==='/goal/add'){const rejected=(out.results||[]).filter((item:any)=>!['added','already in library'].includes(item.status));if(rejected.length){if(current(version)&&selected===id){await refresh();if(current(version)&&selected===id)message(key,ui.groups.goalRejected(rejected.length,rejected[0].reason||ui.groups.retry),true)}return}}
   if(!current(version)||(!options.forget&&selected!==id))return;
-  if(suffix!=='/pray')await refresh();
+  await refresh();
   if(current(version)&&(options.forget||selected===id))message(key,suffix==='/pray'&&out.alreadySent?ui.groups.prayerAlreadySent:success);
  }catch(error){if(current(version)&&selected===id)message(key,errorText(error),true)}
  finally{if(current(version))busy=''}
@@ -162,7 +167,7 @@ async function mutate(key:string,suffix:string,body:unknown={},success:string=ui
 async function weekly(enabled:boolean){
  if(!group||busy)return;
  cancelReads();const version=epoch,id=group.id,old=group.weeklyPush;group={...group,weeklyPush:enabled};busy='weekly';clearNote('weekly');
- try{await api(path(id,'/weekly'),{enabled});if(current(version)&&group?.id===id)message('weekly',enabled?ui.groups.weeklyOn:ui.groups.weeklyOff)}
+ try{await api(path(id,'/weekly'),{enabled});if(current(version)&&group?.id===id)await refresh();if(current(version)&&group?.id===id)message('weekly',enabled?ui.groups.weeklyOn:ui.groups.weeklyOff)}
  catch(error){if(current(version)&&group?.id===id){group={...group,weeklyPush:old};message('weekly',errorText(error),true)}}
  finally{if(current(version))busy=''}
 }
@@ -186,44 +191,43 @@ const confirmationTitle = $derived(confirmation?.kind==='delete'?ui.groups.delet
  <p use:revealFeedback={notes[key]} class="feedback" class:sr-only={!notes[key]} class:failed={notes[key]?.error} aria-live="polite" aria-atomic="true" role={notes[key]?(notes[key].error?'alert':'status'):undefined}>{notes[key]?.text||''}</p>
 {/snippet}
 
-<section class="groups-panel" aria-labelledby="groups-heading">
- <header class="heading"><h2 id="groups-heading">{ui.groups.heading}</h2>{#if visible&&pendingCount}<span class="translation-badge" aria-label={ui.groups.pendingCount(pendingCount)}>{pendingCount}</span>{/if}{#if visible}<button class="text-button" disabled={loading||!!busy} onclick={()=>void refresh()}>{loading?ui.groups.refreshing:ui.groups.refresh}</button>{/if}</header>
+<section class="groups-panel" aria-label={ui.groups.heading} bind:this={panel}>
  {#if visible}{@render feedback('list')}{/if}
- <p class="intro">{ui.groups.intro}</p>
+ {#if !account||(visible&&listed&&!groups.length&&!notes.list)}<div class="groups-empty stack"><svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="21"/><circle cx="24" cy="17" r="6"/><path d="M12 38v-3a12 12 0 0 1 24 0v3"/></svg><h2>{ui.groups.empty}</h2><div class="stack"><button onclick={()=>void openForms('create')}>{ui.groups.createHeading}</button><button class="secondary" onclick={()=>void openForms('join')}>{ui.groups.joinWithCode}</button></div></div>{:else}<p class="intro">{ui.groups.intro}</p>{/if}
  {#if !account}
   <p>{pendingCode?ui.groups.signInInvite:ui.groups.signInHelp}</p>
-  <button class="secondary" onclick={onSignIn}>{ui.groups.signIn}</button>
+  {#if pendingCode}<button class="secondary" onclick={()=>onSignIn()}>{ui.groups.signIn}</button>{/if}
  {:else if visible}
-  {#if loading&&!groups.length}<p role="status">{ui.groups.loadingList}</p>{/if}
+  {#if loading&&!listed}<p class="group-loading" role="status">{ui.groups.loadingList}</p>{/if}
   {#if groups.length}
    <nav class="group-list" aria-label={ui.groups.listLabel}>
     {#each groups as item (item.id)}
      <button class="group-choice secondary" class:chosen={selected===item.id} aria-pressed={selected===item.id} disabled={!!busy} onclick={()=>choose(item.id)}><strong>{item.name}</strong>{#if item.pending?.length}<span class="translation-badge" aria-label={ui.groups.pendingCount(item.pending.length)}>{item.pending.length}</span>{/if}<small>{ui.groups.choiceSummary(item.memberCount,item.role)}</small></button>
     {/each}
    </nav>
-  {:else if !loading&&!notes.list}<p>{ui.groups.empty}</p>{/if}
+  {/if}
   {@render feedback('detail')}
   {#if detailLoading&&!group}<p role="status">{ui.groups.loadingDetail}</p>{/if}
   {#if pendingMemberships.length}<section class="panel stack" aria-label={ui.groups.yourRequests}><h3>{ui.groups.yourRequests}</h3>{#each pendingMemberships as item (item.id)}<div class="stack"><strong>{item.name}</strong><small>{ui.groups.awaitingApproval(item.ownerName)}</small><button class="text-button" disabled={!!busy} onclick={()=>void withdraw(item.id)}>{busy==='withdraw:'+item.id?ui.groups.withdrawing:ui.groups.withdraw}</button>{@render feedback('withdraw:'+item.id)}</div>{/each}</section>{/if}
   {#each Object.keys(notes).filter(key=>key.startsWith('withdraw:')&&!pendingMemberships.some(item=>key==='withdraw:'+item.id)) as key (key)}{@render feedback(key)}{/each}
-  <details class="panel" bind:open={formsOpen}>
+  {#if formsOpen||groups.length||pendingMemberships.length}<details class="panel" bind:open={formsOpen}>
    <summary>{ui.groups.createOrJoin}</summary>
    <div class="forms">
     <form class="stack" onsubmit={(event)=>{event.preventDefault();void create()}}>
      <h3>{ui.groups.createHeading}</h3>
-     <label>{ui.groups.name}<input bind:value={name} maxlength="80" required autocomplete="off" /></label>
+     <label>{ui.groups.name}<input bind:this={nameInput} bind:value={name} maxlength="80" required autocomplete="off" /></label>
      <label class="check"><input type="checkbox" bind:checked={approval} />{ui.groups.approveNew}</label>
      <button type="submit" disabled={!!busy||!name.trim()}>{busy==='create'?ui.groups.creating:ui.groups.create}</button>
      {@render feedback('create')}
     </form>
     <form class="stack" onsubmit={(event)=>{event.preventDefault();void join()}}>
      <h3>{ui.groups.joinHeading}</h3>
-     <label>{ui.groups.inviteCode}<input bind:value={code} required maxlength="64" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder={ui.groups.invitePlaceholder} /></label>
+     <label>{ui.groups.inviteCode}<input bind:this={codeInput} bind:value={code} required maxlength="64" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder={ui.groups.invitePlaceholder} /></label>
      <button type="submit" disabled={!!busy||!code.trim()}>{busy==='join'?ui.groups.joining:ui.groups.join}</button>
      {@render feedback('join')}
     </form>
    </div>
-  </details>
+  </details>{/if}
   {#if group}
    <article class="panel stack" aria-label={group.name} aria-busy={detailLoading}>
     <header><h3 class="group-name">{group.name}</h3><small>{ui.groups.memberSummary(group.memberCount,group.role)}</small></header>

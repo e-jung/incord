@@ -24,14 +24,17 @@ for(const width of [320,393])test(`iOS all tab items and shared primary buttons 
  for(const box of before){const after=await page.locator(`button[data-haptic-test="${box.i}"]`).boundingBox();if(!after)continue;for(const key of ['x','y','width','height'] as const)expect(Math.abs(after[key]-box[key])).toBeLessThan(0.6)}
  await expect(page.locator('input.haptic-button,textarea.haptic-button,select.haptic-button,a.haptic-button')).toHaveCount(0);
  await page.evaluate(()=>{(document.activeElement as HTMLElement)?.blur()});await tap(page.getByRole('button',{name:'Test haptic',exact:true}));await expect(page.locator('body')).toBeFocused();
- for(const name of ['Library','Discover','Today']){
+ await expect(page.getByRole('navigation').getByRole('button')).toHaveCount(4);
+ await expect(page.getByRole('navigation').getByRole('button')).toHaveText(['Today','Library','Discover','Groups']);
+ await expect(page.getByRole('navigation').locator('.haptic-overlay')).toHaveCount(4);
+ for(const name of ['Library','Discover','Groups','Today']){
   await page.evaluate(()=>(window as any).__buttonClicks=[]);await tab(page,name);
   await expect(page.getByRole('navigation').getByRole('button',{name,exact:true})).toHaveAttribute('aria-current','page');expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
   expect(await page.evaluate(()=>(window as any).__buttonClicks)).toEqual([name]);
  }
  // Simulate keyed reconciliation moving an existing button: only its sibling
  // switch should follow, and Svelte-owned button nodes must never be reparented.
- await page.getByRole('navigation').evaluate(nav=>{const last=nav.querySelectorAll('button')[2];nav.insertBefore(last,nav.firstElementChild)});
+ await page.getByRole('navigation').evaluate(nav=>{const last=nav.querySelectorAll('button')[3];nav.insertBefore(last,nav.firstElementChild)});
  await expect.poll(()=>page.getByRole('navigation').evaluate(nav=>[...nav.querySelectorAll('button')].every(button=>button.parentElement===nav&&button.nextElementSibling?.classList.contains('haptic-overlay')))).toBe(true);
  await tab(page,'Library');await page.evaluate(()=>(window as any).__buttonClicks=[]);
  await tap(page.getByRole('button',{name:'Find something to memorize',exact:true}));

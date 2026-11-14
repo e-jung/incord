@@ -496,15 +496,28 @@ export class UserDO {
       this.mergeData(items,events,settings);
       return json({ items: this.list('items'), events: this.list('events'), settings: this.settings(), serverTime: Date.now() });
     }
+    if(path==='/groups/attention') {
+      // Count distinct senders by the recipient's local day, independent of UTC dedup.
+      // Legacy reservations have no received timestamp, so cannot be dated locally.
+      // Return only a count; sender hashes, notification text and tags stay private.
+      const settings=this.settings();if(settings.groupReceivePrayer===false)return json({prayersToday:0});
+      const timezone=settings.timezone||'UTC',day=localDay(new Date(Date.now()),timezone);
+      const prayersToday=this.rows("SELECT value FROM meta WHERE key GLOB 'group-prayer-received:*'").filter(row=>{
+        const received=JSON.parse(String(row.value));
+        return typeof received==='number'&&Number.isFinite(received)&&localDay(new Date(received),timezone)===day;
+      }).length;
+      return json({prayersToday});
+    }
     if(path==='/groups/state')return json({name:this.get('profile').displayName,settings:this.settings(),items:this.list('items').map(({id,title,reference,translation,learned,deleted}:any)=>({id,title,reference,translation,learned,deleted})),events:this.list('events').map(({at,timestamp,createdAt}:any)=>({at:at??timestamp??createdAt}))});
     if(path==='/groups/push'||path==='/groups/prayer') {
       if(path==='/groups/prayer') {
         assert(typeof data.senderHash==='string'&&/^[a-f0-9]{64}$/.test(data.senderHash)&&data.kind==='prayer','Invalid prayer');
         // Recipient DO + stable sender hash is an ordered, cross-group pair.
         // Reserve before preferences/delivery, without awaits or delivery receipts.
-        const key='group-prayer:'+data.senderHash,day=new Date(Date.now()).toISOString().slice(0,10);
+        const key='group-prayer:'+data.senderHash,received=Date.now(),day=new Date(received).toISOString().slice(0,10);
         if(this.get(key)===day)return json({ok:true,alreadySent:true});
         this.set(key,day);
+        this.set('group-prayer-received:'+data.senderHash,received);
       }
       const settings=this.settings();
       if(!(settings.remindersEnabled??settings.pushEnabled)||!this.env.VAPID_PRIVATE_KEY||!this.env.VAPID_PUBLIC_KEY||(data.kind==='prayer'&&settings.groupReceivePrayer===false))return json({ok:true});

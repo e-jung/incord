@@ -89,7 +89,12 @@ async function device(label) {
   return { context, page };
 }
 async function tab(page, name) {
-  await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name, exact: true }).click();
+  const button = page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name, exact: true });
+  await button.waitFor({ state: 'visible' });
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const overlay = button.locator('xpath=following-sibling::*[1][self::input[contains(@class,"haptic-overlay")]]');
+  if (await overlay.count()) await overlay.tap(); else await button.click();
+  await expect(button).toHaveAttribute('aria-current', 'page');
 }
 async function account(page) {
   await tab(page, 'Today');
@@ -227,6 +232,16 @@ try {
   await check('App loads signed out with enforcing CSP', async () => {
     first = await device('first device');
     expect(await api(first.context, '/me')).toEqual({ user: null });
+    const { page } = first;
+    const nav = page.getByRole('navigation', { name: 'Main navigation' });
+    await expect(nav.getByRole('button')).toHaveCount(4);
+    await expect(nav.getByRole('button')).toHaveText(['Today', 'Library', 'Discover', 'Groups']);
+    await expect(page.getByRole('region', { name: 'Groups', exact: true })).toHaveCount(0);
+    await tab(page, 'Groups');
+    await expect(page.getByRole('heading', { name: 'Groups', exact: true, level: 1 })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Groups', exact: true })).toBeVisible();
+    await tab(page, 'Today');
+    await expect(page.getByRole('region', { name: 'Groups', exact: true })).toHaveCount(0);
   });
   await check('Gospel starter added through the UI', async () => {
     const { page } = first;
