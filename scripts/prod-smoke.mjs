@@ -159,8 +159,12 @@ async function emailSignin(page, beforeVerify = () => {}) {
     if (code) {
       seenCodes.add(code);
       beforeVerify();
+      // Email sign-in hands off to accounts.jesklabs.com (shared SSO attach) and
+      // returns to a fresh document; callers verify the session via /api/me.
+      const origin = new URL(page.url()).origin;
+      const returned = page.waitForURL(url => url.origin === origin && url.searchParams.get('signedIn') === '1', { waitUntil: 'domcontentloaded', timeout: 30_000 });
       await page.getByLabel('Six-digit code').fill(code);
-      await expect(page.getByText('Signed in.', { exact: true })).toBeVisible();
+      await returned;
       return;
     }
     await delay(3_000);
@@ -330,6 +334,7 @@ try {
     ]);
     expect(response.ok(), 'UI sync succeeded').toBe(true);
     expect(learned(await response.json())).toBe(true);
+    await account(page);
     await expect(page.getByText('Signed in.', { exact: true })).toBeVisible();
     await expect.poll(async () => learned(await api(context, '/export')), { timeout: 30_000 }).toBe(true);
     const exported = await api(context, '/export');
