@@ -1,15 +1,17 @@
 import {test,expect,type Page,type Locator} from '@playwright/test';
 import {mkdir} from 'node:fs/promises';
+import {readFileSync} from 'node:fs';
+const longQuestion=JSON.parse(readFileSync('public/content/documents.json','utf8')).find((d:any)=>d.id==='wlc').items.find((i:any)=>i.id==='wlc-79');
 test.use({serviceWorkers:'block'});
 async function tap(button:Locator){await button.waitFor();await button.page().evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));const overlay=button.locator('xpath=following-sibling::input[contains(@class,"haptic-overlay")][1]');if(await overlay.count())await overlay.tap();else await button.click()}
 // A fresh document in the same context verifies IndexedDB persistence without
 // Linux MiniBrowser's repeated same-document-history reload crash.
 async function reopen(page:Page){const context=page.context();await page.close();return context.newPage()}
 async function stored(page:Page){return page.evaluate(async()=>{const r=indexedDB.open('byheart',1);const db=await new Promise<IDBDatabase>(resolve=>r.onsuccess=()=>resolve(r.result));return new Promise<any>(resolve=>{const q=db.transaction('state').objectStore('state').get('current');q.onsuccess=()=>{db.close();resolve(q.result)}})})}
-async function start(page:Page,{step=4,learned=false,haptics=false,text='Peace I leave with you; My peace I give to you.'}={}){
+async function start(page:Page,{step=4,learned=false,haptics=false,text='Peace I leave with you; My peace I give to you.',item=null as any}={}){
  await page.goto('/');await expect(page.getByRole('heading',{name:'Today',exact:true})).toBeVisible();
- await page.evaluate(async({step,learned,haptics,text})=>{const r=indexedDB.open('byheart',1);const db=await new Promise<IDBDatabase>(resolve=>r.onsuccess=()=>resolve(r.result));await new Promise<void>(resolve=>{const tx=db.transaction('state','readwrite'),store=tx.objectStore('state'),r=store.get('current');r.onsuccess=()=>{const state=r.result;state.settings.haptics=haptics;state.items=[{id:'polish',title:'John 14:27',text,collection:'bible',translation:'BSB',step,learned,due:new Date(0).toISOString(),updatedAt:Date.now(),createdAt:new Date().toISOString()}];store.put(state,'current')};tx.oncomplete=()=>resolve()});db.close()},{step,learned,haptics,text});
- await page.reload();await tap(page.locator('.row').filter({hasText:'John 14:27'}));await expect(page.getByLabel('Practice',{exact:true})).toBeFocused();
+ await page.evaluate(async({step,learned,haptics,text,item})=>{const r=indexedDB.open('byheart',1);const db=await new Promise<IDBDatabase>(resolve=>r.onsuccess=()=>resolve(r.result));await new Promise<void>(resolve=>{const tx=db.transaction('state','readwrite'),store=tx.objectStore('state'),r=store.get('current');r.onsuccess=()=>{const state=r.result;state.settings.haptics=haptics;state.items=[{id:'polish',title:'John 14:27',text,collection:'bible',translation:'BSB',...item,step,learned,due:new Date(0).toISOString(),updatedAt:Date.now(),createdAt:new Date().toISOString()}];store.put(state,'current')};tx.oncomplete=()=>resolve()});db.close()},{step,learned,haptics,text,item});
+ await page.reload();await tap(page.locator('.row').filter({hasText:item?.title||'John 14:27'}));await expect(page.getByLabel('Practice',{exact:true})).toBeFocused();
 }
 async function finish(page:Page){for(const word of await page.locator('[data-word].current, [data-word].current ~ [data-word]').allTextContents())await page.keyboard.press(word.replace(/^[^\p{L}\p{N}]+/u,'')[0].toLowerCase())}
 async function shot(page:Page,name:string,project:string){await mkdir('test-results/screens/practice-polish',{recursive:true});await page.evaluate(()=>document.fonts.ready);await page.screenshot({path:`test-results/screens/practice-polish/${project}-${name}.png`,animations:'disabled'})}
@@ -48,4 +50,47 @@ for(const learned of [false,true])test(`successful ${learned?'review':'learning'
 });
 test('first tap does not shift the verse and short screens retain 44px keys',async({page})=>{
  await start(page);const before=(await page.locator('.verse').boundingBox())!;await page.keyboard.press('p');const after=(await page.locator('.verse').boundingBox())!;expect(after.y).toBe(before.y);await page.setViewportSize({width:393,height:667});expect((await page.locator('button.key').first().boundingBox())!.height).toBe(44);
+});
+
+for(const viewport of [{width:393,height:852},{width:375,height:667}])for(const colorScheme of ['light','dark'] as const)test.describe(`${viewport.width}x${viewport.height} ${colorScheme} question`,()=>{
+ test.use({viewport,colorScheme});
+ test('long WLC prompt remains readable, expandable and stable while typing',async({page,browserName},info)=>{
+  await page.addInitScript(()=>{Object.defineProperty(navigator,'vibrate',{value:undefined,configurable:true});Object.defineProperty(navigator,'userAgent',{value:'iPhone OS 27_2',configurable:true})});
+  await start(page,{step:1,item:longQuestion,haptics:true});await page.evaluate(()=>document.fonts.ready);
+  const verse=page.locator('.verse'),title=page.locator('.prompt-title'),before=(await verse.boundingBox())!;
+  const words=await page.locator('[data-word]').allTextContents();
+  await page.keyboard.press(words[0].replace(/^[^\p{L}\p{N}]+/u,'')[0].toLowerCase());
+  expect((await verse.boundingBox())!.y).toBe(before.y);
+  for(const word of words.slice(1,5))await page.keyboard.press(word.replace(/^[^\p{L}\p{N}]+/u,'')[0].toLowerCase());
+  await expect(title).toHaveText(longQuestion.title);await expect(title).toHaveAttribute('aria-expanded','false');
+  const scroller=page.locator('.prompt-title-scroll');
+  const layout=await scroller.evaluate(el=>{const s=getComputedStyle(el);return {font:s.fontSize,weight:s.fontWeight,line:parseFloat(s.lineHeight),height:el.clientHeight,scroll:el.scrollHeight,overflow:s.overflowY,white:s.whiteSpace,ellipsis:s.textOverflow}});
+  expect(layout.font).toBe('18px');expect(layout.weight).toBe('600');expect(layout.height).toBeLessThanOrEqual(layout.line*3+1);expect(layout.white).toBe('normal');expect(layout.ellipsis).not.toBe('ellipsis');expect(layout.overflow).toBe('auto');
+  expect((await verse.boundingBox())!.height).toBeGreaterThan(100);const keys=(await page.locator('.keyboard').boundingBox())!;expect(keys.y+keys.height).toBeLessThanOrEqual(viewport.height);
+  await shot(page,`question-${viewport.width}-${colorScheme}`,info.project.name);
+  await expect(title.locator('xpath=following-sibling::input[contains(@class,"haptic-overlay")]')).toHaveCount(1);
+  expect(await title.evaluate(el=>(el.nextElementSibling as HTMLElement).offsetParent===el.parentElement)).toBe(true);
+  if(browserName==='chromium'&&layout.scroll>layout.height){
+   const cdp=await page.context().newCDPSession(page),box=(await scroller.boundingBox())!;
+   const x=box.x+box.width/2,y=box.y+box.height-8;
+   await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y}]});
+   for(let i=1;i<=12;i++){await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x,y:y-i*(box.height-16)/12}]});await page.waitForTimeout(16)}
+   await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await cdp.detach();
+   await expect.poll(()=>scroller.evaluate(el=>el.scrollTop)).toBeGreaterThan(0);
+  }
+  await scroller.evaluate(el=>el.scrollTop=el.scrollHeight);if(layout.scroll>layout.height)expect(await scroller.evaluate(el=>el.scrollTop)).toBeGreaterThan(0);
+  await tap(title);await expect(title).toHaveAttribute('aria-expanded','true');await shot(page,`question-expanded-${viewport.width}-${colorScheme}`,info.project.name);
+  await tap(title);await page.locator('.practice').focus();
+  for(const word of words.slice(5,35))await page.keyboard.press(word.replace(/^[^\p{L}\p{N}]+/u,'')[0].toLowerCase());
+  await expect.poll(async()=>page.locator('[data-word="35"]').evaluate(el=>{const word=el.getBoundingClientRect(),view=el.closest('.verse')!.getBoundingClientRect();return word.top>=view.top&&word.bottom<=view.bottom})).toBe(true);
+  await expect.poll(async()=>page.locator('[data-word="35"]').evaluate(el=>{const word=el.getBoundingClientRect(),view=el.closest('.verse')!.getBoundingClientRect();return Math.abs(word.top-view.top-view.height/3)})).toBeLessThan(8);
+ });
+});
+test('successful background sync stays silent and clears only the recovered offline notice',async({page},info)=>{
+ let fail=false,syncs=0;
+ await page.route('**/api/me',route=>route.fulfill({json:{user:{id:'silent-sync'}}}));
+ await page.route('**/api/sync',route=>{syncs++;return route.fulfill(fail?{status:503,json:{error:'Unavailable'}}:{json:{items:[],events:[],settings:{}}})});
+ await page.goto('/');await expect.poll(()=>syncs).toBeGreaterThan(0);await expect(page.getByRole('heading',{name:'Today',exact:true})).toBeVisible();await expect(page.locator('.notice[role="status"]')).toHaveCount(0);await expect(page.getByText('All changes saved.',{exact:true})).toHaveCount(0);
+ fail=true;await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await expect(page.getByText('Saved on this device. Sync will resume online.',{exact:true})).toBeVisible();
+ fail=false;await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await expect(page.getByText('Saved on this device. Sync will resume online.',{exact:true})).toHaveCount(0);await expect(page.getByText('All changes saved.',{exact:true})).toHaveCount(0);await shot(page,'today-silent-sync',info.project.name);
 });
