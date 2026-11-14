@@ -1,5 +1,5 @@
 import {describe,it,expect,vi,afterEach} from 'vitest';
-import {usesHapticOverlay,createNativeActivationGuard} from './haptic-overlay';
+import {usesHapticOverlay,createNativeActivationGuard,createTapGesture} from './haptic-overlay';
 const ios={userAgent:'iPhone OS 26_5',platform:'iPhone',maxTouchPoints:5} as Navigator;
 describe('trusted-tap overlay eligibility',()=>{
  it('requires enabled haptics and iOS with no vibration API',()=>{
@@ -46,5 +46,25 @@ describe('native activation lifetime',()=>{
   guard.defer(click);guard.mutate(move);expect(click).not.toHaveBeenCalled();
   frame();expect(click).toHaveBeenCalledTimes(1);expect(move).not.toHaveBeenCalled();
   frame();expect(move).toHaveBeenCalledTimes(1);
+ });
+});
+
+describe('genuine tap gestures',()=>{
+ function setup(){let time=0;const tap=createTapGesture(()=>time);return {tap,at:(value:number)=>{time=value}}}
+ it('permits a real tap, the inclusive 10px and 700ms boundaries, and clicks without a pointer',()=>{
+  const {tap,at}=setup();expect(tap.accepts()).toBe(true);
+  tap.down(20,30);tap.move(26,38);at(700);expect(tap.accepts()).toBe(true);
+ });
+ it('rejects movement beyond 10px even when the finger returns to its origin',()=>{
+  const {tap}=setup();tap.down(20,30);tap.move(26.1,38);tap.move(20,30);expect(tap.accepts()).toBe(false);
+  tap.down(20,30);expect(tap.accepts()).toBe(true);
+ });
+ it('rejects long presses without requiring movement',()=>{
+  const {tap,at}=setup();tap.down(0,0);at(701);expect(tap.accepts()).toBe(false);
+ });
+ for(const interruption of ['cancel','scroll'] as const)it(`rejects ${interruption} until a new down`,()=>{
+  const {tap}=setup();tap[interruption]();expect(tap.accepts()).toBe(true);
+  tap.down(0,0);tap[interruption]();expect(tap.accepts()).toBe(false);
+  tap.down(0,0);expect(tap.accepts()).toBe(true);
  });
 });

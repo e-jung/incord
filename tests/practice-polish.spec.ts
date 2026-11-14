@@ -29,6 +29,18 @@ test('gap taps choose nearest key exactly once with and without native haptic ov
  if(haptics)page=await reopen(page);
  await start(page,{haptics});const row=page.locator('.keyrow').first(),keys=row.locator('button.key'),q=(await keys.nth(0).boundingBox())!,w=(await keys.nth(1).boundingBox())!,last=(await keys.last().boundingBox())!,box=(await row.boundingBox())!;
  expect(Math.abs(last.x+last.width-box.x-box.width)).toBeLessThan(1);expect(q.height).toBe(50);
+ // Row-space fallback must not turn a swipe/cancel/scroll/hold into a key.
+ for(const kind of ['move','cancel','scroll','hold']){
+  await row.dispatchEvent('pointerdown',{pointerId:7,clientX:q.x+q.width+1,clientY:q.y+20});
+  if(kind==='move')await row.dispatchEvent('pointermove',{pointerId:7,clientX:q.x+q.width+1,clientY:q.y+31});
+  if(kind==='cancel')await row.dispatchEvent('pointercancel',{pointerId:7});
+  if(kind==='scroll')await row.evaluate(row=>row.parentElement!.dispatchEvent(new Event('scroll')));
+  if(kind==='hold')await page.waitForTimeout(710);
+  await row.dispatchEvent('pointerup',{pointerId:7,clientX:q.x+q.width+1,clientY:q.y+20});
+  await row.dispatchEvent('click',{clientX:q.x+q.width+1,clientY:q.y+20});
+  expect(await page.evaluate(()=>(window as any).__keyClicks)).toBe(0);
+ }
+
  await page.touchscreen.tap(q.x+q.width+(w.x-q.x-q.width)*.2,q.y+q.height/2);await expect(page.locator('[data-word="1"]')).toHaveClass(/current/);await expect(page.locator('.typed-letter')).toHaveText('Q');expect(await page.evaluate(()=>(window as any).__keyClicks)).toBe(1);
  const bottom=page.locator('.keyrow').nth(2),edge=(await bottom.boundingBox())!;await page.touchscreen.tap(edge.x+1,edge.y+edge.height/2);await expect(page.locator('[data-word="2"]')).toHaveClass(/current/);await expect(page.locator('.typed-letter')).toHaveText('Z');expect(await page.evaluate(()=>(window as any).__keyClicks)).toBe(2);if(haptics)expect(await page.evaluate(({x,y})=>document.elementFromPoint(x,y)?.classList.contains('haptic-overlay'),{x:edge.x+1,y:edge.y+edge.height/2})).toBe(true);
  await tap(page.getByRole('button',{name:'Close practice',exact:true}));await tap(page.getByRole('button',{name:'Leave',exact:true}));await page.evaluate(()=>(window as any).__keyClicks=0);
@@ -130,4 +142,18 @@ for(const viewport of [{width:393,height:852},{width:375,height:667}])for(const 
    await tap(page.getByRole('button',{name:'Close practice',exact:true}));await tap(page.getByRole('button',{name:'Leave',exact:true}));
   }
  });
+});
+
+test('overlapping keyboard touches follow their own finger rather than the first touch',async({page})=>{
+ await page.context().addInitScript(()=>{Object.defineProperty(navigator,'vibrate',{value:undefined,configurable:true});Object.defineProperty(navigator,'userAgent',{value:'iPhone OS 27_2',configurable:true});(window as any).__keyClicks=0;document.addEventListener('click',e=>{if(e.target instanceof HTMLButtonElement&&e.target.classList.contains('key'))(window as any).__keyClicks++},true)});
+ await start(page,{haptics:true});await page.locator('.keyrow').first().evaluate(row=>{
+  const q=row.querySelector('button[aria-label="Q"]')!.nextElementSibling as HTMLInputElement,p=row.querySelector('button[aria-label="P"]')!.nextElementSibling as HTMLInputElement;
+  const a=q.getBoundingClientRect(),b=p.getBoundingClientRect();const x=a.x+a.width/2,y=a.y+a.height/2,px=b.x+b.width/2;
+  q.dispatchEvent(new PointerEvent('pointerdown',{pointerId:1,clientX:x,clientY:y,bubbles:true}));p.dispatchEvent(new PointerEvent('pointerdown',{pointerId:2,clientX:px,clientY:y,bubbles:true}));
+  // MiniBrowser exposes Touch but does not permit constructing it. Supply the
+  // same event shape without replacing any app listener or gesture behavior.
+  const left={identifier:1,target:q,clientX:x,clientY:y},right={identifier:2,target:p,clientX:px+1,clientY:y};
+  const movement=new Event('touchmove');Object.defineProperties(movement,{touches:{value:[left,right]},changedTouches:{value:[right]}});window.dispatchEvent(movement);
+  p.dispatchEvent(new PointerEvent('pointerup',{pointerId:2,clientX:px+1,clientY:y,bubbles:true}));p.click();q.dispatchEvent(new PointerEvent('pointerup',{pointerId:1,clientX:x,clientY:y,bubbles:true}));q.click();
+ });await expect.poll(()=>page.evaluate(()=>(window as any).__keyClicks)).toBe(2);await expect(page.locator('[data-word="2"]')).toHaveClass(/current/);
 });

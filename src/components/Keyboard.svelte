@@ -1,6 +1,6 @@
 <script lang="ts">
 import {onDestroy} from 'svelte';
-import {hapticOverlay} from '../haptic-overlay';
+import {hapticOverlay,trackTapGesture} from '../haptic-overlay';
 import {ui} from '../config/copy';
 let {onkey,disabled=false,hasNumbers=false}:{
   onkey:(key:string)=>void,disabled?:boolean,hasNumbers?:boolean
@@ -11,8 +11,10 @@ let pressedTimer: ReturnType<typeof setTimeout>;
 // Only empty row space reaches this handler. Native overlay clicks stop
 // propagation; button clicks already have their own exactly-once action.
 function gapTarget(row:HTMLDivElement){
+ const gesture=trackTapGesture(row);
  const click=(event:MouseEvent)=>{
   if(disabled||event.target!==row)return;
+  if(!gesture.accepts()){event.stopPropagation();return;}
   const keys=[...row.querySelectorAll<HTMLButtonElement>('button.key')];
   const nearest=keys.reduce<HTMLButtonElement|undefined>((best,key)=>{
    const distance=(button:HTMLButtonElement)=>{const box=button.getBoundingClientRect();return Math.max(box.left-event.clientX,event.clientX-box.right,0)};
@@ -22,7 +24,7 @@ function gapTarget(row:HTMLDivElement){
   nearest?.click();
  };
  row.addEventListener('click',click);
- return {destroy(){row.removeEventListener('click',click)}};
+ return {destroy(){gesture.destroy();row.removeEventListener('click',click)}};
 }
 function press(key:string){clearTimeout(pressedTimer);pressed=key;onkey(key);pressedTimer=setTimeout(()=>pressed=ui.empty,150)}
 onDestroy(()=>clearTimeout(pressedTimer));

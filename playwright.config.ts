@@ -31,7 +31,7 @@ export default defineConfig({
       viewport: { width: 393, height: 852 },
       colorScheme: colorScheme as 'light' | 'dark',
     },
-  })),{name:'WebKit-iPhone15',testMatch:['**/groups-tab.spec.ts','**/inline-discover.spec.ts','**/viewport.spec.ts','**/practice-polish.spec.ts','**/device.spec.ts','**/ui.spec.ts','**/product-feedback.spec.ts','**/iphone-feedback.spec.ts','**/app-haptics.spec.ts','**/historic-documents.spec.ts','**/feedback.spec.ts','**/discover.spec.ts','**/support.spec.ts','**/groups.spec.ts'],// Linux Playwright WebKit aborts offline reload even on the unmodified baseline; Chromium retains this coverage.
+  })),{name:'WebKit-iPhone15',testMatch:['**/full-bleed.spec.ts','**/groups-tab.spec.ts','**/inline-discover.spec.ts','**/viewport.spec.ts','**/practice-polish.spec.ts','**/device.spec.ts','**/ui.spec.ts','**/product-feedback.spec.ts','**/iphone-feedback.spec.ts','**/app-haptics.spec.ts','**/historic-documents.spec.ts','**/feedback.spec.ts','**/discover.spec.ts','**/support.spec.ts','**/groups.spec.ts'],// Linux Playwright WebKit aborts offline reload even on the unmodified baseline; Chromium retains this coverage.
     grepInvert:/email signup|push permission|own words persist offline/,use:{...devices['iPhone 15'],browserName:'webkit',viewport:{width:393,height:852},colorScheme:'light'}}],
   webServer: {
     command: 'WRANGLER_SEND_METRICS=false npx wrangler dev --local --infer-origin-from-routes=false --port '+new URL(base).port+' --persist-to .wrangler/e2e-'+new URL(base).port+' --var EMAIL_TEST_SINK:1 --var SESSION_SECRET:byheart-playwright-local-only-secret-32chars --var STATS_TOKEN:incord-playwright-local-stats-token-32chars',

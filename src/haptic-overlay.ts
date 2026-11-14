@@ -37,6 +37,46 @@ export function createNativeActivationGuard() {
   };
   return guard;
 }
+/** A native switch may still click after a swipe; default activation is allowed,
+ * but only a short, stationary gesture may dispatch the associated action. */
+export function createTapGesture(now = () => performance.now()) {
+  let start: {x:number; y:number; time:number} | undefined, rejected = false;
+  return {
+    down(x:number,y:number) { start={x,y,time:now()}; rejected=false; },
+    move(x:number,y:number) { if(start && Math.hypot(x-start.x,y-start.y)>10) rejected=true; },
+    cancel() { if(start) rejected=true; },
+    scroll() { if(start) rejected=true; },
+    accepts() { return !rejected && (!start || now()-start.time<=700); }
+  };
+}
+
+/** Observe without capturing the pointer or blocking native vertical scrolling.
+ * Keep scroll observation through click, including scrolls after pointerup. */
+export function trackTapGesture(node: HTMLElement, down = () => {}) {
+  const gesture=createTapGesture();
+  let pointer: number | undefined;
+  const move=(event:PointerEvent)=>{if(event.pointerId===pointer)gesture.move(event.clientX,event.clientY)};
+  // Only the finger that began on this target may move its gesture.
+  const touchMove=(event:TouchEvent)=>{const touch=[...event.changedTouches].find(touch=>touch.target===node);if(touch)gesture.move(touch.clientX,touch.clientY)};
+  const cancel=(event:PointerEvent)=>{if(event.pointerId===pointer)gesture.cancel()};
+  const up=(event:PointerEvent)=>move(event);
+  const scroll=(event:Event)=>{
+    if(event.target===window || event.target===document || event.target instanceof Element && event.target.contains(node))gesture.scroll();
+  };
+  const begin=(event:PointerEvent)=>{pointer=event.pointerId;gesture.down(event.clientX,event.clientY);down()};
+  node.addEventListener('pointerdown',begin);
+  window.addEventListener('pointermove',move,{passive:true});
+  window.addEventListener('touchmove',touchMove,{passive:true});
+  window.addEventListener('pointerup',up,{passive:true});
+  window.addEventListener('pointercancel',cancel);
+  window.addEventListener('scroll',scroll,true);
+  return {accepts:gesture.accepts,destroy(){
+    node.removeEventListener('pointerdown',begin);
+    window.removeEventListener('pointermove',move);window.removeEventListener('touchmove',touchMove);
+    window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',cancel);
+    window.removeEventListener('scroll',scroll,true);
+  }};
+}
 type Options = {enabled: boolean};
 type Controller = {refresh: () => void; position: () => void; destroy: () => void};
 type Scope = {activation: ReturnType<typeof createNativeActivationGuard>; root: HTMLElement; enabled: boolean; scan: () => void; forget: (button: HTMLButtonElement) => void; controls: Map<HTMLButtonElement, Controller>};
@@ -45,6 +85,7 @@ const scopeFor = (button: HTMLElement) => [...scopes].find(scope => scope.root.c
 
 function attach(button: HTMLButtonElement, scope: Scope): Controller {
   let input: HTMLInputElement | undefined, activating = false;
+  let gesture: ReturnType<typeof trackTapGesture> | undefined;
   let focus: HTMLElement | null = null, pressedTimer: ReturnType<typeof setTimeout> | undefined;
   const remember = () => { focus = document.activeElement instanceof HTMLElement ? document.activeElement : null; };
   const tap = (event: MouseEvent) => {
@@ -52,14 +93,16 @@ function attach(button: HTMLButtonElement, scope: Scope): Controller {
     // ancestor actions. Never preventDefault: WebKit must toggle the switch.
     event.stopPropagation();
     if (!input || button.disabled || activating) return;
+    const genuineTap = gesture?.accepts() ?? true;
     const switchInput = input, previousFocus = focus;
     focus = null; activating = true;
     scope.activation.defer(() => {
-      if (button.isConnected && !button.disabled) button.click(); // Exactly once, including form submit.
+      if (genuineTap && button.isConnected && !button.disabled) button.click(); // Exactly once, including form submit.
       if (previousFocus?.isConnected && (document.activeElement === switchInput || document.activeElement === document.body)) previousFocus.focus({preventScroll:true});
       // Never leave keyboard/assistive focus on an aria-hidden native switch.
       if (document.activeElement === switchInput) switchInput.blur();
     }, () => { activating = false; });
+    if (!genuineTap) return;
     button.classList.add('haptic-pressed');
     clearTimeout(pressedTimer);
     pressedTimer = setTimeout(() => button.classList.remove('haptic-pressed'), 150);
@@ -71,7 +114,7 @@ function attach(button: HTMLButtonElement, scope: Scope): Controller {
   };
   button.addEventListener('click', vibrate);
   function removeOverlay() {
-    input?.removeEventListener('pointerdown', remember); input?.removeEventListener('click', tap);
+    gesture?.destroy(); gesture = undefined; input?.removeEventListener('click', tap);
     input?.remove(); input = undefined;
     button.classList.remove('haptic-button');
     clearTimeout(pressedTimer); button.classList.remove('haptic-pressed'); focus = null;
@@ -107,7 +150,7 @@ function attach(button: HTMLButtonElement, scope: Scope): Controller {
       button.classList.add('haptic-button');
       input = document.createElement('input'); input.type = 'checkbox'; input.setAttribute('switch','');
       input.setAttribute('aria-hidden','true'); input.tabIndex = -1; input.className = 'haptic-overlay';
-      input.addEventListener('pointerdown',remember); input.addEventListener('click',tap); button.after(input);
+      gesture=trackTapGesture(input,remember); input.addEventListener('click',tap); button.after(input);
     }
     // Keyed lists may move a button. Move only our switch to follow it again.
     if (input && button.nextElementSibling !== input) button.after(input);

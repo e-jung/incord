@@ -67,3 +67,24 @@ test('Android gives one vibration per button tap, none for native controls or wh
  await tab(page,'Today');await page.getByRole('button',{name:'Account settings',exact:true}).click();await page.getByLabel('Haptics',{exact:true}).uncheck();await page.evaluate(()=>(window as any).__vibrations=[]);
  await tab(page,'Library');await tab(page,'Today');expect(await page.evaluate(()=>(window as any).__vibrations)).toEqual([]);await expect(page.locator('.haptic-overlay')).toHaveCount(0);
 });
+
+test('iOS switch rejects scroll-only, cancelled, moved and held gestures while retaining native toggle default',async({page})=>{
+ await page.addInitScript(()=>{Object.defineProperty(navigator,'vibrate',{value:undefined,configurable:true});Object.defineProperty(navigator,'userAgent',{value:'iPhone OS 27_2',configurable:true})});
+ await settings(page);await page.getByLabel('Haptics',{exact:true}).check();
+ const button=page.getByRole('button',{name:'Test haptic',exact:true});
+ const overlay=button.locator('xpath=following-sibling::input[contains(@class,"haptic-overlay")][1]');
+ await button.evaluate(button=>{button.dataset.clicks='0';button.addEventListener('click',()=>button.dataset.clicks=String(Number(button.dataset.clicks)+1))});
+ for(const kind of ['move','cancel','scroll','container-scroll','hold']){
+  const checked=await overlay.isChecked();
+  await overlay.dispatchEvent('pointerdown',{pointerId:1,clientX:50,clientY:50});
+  if(kind==='move')await overlay.dispatchEvent('pointermove',{pointerId:1,clientX:50,clientY:61});
+  if(kind==='cancel')await overlay.dispatchEvent('pointercancel',{pointerId:1});
+  if(kind==='scroll')await page.evaluate(()=>window.dispatchEvent(new Event('scroll')));
+  if(kind==='container-scroll')await overlay.evaluate(input=>input.parentElement!.dispatchEvent(new Event('scroll')));
+  if(kind==='hold')await page.waitForTimeout(710);
+  await overlay.dispatchEvent('pointerup',{pointerId:1,clientX:50,clientY:50});
+  await overlay.evaluate(input=>(input as HTMLInputElement).click());
+  await page.waitForTimeout(80);await expect(button).toHaveAttribute('data-clicks','0');expect(await overlay.isChecked()).toBe(!checked);
+ }
+ await tap(button);await expect(button).toHaveAttribute('data-clicks','1');
+});

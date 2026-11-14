@@ -161,7 +161,7 @@ main.practicing{position:fixed;inset:0;width:100%;height:100dvh;min-height:0;ove
 /* Keep absolute sibling switches inside horizontal/vertical clipping surfaces. */
 .covers,.discover-filters,.settings-group,.page.has-toast,.practice{position:relative}
 button.haptic-button{isolation:isolate}
-input.haptic-overlay{position:absolute;min-width:0;max-width:none;margin:0;padding:0;border:0;opacity:0;touch-action:manipulation;cursor:pointer;appearance:auto;-webkit-appearance:auto}
+input.haptic-overlay{position:absolute;min-width:0;max-width:none;margin:0;padding:0;border:0;opacity:0;touch-action:pan-x pan-y;cursor:pointer;appearance:auto;-webkit-appearance:auto}
 input.haptic-overlay:disabled{pointer-events:none}
 button.haptic-pressed{transform:translateY(2px)}
 button.key.haptic-pressed{background:var(--acc);color:var(--on-acc)}
@@ -204,3 +204,6 @@ button.key.haptic-pressed{background:var(--acc);color:var(--on-acc)}
 .tabbar button{min-width:0;padding:6px 3px;white-space:nowrap}.tabbar button .tab-icon{position:relative;display:block;width:24px;height:24px;font-size:inherit;line-height:1}.tabbar button .tab-badge{position:absolute;top:-4px;left:17px;min-width:15px;height:15px;padding:0 3px;border-radius:8px;background:var(--acc);color:var(--on-acc);font-size:10px;line-height:15px;text-align:center;box-shadow:0 0 0 2px var(--bar)}
 .groups-panel{margin-top:0}.groups-panel .intro{margin-top:0}.groups-empty{padding:28px 4px;text-align:center;align-items:center}.groups-empty>svg{width:56px;height:56px;fill:none;stroke:var(--acc);stroke-width:1.8;stroke-linecap:round}.groups-empty h2{max-width:300px;font-size:25px;line-height:1.25}.groups-empty>div{width:100%;max-width:280px;gap:10px}.group-loading{font-size:13px}.group-attention{display:flex;align-items:center;gap:10px;width:100%;margin-top:24px;padding:12px 14px;border-radius:16px;background:var(--fill);color:var(--ink);text-align:left;font-weight:500;min-height:44px}.group-attention>span:nth-child(2){flex:1;min-width:0;font-size:13px;line-height:1.35}.group-attention>span:first-child{font-size:19px;color:var(--acc)}.group-attention>span:last-child{font-size:22px;color:var(--ink3)}
 @media(max-width:350px){.tabbar{gap:1px}.tabbar button{font-size:11px;padding-inline:2px}}
+
+/* Horizontal choices bleed to the page edge; resting content stays on its gutter. */
+.page{--page-gutter:24px}.page .covers,.page .discover-filters{margin-inline:calc(-1 * var(--page-gutter));padding-inline:var(--page-gutter);max-width:none;scroll-padding-inline:var(--page-gutter);scroll-snap-type:x proximity;scrollbar-width:none}.page .covers::-webkit-scrollbar,.page .discover-filters::-webkit-scrollbar{display:none}.page .covers>:not(.haptic-overlay),.page .discover-filters>button{scroll-snap-align:start}.page .featured-cards{padding-top:6px;margin-top:10px}.page .discover-filters{padding-block:6px}
