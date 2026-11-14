@@ -116,4 +116,8 @@ Bug reports, ideas and small focused pull requests are welcome; see [CONTRIBUTIN
 To include an optional support link in this static README, set `DONATE_URL` in `wrangler.jsonc` and run `npm run docs:support` before committing. With no URL set, no Support section renders.
 
 <!-- SUPPORT:START -->
+## Support
+
+[Support Jesklabs](<https://ko-fi.com/jesklabs>)
+
 <!-- SUPPORT:END -->

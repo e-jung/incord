@@ -188,7 +188,7 @@ export const copy = {
  noPushDevices:'No subscribed devices. Turn on reminders on this device first.',
  pushProvider:(host:string)=>host.endsWith('push.apple.com')?'Apple':host==='fcm.googleapis.com'?'Google':host==='updates.push.services.mozilla.com'?'Mozilla':'the notification service',
  pushOutcome:(host:string,status:number,reason:string)=>{try{const data=JSON.parse(reason);if(typeof data.reason==='string')reason=data.reason}catch{}const provider=host.endsWith('push.apple.com')?'Apple':host==='fcm.googleapis.com'?'Google':'the notification service';return status>=200&&status<300?`Sent to ${provider}. If it didn't appear, check Settings → Notifications → Incord.`:status===0?`Could not reach ${provider}. Try again when connected.`:`${provider} rejected it (${status}${reason?' '+reason:''}).`},
- supportIncord:'Support Incord',
+ supportIncord:'Support Jesklabs',
  aboutVersion:(version:string)=>`About · Version ${version}`,
 
  contentType:'Content type', preferences:'Preferences', dataLabel:'Data', galleryVerseCount:'10 verses', galleryStep:'Step 2',

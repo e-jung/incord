@@ -4,7 +4,7 @@ export function supportSection(value) {
   if(!value)return '';
   let url;try{url=new URL(value)}catch{throw Error('DONATE_URL must be an HTTPS URL')}
   if(url.protocol!=='https:'||url.username||url.password||url.href.length>2048)throw Error('DONATE_URL must be an HTTPS URL without credentials');
-  return `\n## Support\n\n[Support Incord](<${url.href.replaceAll('>','%3E').replaceAll('<','%3C')}>)\n`;
+  return `\n## Support\n\n[Support Jesklabs](<${url.href.replaceAll('>','%3E').replaceAll('<','%3C')}>)\n`;
 }
 if(process.argv[1]===fileURLToPath(import.meta.url)){
   const config=readFileSync('wrangler.jsonc','utf8');
