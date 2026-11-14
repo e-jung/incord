@@ -96,9 +96,11 @@ async function account(page) {
   await page.getByRole('button', { name: 'Account settings', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Account', exact: true })).toBeVisible();
 }
-const smokeEmail = 'jung.ai.assistant@gmail.com';
+// Account checks need a real inbox you control: SMOKE_EMAIL plus SMOKE_CODE_CMD
+// (prints recent sign-in emails), optionally SMOKE_ENV_FILE for that command.
+const smokeEmail = process.env.SMOKE_EMAIL || '';
 const seenCodes = new Set();
-const defaultCodeCommand = "gog --account jung.ai.assistant@gmail.com --no-input gmail search 'from:signin@incord.jesklabs.com newer_than:10m' --max 1";
+const defaultCodeCommand = smokeEmail ? `gog --account ${smokeEmail} --no-input gmail search 'from:signin@incord.jesklabs.com newer_than:10m' --max 1` : '';
 async function readCodes() {
   // Do not mutate the parent environment or expose command output/errors: they
   // may contain mailbox content, codes, or credentials from a custom reader.
@@ -106,12 +108,12 @@ async function readCodes() {
   const names = ['GOG_HOME', 'GOG_KEYRING_BACKEND', 'GOG_KEYRING_PASSWORD'];
   for (const name of names) delete env[name];
   try {
-    const configured = parseEnv(await readFile('/home/ubuntu/.openclaw/.env', 'utf8'));
+    const configured = parseEnv(await readFile(process.env.SMOKE_ENV_FILE || '.smoke.env', 'utf8'));
     for (const name of names) if (configured[name] !== undefined) env[name] = configured[name];
   } catch (error) {
     if (error.code !== 'ENOENT') throw new Error('Unable to load smoke code-reader environment');
   }
-  env.PATH = '/home/ubuntu/.local/bin:' + (env.PATH || '');
+  if (process.env.SMOKE_PATH_PREFIX) env.PATH = process.env.SMOKE_PATH_PREFIX + ':' + (env.PATH || '');
   let stdout;
   try {
     ({ stdout } = await run('/bin/sh', ['-c', process.env.SMOKE_CODE_CMD || defaultCodeCommand], {
@@ -124,6 +126,7 @@ async function readCodes() {
   return codes;
 }
 async function emailSignin(page, beforeVerify = () => {}) {
+  if (!smokeEmail || !(process.env.SMOKE_CODE_CMD || defaultCodeCommand)) throw new Error('Set SMOKE_EMAIL (and SMOKE_CODE_CMD if not using gog) to run the account checks');
   // Snapshot the latest subject BEFORE requesting a code so an older delivery
   // can never satisfy a new flow, including the second isolated browser.
   for (const code of await readCodes()) seenCodes.add(code);
