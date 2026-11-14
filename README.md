@@ -133,11 +133,11 @@ Feedback includes only the submitted message, optional explicit reply address, a
 
 ## Content and licensing
 
-Original project code is **AGPL-3.0-only**, not “or later”; see [LICENSE](LICENSE) and [NOTICE](NOTICE). The unmodified license includes its standard application examples; those examples do not change this project's version-only designation. Modified network services must meet AGPL's corresponding-source obligations.
+Original project code is licensed under the **MIT License**; see [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
 Bundled BSB and WEB text and identified historic catechism/creed editions are public domain. KJV is public domain in the United States; United Kingdom Crown rights are not waived. Edition details, source snapshots and transformation notes are in [content/SOURCES.md](content/SOURCES.md). Font files retain their separate SIL OFL 1.1 licenses under [public/licenses](public/licenses).
 
-ESV is copyrighted and **not bundled or relicensed under AGPL**. The optional proxy does not cache quotations server-side; device storage is limited to 500 verses and no more than half of any book, whichever is less. Quotations remain unaltered and carry linked ESV attribution. The exact required notice and download restriction are reproduced in [NOTICE](NOTICE).
+ESV is copyrighted and **not bundled or relicensed under MIT**. The optional proxy does not cache quotations server-side; device storage is limited to 500 verses and no more than half of any book, whichever is less. Quotations remain unaltered and carry linked ESV attribution. The exact required notice and download restriction are reproduced in [NOTICE](NOTICE).
 
 ## Contributing and help
 

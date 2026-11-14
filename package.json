@@ -39,5 +39,5 @@
     "vitest": "5.1.0",
     "wrangler": "4.161.0"
   },
-  "license": "AGPL-3.0-only"
+  "license": "MIT"
 }

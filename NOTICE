@@ -1,7 +1,7 @@
 Incord
 
-Original project code is licensed under the GNU Affero General Public License,
-version 3 only (SPDX: AGPL-3.0-only). See LICENSE for the full, unmodified license.
+Original project code is licensed under the MIT License (SPDX: MIT).
+Copyright (c) 2026 Eric Jung. See LICENSE for the full license.
 Third-party content and dependencies retain their own licenses and notices;
 this designation does not relicense any Scripture text or font.
 
@@ -32,7 +32,7 @@ claimed.
 OPTIONAL ESV QUOTATIONS — NOT BUNDLED
 
 The English Standard Version is not part of the bundled content and is not
-licensed under the AGPL. Optional quotations are obtained through Crossway's
+licensed under the MIT License. Optional quotations are obtained through Crossway's
 API under its conditions. Do not bundle ESV text, cache it server-side, put it
 in logs or expose it through sync or MCP. Retain visible linked ESV attribution
 with quotations: https://www.esv.org
@@ -50,7 +50,7 @@ FONTS
 
 Figtree and Literata are self-hosted through @fontsource packages, version
 5.2.8. Both font families are licensed under the SIL Open Font License 1.1,
-not the AGPL. Exact package-supplied copyright notices and full license text
+not the MIT License. Exact package-supplied copyright notices and full license text
 are preserved without modification in public/licenses/figtree-OFL.txt and
 public/licenses/literata-OFL.txt. Keep these notices with redistributed fonts.
 
@@ -61,7 +61,7 @@ RECORDED KEY SOUNDS
 Five key-click recordings are adapted from Kenney's Interface Sounds 1.0
 and original UI Audio / UI SFX set, released under Creative Commons Zero
 (CC0 1.0). They are not Apple recordings. MP3 derivatives retain CC0;
-the project's AGPL designation does not relicense these recordings.
+the project's MIT designation does not relicense these recordings.
 Creator notices: public/licenses/kenney-CC0.txt
 License: https://creativecommons.org/publicdomain/zero/1.0/
 Exact pack downloads, file mapping and conversion details: content/SOURCES.md

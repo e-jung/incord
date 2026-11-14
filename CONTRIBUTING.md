@@ -13,4 +13,4 @@ Never include secrets, private account data, email codes or copyrighted Bible te
 
 Keep engine logic DOM-free, UI copy in `src/config`, and styling in the shared tokens/components. Preserve Durable Object identities, additive migrations, offline behavior and explicit device-item ownership.
 
-By submitting a contribution, you agree that your original contribution is provided under this project's AGPL-3.0-only license. Identify any third-party material and its separate license; fonts and public-domain historical texts keep their existing status. No contributor license agreement is required.
+By submitting a contribution, you agree that your original contribution is provided under this project's MIT license. Identify any third-party material and its separate license; fonts and public-domain historical texts keep their existing status. No contributor license agreement is required.

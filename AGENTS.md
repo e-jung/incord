@@ -61,6 +61,6 @@ First-party operational logs only: Cloudflare dashboard → Workers → byheart 
 
 
 ## Licensing and contributions
-- Original project code is AGPL-3.0-only; preserve LICENSE and NOTICE. Third-party Scripture/content/fonts retain their separate terms. See content/SOURCES.md and public/licenses/.
+- Original project code is MIT; preserve LICENSE and NOTICE. Third-party Scripture/content/fonts retain their separate terms. See content/SOURCES.md and public/licenses/.
 - Do not commit credentials, private account data or operator-specific machine paths. Use .dev.vars.example for local configuration and README.md for self-hosting.
 - Report vulnerabilities through SECURITY.md. Keep ordinary bug reports free of private text and credentials.
