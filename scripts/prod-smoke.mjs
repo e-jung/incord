@@ -105,7 +105,8 @@ async function account(page) {
 // (prints recent sign-in emails), optionally SMOKE_ENV_FILE for that command.
 const smokeEmail = process.env.SMOKE_EMAIL || '';
 const seenCodes = new Set();
-const defaultCodeCommand = smokeEmail ? `gog --account ${smokeEmail} --no-input gmail search 'from:signin@incord.jesklabs.com newer_than:10m' --max 1` : '';
+// Jesklabs Accounts sends the code in the body only, so read the newest message.
+const defaultCodeCommand = smokeEmail ? `g='gog --account ${smokeEmail} --no-input'; id=$($g gmail search 'from:signin@incord.jesklabs.com newer_than:10m' --max 1 | awk 'NR==2{print $1}'); [ -z "$id" ] || $g gmail get "$id"` : '';
 async function readCodes() {
   // Do not mutate the parent environment or expose command output/errors: they
   // may contain mailbox content, codes, or credentials from a custom reader.
@@ -125,7 +126,7 @@ async function readCodes() {
       env, timeout: 15_000, maxBuffer: 128 * 1024,
     }));
   } catch { throw new Error('Smoke code reader failed (output withheld)'); }
-  const codes = [...stdout.matchAll(/Your Incord code:\s*(\d{6})\b/gi)].map(match => match[1]);
+  const codes = [...stdout.matchAll(/Your Incord (?:sign-in )?code(?::| is)\s*(\d{6})\b/gi)].map(match => match[1]);
   if (/^\d{6}$/.test(stdout.trim())) codes.push(stdout.trim());
   for (const code of codes) secrets.add(code);
   return codes;
