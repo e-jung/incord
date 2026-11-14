@@ -13,3 +13,22 @@ input{appearance:auto;-webkit-appearance:auto}
 .large-switch{width:100px;height:60px}
 .pressed{background:#9cbea6;transform:translateY(2px)}
 output{font-weight:700;font-variant-numeric:tabular-nums}
+
+/* Leave A–G unchanged; reserve room for H's actual fixed app navigation. */
+main{padding-bottom:calc(130px + env(safe-area-inset-bottom))}
+/* Relevant light-theme tokens from src/tokens.css, scoped to the app replica. */
+#tabbar-lab{--bar:#fff;--fill:#F2F3F6;--ink:#14161B;--ink2:#5A6070;--ink3:#737987;--line:rgba(20,22,27,.09);--acc:#4D62D3;--sh:0 1px 2px rgba(20,22,27,.06),0 10px 26px -10px rgba(20,22,27,.22)}
+/* App button reset isolates the replica from the lab's large green buttons. */
+#tabbar-lab .tabbar{font-family:Figtree,system-ui,sans-serif;line-height:normal;-webkit-font-smoothing:antialiased;position:fixed;bottom:max(18px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);width:min(calc(100% - 32px),472px);border-radius:30px;background:var(--bar);padding:5px;display:flex;gap:4px;box-shadow:0 0 0 1px var(--line),var(--sh);z-index:3}
+#tabbar-lab .tabbar button{font:inherit;cursor:pointer;border:0;touch-action:manipulation;flex:1;border-radius:26px;background:none;display:flex;align-items:center;flex-direction:column;padding:6px;font-size:12px;font-weight:600;color:var(--ink2);gap:1px;min-height:48px}
+#tabbar-lab .tabbar button:active{transform:scale(.97)}
+#tabbar-lab .tabbar button:focus-visible{outline:3px solid var(--acc);outline-offset:3px}
+#tabbar-lab .tabbar button.active{background:var(--fill);color:var(--ink)}
+#tabbar-lab .tabbar svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+#tabbar-lab button.haptic-button{isolation:isolate}
+#tabbar-lab button.haptic-pressed{transform:translateY(2px)}
+/* Three equal flex buttons: 10px nav padding + two 4px gaps. */
+#tabbar-lab input.haptic-overlay{position:absolute;top:5px;bottom:5px;width:calc((100% - 18px)/3);height:calc(100% - 10px);min-width:0;max-width:none;margin:0;padding:0;border:0;border-radius:26px;opacity:0;touch-action:manipulation;cursor:pointer;appearance:auto;-webkit-appearance:auto}
+#tabbar-lab .tab-overlay-0{left:5px}
+#tabbar-lab .tab-overlay-1{left:calc(5px + (100% - 18px)/3 + 4px)}
+#tabbar-lab .tab-overlay-2{left:calc(5px + 2*(100% - 18px)/3 + 8px)}

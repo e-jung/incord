@@ -10,7 +10,7 @@
 </head>
 <body><main>
 <h1>Native switch haptics lab</h1>
-<p>Compare real taps on iPhone Safari. Haptics depend on device and browser support. Each counter records native switch clicks, not proof of vibration. No scripted activation or vibration API is used.</p>
+<p>Compare real taps on iPhone Safari. Haptics depend on device and browser support. Counters record activation, not proof of vibration. A–E compare native switch targets. F–H forward switch taps to button actions; only G and H defer those actions. No switch is activated by script and no vibration API is used.</p>
 <section aria-labelledby="a-title"><h2 id="a-title">A · Visible native switch</h2>
 <label class="visible-switch"><input id="test-a" type="checkbox" switch> Tap the visible switch</label>
 <p>Clicks: <output id="count-a" aria-live="polite">0</output></p></section>
@@ -27,5 +27,24 @@
 <section aria-labelledby="e-title"><h2 id="e-title">E · Large native switch</h2>
 <label class="visible-switch"><input id="test-e" class="large-switch" type="checkbox" switch> Tap the large switch</label>
 <p>Clicks: <output id="count-e" aria-live="polite">0</output></p></section>
+<section aria-labelledby="f-title"><h2 id="f-title">F · Sibling overlay, synchronous navigation</h2>
+<p>The button action immediately removes and re-renders its target, during the native switch click.</p>
+<div id="target-f"></div>
+<template id="template-f"><span class="target"><button type="button" data-test="f">Tap synchronous navigation</button><input id="test-f" class="overlay" type="checkbox" switch aria-hidden="true" tabindex="-1"></span></template>
+<p>Clicks: <output id="count-f" aria-live="polite">0</output> · Actions: <output id="actions-f">0</output></p></section>
+<section aria-labelledby="g-title"><h2 id="g-title">G · Sibling overlay, deferred navigation</h2>
+<p>The same target is removed and re-rendered by a setTimeout(0) action, after the switch click finishes.</p>
+<div id="target-g"></div>
+<template id="template-g"><span class="target"><button type="button" data-test="g">Tap deferred navigation</button><input id="test-g" class="overlay" type="checkbox" switch aria-hidden="true" tabindex="-1"></span></template>
+<p>Clicks: <output id="count-g" aria-live="polite">0</output> · Actions: <output id="actions-g">0</output></p></section>
+<section id="tabbar-lab" aria-labelledby="h-title"><h2 id="h-title">H · App tab bar, deferred navigation</h2>
+<p>Use the fixed Today / Library / Discover bar below. It copies the app tab bar markup and styles, with sibling native switches and a setTimeout(0) handler. Each action re-renders the bar.</p>
+<p>Clicks: <output id="count-h" aria-live="polite">0</output> · Actions: <output id="actions-h">0</output> · Selected: <output id="selected-h">Today</output></p>
+<div id="target-h"></div>
+<template id="template-h"><nav class="tabbar" aria-label="Main navigation">
+<button type="button" data-tab="Today"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg>Today</button>
+<button type="button" data-tab="Library"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v16H4zM13 5l5-1 3 15-5 1zM4 8h6M14 9l5-1"/></svg>Library</button>
+<button type="button" data-tab="Discover"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m16 8-2 6-6 2 2-6z"/></svg>Discover</button>
+</nav></template></section>
 <p id="event-details" role="status">Waiting for a tap.</p>
 </main></body></html>

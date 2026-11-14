@@ -5,31 +5,64 @@ export function usesHapticOverlay(settings: FeedbackSettings, platform = typeof 
   return !!settings.haptics && !!platform && typeof platform.vibrate !== 'function'
     && (/iPhone|iPad|iPod/.test(platform.userAgent) || (platform.platform === 'MacIntel' && platform.maxTouchPoints > 1));
 }
+/** Keep native switch activation intact through the next task and paint.
+ * DOM reconciliation must not move its input while WebKit commits the toggle.
+ */
+export function createNativeActivationGuard() {
+  let pending = 0;
+  const mutations = new Set<() => void>();
+  const guard = {
+    mutate(action: () => void) { if (pending) mutations.add(action); else action(); },
+    defer(action: () => void, settled: () => void = () => {}) {
+      pending++;
+      let dispatched = false;
+      const dispatch = () => {
+        if (dispatched) return;
+        dispatched = true;
+        try { action(); }
+        finally {
+          requestAnimationFrame(() => {
+            settled();
+            if (--pending === 0) {
+              const queued = [...mutations]; mutations.clear();
+              for (const mutation of queued) guard.mutate(mutation);
+            }
+          });
+        }
+      };
+      // A task runs after the native click dispatch/default activation. rAF is
+      // a fallback only if scheduling the task is unavailable, not a second action.
+      try { setTimeout(dispatch, 0); } catch { requestAnimationFrame(dispatch); }
+    }
+  };
+  return guard;
+}
 type Options = {enabled: boolean};
 type Controller = {refresh: () => void; position: () => void; destroy: () => void};
-type Scope = {root: HTMLElement; enabled: boolean; scan: () => void; forget: (button: HTMLButtonElement) => void; controls: Map<HTMLButtonElement, Controller>};
+type Scope = {activation: ReturnType<typeof createNativeActivationGuard>; root: HTMLElement; enabled: boolean; scan: () => void; forget: (button: HTMLButtonElement) => void; controls: Map<HTMLButtonElement, Controller>};
 const scopes = new Set<Scope>();
 const scopeFor = (button: HTMLElement) => [...scopes].find(scope => scope.root.contains(button));
 
 function attach(button: HTMLButtonElement, scope: Scope): Controller {
-  let input: HTMLInputElement | undefined;
+  let input: HTMLInputElement | undefined, activating = false;
   let focus: HTMLElement | null = null, pressedTimer: ReturnType<typeof setTimeout> | undefined;
   const remember = () => { focus = document.activeElement instanceof HTMLElement ? document.activeElement : null; };
   const tap = (event: MouseEvent) => {
     // The overlay is a sibling: its own bubbling event must not also activate
     // ancestor actions. Never preventDefault: WebKit must toggle the switch.
     event.stopPropagation();
-    if (!input || button.disabled) return;
-    const switchInput = input;
+    if (!input || button.disabled || activating) return;
+    const switchInput = input, previousFocus = focus;
+    focus = null; activating = true;
+    scope.activation.defer(() => {
+      if (button.isConnected && !button.disabled) button.click(); // Exactly once, including form submit.
+      if (previousFocus?.isConnected && (document.activeElement === switchInput || document.activeElement === document.body)) previousFocus.focus({preventScroll:true});
+      // Never leave keyboard/assistive focus on an aria-hidden native switch.
+      if (document.activeElement === switchInput) switchInput.blur();
+    }, () => { activating = false; });
     button.classList.add('haptic-pressed');
     clearTimeout(pressedTimer);
     pressedTimer = setTimeout(() => button.classList.remove('haptic-pressed'), 150);
-    button.click(); // Exactly one original button action, including form submit.
-    if (focus?.isConnected && (document.activeElement === switchInput || document.activeElement === document.body)) focus.focus({preventScroll:true});
-    // body (and other non-focusable elements) cannot receive focus(). Never
-    // leave keyboard/assistive focus on an aria-hidden native switch.
-    if (document.activeElement === switchInput) switchInput.blur();
-    focus = null;
   };
   const vibrate = () => {
     if (scope.enabled && !button.disabled && typeof navigator.vibrate === 'function') {
@@ -43,7 +76,7 @@ function attach(button: HTMLButtonElement, scope: Scope): Controller {
     button.classList.remove('haptic-button');
     clearTimeout(pressedTimer); button.classList.remove('haptic-pressed'); focus = null;
   }
-  function position() {
+  function positionNow() {
     if (!input) return;
     // Keep the Svelte-owned button in place: only its sibling switch is injected.
     // Both share a positioned ancestor, including local scroll/clipping surfaces.
@@ -59,7 +92,8 @@ function attach(button: HTMLButtonElement, scope: Scope): Controller {
     input.style.display = button.offsetWidth && button.offsetHeight ? 'block' : 'none';
     if (input.disabled !== button.disabled) input.disabled = button.disabled;
   }
-  function refresh() {
+  function position() { scope.activation.mutate(positionNow); }
+  function refreshNow() {
     if (!usesHapticOverlay({haptics:scope.enabled})) { if (input) removeOverlay(); return; }
     if (!input && button.parentNode) {
       button.classList.add('haptic-button');
@@ -69,9 +103,11 @@ function attach(button: HTMLButtonElement, scope: Scope): Controller {
     }
     // Keyed lists may move a button. Move only our switch to follow it again.
     if (input && button.nextElementSibling !== input) button.after(input);
-    position();
+    positionNow();
   }
-  return {refresh,position,destroy() { button.removeEventListener('click',vibrate); removeOverlay(); }};
+  function refresh() { scope.activation.mutate(refreshNow); }
+  function destroyNow() { button.removeEventListener('click',vibrate); removeOverlay(); }
+  return {refresh,position,destroy() { scope.activation.mutate(destroyNow); }};
 }
 
 /** Shared button action; on the app root it also covers screen-local buttons.
@@ -83,11 +119,12 @@ export function hapticOverlay(node: HTMLElement, initial?: Options) {
     scopeFor(node)?.scan();
     return {destroy() { scopeFor(node)?.forget(node); }};
   }
-  const scope: Scope = {root:node,enabled:!!initial?.enabled,scan,controls:new Map(),forget(button) { resize.unobserve(button); scope.controls.get(button)?.destroy(); scope.controls.delete(button); }};
+  const scope: Scope = {activation:createNativeActivationGuard(),root:node,enabled:!!initial?.enabled,scan,controls:new Map(),forget(button) { scope.activation.mutate(() => { resize.unobserve(button); scope.controls.get(button)?.destroy(); scope.controls.delete(button); }); }};
   scopes.add(scope);
   let frame = 0, destroyed = false;
   const resize = new ResizeObserver(schedule);
-  function scan() {
+  function scan() { scope.activation.mutate(scanNow); }
+  function scanNow() {
     if (destroyed) return;
     for (const button of scope.controls.keys()) if (!node.contains(button)) scope.forget(button);
     for (const button of node.querySelectorAll('button')) {
@@ -104,6 +141,6 @@ export function hapticOverlay(node: HTMLElement, initial?: Options) {
   scan();
   return {
     update(next: Options) { scope.enabled=!!next.enabled; scan(); },
-    destroy() { destroyed=true; observer.disconnect(); resize.disconnect(); cancelAnimationFrame(frame); node.removeEventListener('scroll',schedule,true); window.removeEventListener('resize',schedule); scopes.delete(scope); for (const control of scope.controls.values()) control.destroy(); scope.controls.clear(); }
+    destroy() { destroyed=true; observer.disconnect(); resize.disconnect(); cancelAnimationFrame(frame); node.removeEventListener('scroll',schedule,true); window.removeEventListener('resize',schedule); scopes.delete(scope); scope.activation.mutate(() => { for (const control of scope.controls.values()) control.destroy(); scope.controls.clear(); }); }
   };
 }

@@ -40,6 +40,21 @@ test('Sound preview works with defaults OFF and haptics stay silent until enable
  const words=await page.locator('[data-word]').allTextContents();for(const word of words.slice(0,2))await page.keyboard.press(Array.from(word.replace(/^[^\p{L}\p{N}]+/u,''))[0].toLowerCase());
  expect(await page.evaluate(()=>(window as any).__feedbackCalls)).toEqual(afterPreview);
 });
+test('iOS sound preview unlocks on the real sibling-overlay gesture before its deferred action',async({page})=>{
+ await page.addInitScript(mockFeedback);await page.addInitScript(()=>{
+  Object.defineProperty(navigator,'vibrate',{value:undefined,configurable:true});Object.defineProperty(navigator,'userAgent',{value:'iPhone OS 27_2',configurable:true});
+  let pointerDown=false;(window as any).__resumeGestures=[];
+  document.addEventListener('pointerdown',event=>{pointerDown=event.isTrusted},true);document.addEventListener('pointerup',()=>{pointerDown=false},true);
+  const resume=AudioContext.prototype.resume;AudioContext.prototype.resume=function(){(window as any).__resumeGestures.push(pointerDown);return resume.call(this)};
+ });
+ await settings(page);await page.getByLabel('Haptics',{exact:true}).check();
+ const button=page.getByRole('button',{name:'Test sound',exact:true}),overlay=button.locator('xpath=following-sibling::*[1][self::input[contains(@class,"haptic-overlay")]]');
+ await expect(overlay).toHaveCount(1);await overlay.tap();
+ await expect.poll(()=>page.evaluate(()=>(window as any).__feedbackCalls.tick)).toBe(1);
+ expect((await page.evaluate(()=>(window as any).__resumeGestures))[0]).toBe(true);
+ await expect(page.getByLabel('Key sounds',{exact:true})).not.toBeChecked();
+ await expect(page.getByRole('status').filter({hasText:'Hear nothing?'})).toBeVisible();
+});
 test('signed-in default translation syncs from Settings and the single Discover picker, with reference-only ESV passages',async({page,browser,baseURL})=>{
  const email=`translation-sync-${crypto.randomUUID()}@example.com`;
  const text='The LORD is my shepherd; I shall not want. He makes me lie down in green pastures.';

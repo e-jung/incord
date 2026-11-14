@@ -1,5 +1,5 @@
 import { test, expect, type Page, type Locator } from '@playwright/test';
-async function tap(button:Locator){await button.waitFor({state:'visible'});const overlay=button.locator('xpath=following-sibling::*[1][self::input[contains(@class,"haptic-overlay")]]');if(await overlay.count())await overlay.tap();else await button.click()}
+async function tap(button:Locator){await button.waitFor({state:'visible'});await button.page().evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));const overlay=button.locator('xpath=following-sibling::*[1][self::input[contains(@class,"haptic-overlay")]]');if(await overlay.count())await overlay.tap();else await button.click()}
 async function account(page:Page){if(page.url()==='about:blank')await page.goto('/');else await tap(page.getByRole('navigation').getByRole('button',{name:'Today',exact:true}));await tap(page.getByRole('button',{name:'Account settings',exact:true}))}
 async function longPassage(page:Page){
  await tap(page.getByRole('navigation').getByRole('button',{name:'Discover',exact:true}));
@@ -97,10 +97,10 @@ test('passage added from a collection stays in that collection',async({page})=>{
  await expect(page.getByRole('heading',{name:'The Gospel in 10 verses',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:/^Psalm 23:1–6/})).toBeVisible();
 });
 
-test('standalone haptics lab exposes five independent native-switch comparisons without inline assets',async({page})=>{
+test('standalone haptics lab compares native switches and synchronous versus deferred navigation without inline assets',async({page})=>{
  await page.goto('/haptics-lab.html');
  await expect(page.getByRole('heading',{name:'Native switch haptics lab',exact:true})).toBeVisible();
- await expect(page.locator('input[switch]')).toHaveCount(5);
+ await expect(page.locator('input[switch]')).toHaveCount(10);
  await expect(page.locator('script:not([src]),[style],[onclick]')).toHaveCount(0);
  for(const name of ['a','b','c','d','e']){
   await page.locator(name==='d'?'.label-overlay':`#test-${name}`).tap();
@@ -109,4 +109,18 @@ test('standalone haptics lab exposes five independent native-switch comparisons 
  }
  await expect(page.locator('#test-b').locator('..').locator(':scope > button')).toHaveCount(1);
  await expect(page.locator('#test-c').locator('..')).toHaveJSProperty('tagName','BUTTON');
+ await page.evaluate(()=>{(window as any).__labDispatch=[];document.addEventListener('click',event=>{
+  if(!(event.target instanceof HTMLInputElement)||!/^test-[fgh]/.test(event.target.id))return;
+  const input=event.target,name=input.id[5];input.addEventListener('click',()=>(window as any).__labDispatch.push({name,connected:input.isConnected,actions:document.getElementById(`actions-${name}`)!.textContent}),{once:true});
+ },true)});
+ for(const name of ['f','g'])for(const count of [1,2]){
+  await page.locator(`#test-${name}`).tap();await expect(page.locator(`#count-${name}`)).toHaveText(String(count));await expect(page.locator(`#actions-${name}`)).toHaveText(String(count));
+ }
+ for(const [index,tab] of ['Library','Discover','Today'].entries()){
+  await page.locator(`#test-h-${tab.toLowerCase()}`).tap();await expect(page.locator('#selected-h')).toHaveText(tab);await expect(page.locator('#count-h')).toHaveText(String(index+1));await expect(page.locator('#actions-h')).toHaveText(String(index+1));
+  await expect(page.getByRole('navigation').getByRole('button',{name:tab,exact:true})).toHaveAttribute('aria-current','page');
+ }
+ const dispatch=await page.evaluate(()=>(window as any).__labDispatch);
+ expect(dispatch.filter((check:any)=>check.name==='f').map((check:any)=>check.connected)).toEqual([false,false]);
+ expect(dispatch.filter((check:any)=>check.name!=='f').every((check:any)=>check.connected)).toBe(true);
 });
