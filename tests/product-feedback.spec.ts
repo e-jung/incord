@@ -61,12 +61,14 @@ test('iOS direct switch taps dispatch once, preserve focus and physical input, a
  await page.getByLabel('Haptics',{exact:true}).check();await expect(testButton.locator('xpath=following-sibling::*[1][self::input[contains(@class,"haptic-overlay")]]')).toHaveCount(1);await expect(testButton).toBeEnabled();await testButton.locator('xpath=following-sibling::*[1][self::input[contains(@class,"haptic-overlay")]]').tap();
  await longPassage(page);await page.evaluate(()=>(window as any).__switchEvents=[]);const region=page.getByLabel('Practice',{exact:true});
  const key=page.getByRole('button',{name:'F',exact:true}),overlay=key.locator('xpath=following-sibling::*[1][self::input[contains(@class,"haptic-overlay")]]');
- await expect(page.locator('.keyboard input[switch]')).toHaveCount(27);
+ await expect(page.locator('.keyboard input[switch]')).toHaveCount(26);
  await expect(key.locator('input')).toHaveCount(0);
  await expect(overlay).toHaveAttribute('aria-hidden','true');await expect(overlay).toHaveAttribute('tabindex','-1');
  expect(await overlay.evaluate(input=>({opacity:getComputedStyle(input).opacity,display:getComputedStyle(input).display,appearance:getComputedStyle(input).appearance}))).toMatchObject({opacity:'0',appearance:'auto'});
  await overlay.tap();await expect(overlay).toBeChecked();await expect(page.locator('[data-word="1"]')).toHaveClass(/current/);await expect(region).toBeFocused();
- await page.getByRole('button',{name:'Peek',exact:true}).locator('xpath=following-sibling::*[1][self::input[contains(@class,"haptic-overlay")]]').tap();await expect(page.locator('[data-word="2"]')).toHaveClass(/current/);await expect(region).toBeFocused();
+ const word=await page.locator('[data-word="1"]').textContent();
+ const wrongKey=word!.replace(/^[^\p{L}\p{N}]+/u,'').toUpperCase().startsWith('Z')?'X':'Z';
+ await page.getByRole('button',{name:wrongKey,exact:true}).locator('xpath=following-sibling::*[1][self::input[contains(@class,"haptic-overlay")]]').tap();await expect(page.locator('[data-word="2"]')).toHaveClass(/current/);await expect(region).toBeFocused();
  await page.keyboard.press('w');await expect(page.locator('[data-word="3"]')).toHaveClass(/current/);await expect(region).toBeFocused();
  expect(await page.evaluate(()=>(window as any).__switchEvents)).toEqual([{trusted:true},{trusted:true}]);
  await tap(page.getByRole('button',{name:'Close practice',exact:true}));await tap(page.getByRole('dialog',{name:'Leave this practice?',exact:true}).getByRole('button',{name:'Leave',exact:true}));await account(page);await page.getByLabel('Haptics',{exact:true}).uncheck();await expect(page.locator('input[switch]')).toHaveCount(0);

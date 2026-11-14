@@ -255,8 +255,8 @@ describe('Incord ESV server boundaries',()=>{
 });
 
 it('ignores removed typing preference even when its retired field clock is invalid',()=>{
- const legacy={typingMode:'native',haptics:true,updatedAt:20,fieldUpdatedAt:{typingMode:Infinity,haptics:20}};
- const validated=settingsRecord(legacy);expect(validated).not.toHaveProperty('typingMode');expect(validated.fieldUpdatedAt).not.toHaveProperty('typingMode');
+ const legacy={typingMode:'native',peekNoteDismissed:true,haptics:true,updatedAt:20,fieldUpdatedAt:{typingMode:Infinity,peekNoteDismissed:Infinity,haptics:20}};
+ const validated=settingsRecord(legacy);expect(validated).not.toHaveProperty('typingMode');expect(validated.fieldUpdatedAt).not.toHaveProperty('typingMode');expect(validated).not.toHaveProperty('peekNoteDismissed');expect(validated.fieldUpdatedAt).not.toHaveProperty('peekNoteDismissed');
  const merged=mergeServerSettings({...legacy,keySounds:true},{updatedAt:30,haptics:false,fieldUpdatedAt:{haptics:30}});
- expect(merged).toMatchObject({haptics:false,keySounds:true});expect(merged).not.toHaveProperty('typingMode');expect(merged.fieldUpdatedAt).not.toHaveProperty('typingMode');
+ expect(merged).toMatchObject({haptics:false,keySounds:true});expect(merged).not.toHaveProperty('typingMode');expect(merged.fieldUpdatedAt).not.toHaveProperty('typingMode');expect(merged).not.toHaveProperty('peekNoteDismissed');expect(merged.fieldUpdatedAt).not.toHaveProperty('peekNoteDismissed');
 });

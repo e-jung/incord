@@ -61,7 +61,7 @@ export function displayTokens(text: string): DisplayToken[] {
 }
 
 /** Visible mistakes get feedback but only hidden words affect memory scoring. */
-export function attemptFeedback(word: string, key: string, hidden: boolean, peek = false): { slipped: boolean; scoredSlip: boolean } {
-  const slipped = peek || !matchesFirstLetter(word, key);
+export function attemptFeedback(word: string, key: string, hidden: boolean): { slipped: boolean; scoredSlip: boolean } {
+  const slipped = !matchesFirstLetter(word, key);
   return { slipped, scoredSlip: hidden && slipped };
 }

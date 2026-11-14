@@ -11,7 +11,6 @@ test('hidden component gallery is usable and self-hosted',async({page},info)=>{
  await page.getByRole('button',{name:'Primary button',exact:true}).click();
  await page.getByRole('button',{name:'Secondary button',exact:true}).click();
  await page.getByRole('button',{name:'Q',exact:true}).click();
- await page.getByRole('button',{name:'Peek',exact:true}).click();
  await page.evaluate(()=>document.fonts.ready);
  await mkdir('test-results/screens',{recursive:true});
  await page.screenshot({path:'test-results/screens/'+info.project.name+'-gallery.png',fullPage:false});

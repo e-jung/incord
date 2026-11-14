@@ -12,7 +12,11 @@ function fixture() {
 const request=(path:string,body?:string,cookie?:string,origin='https://app.test')=>new Request('https://app.test'+path,{method:body===undefined?'GET':'POST',headers:{Origin:origin,'Content-Type':path==='/api/stats'?'application/json':'application/x-www-form-urlencoded',...(cookie?{Cookie:cookie}:{})},...(body===undefined?{}:{body})});
 afterEach(()=>{vi.useRealTimers();vi.restoreAllMocks()});
 describe('Anonymous stats boundary',()=>{
- it('keeps the server and client categorical whitelist identical',()=>expect(CLIENT_EVENTS).toEqual(STATS_EVENTS));
+ it('keeps active client categories aligned while accepting legacy Peek batches',()=>{
+  expect(CLIENT_EVENTS).toEqual(STATS_EVENTS.filter(event=>event!=='peek'));
+  const legacy={token:'a'.repeat(32),events:['peek']};
+  expect(validateStatsBatch(legacy)).toEqual(legacy);
+ });
  it('rejects identities, arbitrary categories, text, references and extra properties',()=>{
   const batch={token:'a'.repeat(32),events:['app_open']};expect(validateStatsBatch(batch)).toEqual(batch);
   for(const input of [null,[],{...batch,userId:'private'},{...batch,reference:'John 3:16'},{...batch,events:['starter_added:private-content']},{...batch,events:['own_text_added:secret']},{...batch,events:[{name:'app_open',text:'secret'}]},{...batch,events:Array(51).fill('peek')},{...batch,events:[]},{...batch,token:'user-id'}])expect(validateStatsBatch(input)).toBeNull();

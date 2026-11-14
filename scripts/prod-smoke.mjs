@@ -244,6 +244,10 @@ try {
     await check(`John 3:16 ladder step ${step}/4`, async () => {
       const { page } = first;
       await expect(page.getByText(new RegExp(`^Step ${step} of 4`))).toBeVisible();
+      const keyboard = page.getByLabel('Practice keyboard');
+      await expect(keyboard.locator('.keyrow')).toHaveCount(3);
+      await expect(keyboard.getByRole('button')).toHaveCount(26);
+      await expect(keyboard.getByRole('button', { name: 'Show numbers', exact: true })).toHaveCount(0);
       const words = await page.locator('[data-word]').allTextContents();
       expect(words.length).toBeGreaterThan(20);
       const hidden = await page.locator('[data-hidden="true"]').count();

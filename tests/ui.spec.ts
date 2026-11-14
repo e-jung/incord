@@ -42,14 +42,13 @@ async function step(page: Page, n: number) {
 }
 // Read token labels as a person reads the prompt. This does not import the
 // engine's masking, grading, or transition implementation into the assertions.
-async function typePassage(page: Page, options: { wrong?: boolean; onscreen?: boolean; peek?: boolean; learned?: boolean } = {}) {
+async function typePassage(page: Page, options: { wrong?: boolean; onscreen?: boolean; learned?: boolean } = {}) {
   const words = await page.locator('[data-word]').allTextContents();
   expect(words.length).toBeGreaterThan(0);
   for (const word of words) {
     const initial = word.replace(/^[^\p{L}\p{N}]+/u, '').slice(0, 1).toLowerCase();
     const key = options.wrong ? (initial === 'z' ? 'x' : 'z') : initial;
-    if (options.peek) await page.getByRole('button', { name: 'Peek', exact: true }).click();
-    else if (options.onscreen) {
+    if (options.onscreen) {
       const toggle=page.getByRole('button',{name:/^[0-9]$/.test(key)?'Show numbers':'Show letters',exact:true});
       if(await toggle.count())await toggle.click();
       await page.getByRole('button', { name: key.toUpperCase(), exact: true }).click();
@@ -262,13 +261,13 @@ test('catechism browse and complete a full ladder', async ({ page }, info) => {
   await screen(page, info, 'catechism-learned');
 });
 
-test('failed step repeats, peek is a slip, result-close continues, shortcut fails to step 3 and then passes', async ({ page }, info) => {
+test('failed step repeats, wrong letters are slips, result-close continues, shortcut fails to step 3 and then passes', async ({ page }, info) => {
   await addOwn(page);
   await beginOwn(page);
   await typePassage(page);
   await page.getByRole('button', { name: 'Continue', exact: true }).click();
   await step(page, 2);
-  await typePassage(page, { peek: true });
+  await typePassage(page, { wrong: true });
   await expect(page.getByRole('dialog')).toHaveAccessibleName('One more time');
   await screen(page, info, 'practice-failed');
   await page.getByRole('button', { name: 'Continue', exact: true }).click();

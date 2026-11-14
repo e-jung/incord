@@ -18,20 +18,20 @@ describe('Anonymous counter client',()=>{
   expect(JSON.parse(init.body as string)).toEqual({token:expect.stringMatching(/^[a-f0-9]{32}$/),events:['practice_start']});
  });
  it('caps batches at 50, flushes on idle, and does not retry failed sends',async()=>{
-  for(let i=0;i<50;i++)trackStats('peek');expect(fetcher).toHaveBeenCalledOnce();expect(JSON.parse(fetcher.mock.calls[0][1].body).events).toHaveLength(50);
+  for(let i=0;i<50;i++)trackStats('practice_start');expect(fetcher).toHaveBeenCalledOnce();expect(JSON.parse(fetcher.mock.calls[0][1].body).events).toHaveLength(50);
   trackStats('learned');await vi.advanceTimersByTimeAsync(5000);expect(fetcher).toHaveBeenCalledTimes(2);
-  fetcher.mockRejectedValueOnce(Error('offline'));trackStats('peek');await flushStats();await flushStats();expect(fetcher).toHaveBeenCalledTimes(3);
+  fetcher.mockRejectedValueOnce(Error('offline'));trackStats('practice_start');await flushStats();await flushStats();expect(fetcher).toHaveBeenCalledTimes(3);
  });
  it('clears queued counts and the token on opt out and honors GPC and all supported DNT forms',async()=>{
   trackStats('app_open');setStatsEnabled(false);await flushStats();expect(fetcher).not.toHaveBeenCalled();expect(data.has(STATS_TOKEN_KEY)).toBe(false);expect(statsEnabled()).toBe(false);
-  for(const nav of [{globalPrivacyControl:true},{doNotTrack:'1'},{doNotTrack:'yes'}]){vi.stubGlobal('navigator',nav);setStatsEnabled(true);trackStats('peek');await flushStats();expect(statsEnabled()).toBe(false);expect(dailyStatsToken()).toBeNull()}
+  for(const nav of [{globalPrivacyControl:true},{doNotTrack:'1'},{doNotTrack:'yes'}]){vi.stubGlobal('navigator',nav);setStatsEnabled(true);trackStats('practice_start');await flushStats();expect(statsEnabled()).toBe(false);expect(dailyStatsToken()).toBeNull()}
   expect(fetcher).not.toHaveBeenCalled();
  });
  it('rechecks browser privacy immediately before a send',async()=>{
-  trackStats('peek');vi.stubGlobal('navigator',{globalPrivacyControl:true});await flushStats();expect(fetcher).not.toHaveBeenCalled();expect(data.has(STATS_TOKEN_KEY)).toBe(false);
+  trackStats('practice_start');vi.stubGlobal('navigator',{globalPrivacyControl:true});await flushStats();expect(fetcher).not.toHaveBeenCalled();expect(data.has(STATS_TOKEN_KEY)).toBe(false);
  });
  it('discards yesterday’s unsent queue when the local day changes',async()=>{
-  trackStats('peek');vi.setSystemTime(new Date('2026-11-14T10:00:00Z'));await flushStats();expect(fetcher).not.toHaveBeenCalled();trackStats('learned');await flushStats();expect(JSON.parse(fetcher.mock.calls[0][1].body).events).toEqual(['learned']);
+  trackStats('practice_start');vi.setSystemTime(new Date('2026-11-14T10:00:00Z'));await flushStats();expect(fetcher).not.toHaveBeenCalled();trackStats('learned');await flushStats();expect(JSON.parse(fetcher.mock.calls[0][1].body).events).toEqual(['learned']);
  });
  it('flushes on hidden visibility and removes lifecycle listeners on disposal',async()=>{
   const doc=Object.assign(new EventTarget(),{visibilityState:'visible'}),win=new EventTarget();vi.stubGlobal('document',doc);vi.stubGlobal('window',win);
@@ -40,7 +40,7 @@ describe('Anonymous counter client',()=>{
  });
  it('works without persistent browser storage and respects legacy window DNT',async()=>{
   vi.stubGlobal('localStorage',{getItem:()=>{throw Error('blocked')},setItem:()=>{throw Error('blocked')},removeItem:()=>{throw Error('blocked')}});
-  trackStats('peek');await flushStats();expect(fetcher).toHaveBeenCalledOnce();vi.stubGlobal('window',{doNotTrack:'1'});trackStats('peek');await flushStats();expect(fetcher).toHaveBeenCalledOnce();
+  trackStats('practice_start');await flushStats();expect(fetcher).toHaveBeenCalledOnce();vi.stubGlobal('window',{doNotTrack:'1'});trackStats('practice_start');await flushStats();expect(fetcher).toHaveBeenCalledOnce();
  });
 
 });

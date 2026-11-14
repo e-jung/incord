@@ -33,13 +33,13 @@ test('notifications expire, stay above navigation without covering content, and 
   await expect(page.locator('.practice')).toBeVisible();
   await expect(page.locator('.added-toast,.undo-toast')).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Show numbers',exact:true})).toHaveCount(0);
-  await expect(page.locator('.keyboard .keyrow')).toHaveCount(4);
+  await expect(page.locator('.keyboard .keyrow')).toHaveCount(3);
   await shot(page,info,'catechism-step-1');
   await page.getByRole('button',{name:'Close practice',exact:true}).click();
   await page.getByRole('button',{name:'Discover',exact:true}).click();
   await expect(toast).toHaveCount(0);
 });
-test('numeric tokens have a reversible digit keyboard with four rows and full-height targets',async({page},info)=>{
+test('numeric tokens have a reversible digit keyboard with three rows and full-height targets',async({page},info)=>{
   await page.goto('/');
   await page.getByRole('button',{name:'Discover',exact:true}).click();
   await page.getByRole('button',{name:'Your text',exact:true}).click();
@@ -48,6 +48,11 @@ test('numeric tokens have a reversible digit keyboard with four rows and full-he
   await page.getByRole('button',{name:'Add your text',exact:true}).click();
   await page.getByRole('button').filter({has:page.locator('b',{hasText:'Count the gifts'})}).click();
   const keyboard=page.getByLabel('Practice keyboard');
+  await expect(keyboard.locator('.keyrow')).toHaveCount(3);
+  const numberToggle=keyboard.getByRole('button',{name:'Show numbers',exact:true});
+  await expect(keyboard.locator('.keyrow').nth(2).getByRole('button').first()).toHaveAccessibleName('Show numbers');
+  const toggleBox=(await numberToggle.boundingBox())!,zBox=(await keyboard.getByRole('button',{name:'Z',exact:true}).boundingBox())!;
+  expect(toggleBox.x+toggleBox.width).toBeLessThanOrEqual(zBox.x);
   const height=(await keyboard.boundingBox())!.height;
   expect(height).toBeLessThan(250);
   await expect(page.locator('.added-toast,.undo-toast')).toHaveCount(0);
@@ -55,7 +60,8 @@ test('numeric tokens have a reversible digit keyboard with four rows and full-he
   await keyboard.getByRole('button',{name:'G',exact:true}).click();
   await keyboard.getByRole('button',{name:'Show numbers',exact:true}).click();
   await expect(keyboard.locator('.number-key')).toHaveCount(10);
-  await expect(keyboard.locator('.keyrow')).toHaveCount(4);
+  await expect(keyboard.locator('.keyrow')).toHaveCount(3);
+  await expect(keyboard.locator('.keyrow').nth(2).getByRole('button').first()).toHaveAccessibleName('Show letters');
   expect((await keyboard.boundingBox())!.height).toBe(height);
   for(const button of await keyboard.getByRole('button').all())expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   await shot(page,info,'numeric-digits');

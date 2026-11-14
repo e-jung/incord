@@ -35,7 +35,7 @@ describe('P0-1 current word stays above the keyboard',()=>{
           const {tokenize}=await load('/src/engine/tokenize.ts');
           document.documentElement.dataset.theme=theme;
           (window as any).harness={mount,unmount,Verse,words:tokenize(text),text};
-          mount(Keys,{target:document.querySelector('#keys'),props:{onkey:()=>{},onpeek:()=>{}}});
+          mount(Keys,{target:document.querySelector('#keys'),props:{onkey:()=>{}}});
         },{text,theme,runtimePath:`/${cacheDir}/deps/svelte.js`});
         for(const target of [0,50,70,118]){
           const index=await page.evaluate(target=>{
@@ -54,8 +54,10 @@ describe('P0-1 current word stays above the keyboard',()=>{
         }
         expect(await page.locator('.verse .slip').count()).toBe(1);
         expect(await page.locator('.verse .slip').evaluate(el=>getComputedStyle(el).color)).toBe(theme==='light'?'rgb(153, 80, 13)':'rgb(231, 161, 99)');
-        const dimensions=await page.locator('.number-key,.peek').evaluateAll(keys=>keys.map(key=>{const r=key.getBoundingClientRect();return [r.width,r.height]}));
-        expect(dimensions.every(([width,height])=>width!>=44&&height!>=44)).toBe(true);
+        await expect.poll(()=>page.locator('.keyboard .keyrow').count()).toBe(3);
+        expect(await page.locator('.keyboard .key').count()).toBe(26);
+        const heights=await page.locator('.keyboard .key').evaluateAll(keys=>keys.map(key=>key.getBoundingClientRect().height));
+        expect(heights.every(height=>height>=44)).toBe(true);
       }finally{await page.close()}
     },30000);
   }

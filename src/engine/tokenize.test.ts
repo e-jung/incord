@@ -64,6 +64,5 @@ describe('visible slip feedback (P1-7)', () => {
     expect(attemptFeedback('God', 'x', false)).toEqual({ slipped: true, scoredSlip: false });
     expect(attemptFeedback('God', 'x', true)).toEqual({ slipped: true, scoredSlip: true });
     expect(attemptFeedback('God', 'G', false)).toEqual({ slipped: false, scoredSlip: false });
-    expect(attemptFeedback('God', '', true, true)).toEqual({ slipped: true, scoredSlip: true });
   });
 });

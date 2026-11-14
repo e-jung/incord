@@ -8,7 +8,7 @@ describe('attempt-local tap undo',()=>{
   expect(undoPracticeTap(tap.state,tap.undo,2099)).toEqual(initial);
   expect(initial).toEqual({position:0,slips:[],visualSlips:[]});
  });
- it('restores both hidden-word slip counters, including Peek',()=>{
+ it('restores both hidden-word slip counters after a wrong letter',()=>{
   const tap=applyPracticeTap({position:1,slips:[0],visualSlips:[0]},true,true,4,100);
   expect(tap.state).toEqual({position:2,slips:[0,1],visualSlips:[0,1]});
   const restored=undoPracticeTap(tap.state,tap.undo,101);

@@ -1,6 +1,6 @@
 /** Anonymous first-party counters. Only fixed categorical names enter this queue. */
 export const STATS_EVENTS = [
-  'app_open','practice_start','peek','learned','own_text_added','welcome_back_shown','reminders_enabled','account_created','client_error',
+  'app_open','practice_start','learned','own_text_added','welcome_back_shown','reminders_enabled','account_created','client_error',
   ...[1,2,3,4].flatMap(n=>[`step_pass:${n}`,`step_fail:${n}`]),
   'i_know_this:pass','i_know_this:fail',...['again','hard','good','easy'].map(x=>`review:${x}`),
   ...['gospel','wsc-start','heidelberg-start','apostles-start','psalm23'].map(x=>`starter_added:${x}`),
