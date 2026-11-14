@@ -6,3 +6,4 @@ test-results/
 playwright-report/
 coverage/
 .smoke.env
+scripts/.daily-smoke.mjs
