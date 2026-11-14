@@ -2,7 +2,7 @@ import { GroupsError, handleGroups, initializeGroupsRegistry, handleGroupsRegist
 export { GroupDO } from './groups';
 import { supportUrl } from '../shared/support';
 import { handleEsv, assertEsvLimit, stripEsvText } from './esv';
-import { handleStatsRequest } from './stats';
+import { handleStatsRequest, verifyStatsCookie } from './stats';
 import { submitFeedback, FeedbackError, initializeFeedbackStorage, handleFeedbackRegistry } from './feedback';
 export { StatsDO } from './stats';
 export { OAuthStorageDO } from './oauth-storage';
@@ -83,6 +83,50 @@ function stub(env: Env, uid: string) { return env.USERS.get(env.USERS.idFromName
 async function call(target: DurableObjectStub, path: string, data: unknown = {}) { const response = await target.fetch('https://internal' + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); if (!response.ok) { const problem = await response.json<{ error: string }>(); throw new ApiError(response.status, problem.error); } return response.json<any>(); }
 const registry = (env: Env, path: string, data: unknown = {}) => call(env.REGISTRY.get(env.REGISTRY.idFromName('registry')), path, data);
 const user = (env: Env, uid: string, path: string, data: unknown = {}) => call(stub(env, uid), path, data);
+/** Both self-service deletion and maintenance must revoke apps before any destructive work. */
+async function deleteAccount(env: Env, uid: string, origin: string) {
+  assert((await oauthCall(env, '/revoke-all', { origin, uid })).ok, 'Unable to disconnect apps. Please try again.', 503);
+  await cleanupGroups(env, uid);
+  await user(env, uid, '/delete'); // Includes push subscriptions, events, settings and credentials.
+  await registry(env, '/delete', { uid });
+}
+
+async function maintainOrphans(request: Request, env: Env) {
+  assert(request.method === 'POST', 'Method not allowed', 405);
+  const origin = originFor(request, env);
+  assert(env.STATS_TOKEN && env.STATS_TOKEN.length >= 32, 'Stats are not configured', 503);
+  // Reuse the stats sign-in throttle and signed administrator cookie. Bearer auth
+  // also permits scripted use without putting the token in a URL or response.
+  const stats = env.STATS.get(env.STATS.idFromName('stats'));
+  assert((await stats.fetch('https://stats/auth-limit', { method: 'POST' })).ok, 'Try again in a minute', 429);
+  const authorization = request.headers.get('Authorization');
+  const bearer = authorization?.startsWith('Bearer ') ? authorization.slice(7) : undefined;
+  const authorized = (bearer !== undefined && constantTimeEqual(bearer, env.STATS_TOKEN))
+    || await verifyStatsCookie(cookies(request).incord_stats, env.STATS_TOKEN);
+  assert(authorized, 'Unauthorized', 401);
+  assert(request.headers.get('Origin') === origin, 'Cross-origin write denied', 403);
+  const input = request.body ? await body(request, 4096) : {};
+  assert(input.confirm === undefined || typeof input.confirm === 'boolean', 'Invalid confirmation');
+  const limit = input.limit ?? 10;
+  assert(Number.isInteger(limit) && Number(limit) >= 1 && Number(limit) <= 25, 'Limit must be 1–25');
+  const report = await registry(env, '/maintenance/orphans', { limit });
+  let deleted = 0, skipped = 0;
+  const createdDates: (string | null)[] = [];
+  for (const uid of report.users as string[]) {
+    if (input.confirm === true && !(await registry(env, '/maintenance/claim', { uid })).claimed) { skipped++; continue; }
+    try {
+      const metadata = await user(env, uid, '/maintenance/metadata');
+      createdDates.push(typeof metadata.createdAt === 'number' ? new Date(metadata.createdAt).toISOString().slice(0, 10) : null);
+      if (input.confirm === true) { await deleteAccount(env, uid, origin); deleted++; }
+    } catch (error) {
+      if (input.confirm === true) await registry(env, '/maintenance/release', { uid });
+      throw error;
+    }
+  }
+  return json({ dryRun: input.confirm !== true, indexedAccounts: report.indexedAccounts, orphanAccounts: report.orphanAccounts,
+    selectedAccounts: report.users.length, deletedAccounts: deleted, skippedAccounts: skipped, createdDates });
+}
+
 function secure(response: Response) {
   const headers = new Headers(response.headers);
   headers.set('Strict-Transport-Security', 'max-age=31536000');
@@ -202,7 +246,7 @@ async function api(request: Request, env: Env): Promise<Response> {
   if (path === '/api/me' && request.method === 'GET') { const me = await user(env, uid, '/me'), flags = await identityFlags(env, uid); return json({ user: { ...me.user, ...flags } }); }
   if (path === '/api/sync' && request.method === 'POST') { const input = await body(request); const result = await user(env, uid, '/sync', input); await registry(env, '/schedule/set', { uid }); return json(result); }
   if (path === '/api/export' && request.method === 'GET') return json(await user(env, uid, '/export'), 200, { 'Content-Disposition': 'attachment; filename="incord.json"' });
-  if (path === '/api/account' && request.method === 'DELETE') { assert((await oauthCall(env,'/revoke-all',{origin,uid})).ok,'Unable to disconnect apps. Please try again.',503); await cleanupGroups(env,uid); await user(env, uid, '/delete'); await registry(env, '/delete', { uid }); return json({ ok: true }, 200, { 'Set-Cookie': cookie(cookieName, '', 0, origin) }); }
+  if (path === '/api/account' && request.method === 'DELETE') { await deleteAccount(env, uid, origin); return json({ ok: true }, 200, { 'Set-Cookie': cookie(cookieName, '', 0, origin) }); }
   if (path === '/api/push/subscribe' && request.method === 'POST') { const input = await body(request); assert(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY, 'Push is not configured', 503); const result = await user(env, uid, '/push/subscribe', { ...input, origin }); await registry(env, '/schedule/set', { uid }); return json(result); }
   if (path === '/api/push/status' && request.method === 'GET') {
     const endpointHash = url.searchParams.get('endpointHash');
@@ -238,6 +282,7 @@ export default {
       }
       const mcpResponse = /^\/(?:mcp(?:\/|$)|oauth\/(?:token|register)$|\.well-known\/oauth-)/.test(path) ? await (await import('./mcp')).handleMcpRequest(request,env,ctx) : null;
       if(mcpResponse)return await finish(mcpResponse);
+      if (path === '/stats/maintenance/orphans') return await finish(await maintainOrphans(request, env));
       const statsResponse = await handleStatsRequest(request, env);
       if (statsResponse) return await finish(statsResponse);
       if (path.startsWith('/api/')) return await finish(await api(request, env));
@@ -283,10 +328,45 @@ export class RegistryDO {
     this.sql.exec('CREATE TABLE IF NOT EXISTS email_codes(id TEXT PRIMARY KEY,hash TEXT NOT NULL,expires INTEGER NOT NULL,attempts INTEGER NOT NULL,uid TEXT)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS email_test(id TEXT PRIMARY KEY,code TEXT NOT NULL,expires INTEGER NOT NULL)');
     this.sql.exec('CREATE TABLE IF NOT EXISTS schedule(uid TEXT PRIMARY KEY,next_at INTEGER NOT NULL)');
+    // Durable index + tombstones. Existing accounts are discoverable only from
+    // references the registry actually retained, not by enumerating UserDO ids.
+    // state: 0 active, 1 deletion claimed (no new identity links), 2 deleted.
+    this.sql.exec('CREATE TABLE IF NOT EXISTS accounts(uid TEXT PRIMARY KEY,state INTEGER NOT NULL DEFAULT 0,claim_until INTEGER NOT NULL DEFAULT 0)');
+    this.indexAccounts();
   }
   private rows(query: string, ...args: (string | number)[]) { return [...this.sql.exec<Row>(query, ...args)]; }
+  private indexAccounts() {
+    this.sql.exec(`INSERT OR IGNORE INTO accounts(uid)
+      SELECT uid FROM mapping UNION SELECT uid FROM schedule
+      UNION SELECT uid FROM email_codes WHERE uid IS NOT NULL
+      UNION SELECT json_extract(value,'$.uid') FROM challenges WHERE json_type(value,'$.uid')='text'
+      UNION SELECT json_extract(member.value,'$.uid') FROM groups_registry, json_each(groups_registry.value,'$.members') AS member
+        WHERE json_type(member.value,'$.uid')='text'`);
+  }
+  private assertActive(uid: string) {
+    assert(!this.rows('SELECT state FROM accounts WHERE uid=? AND state<>0', uid).length, 'Account no longer exists', 401);
+  }
   async fetch(request: Request) { return this.ctx.blockConcurrencyWhile(async () => { try {
     const data = await request.json<any>(), path = new URL(request.url).pathname, now = Date.now();
+    if (path === '/maintenance/orphans') {
+      this.indexAccounts();
+      const eligible = "FROM accounts a WHERE state<2 AND NOT EXISTS (SELECT 1 FROM mapping m WHERE m.uid=a.uid AND m.kind IN ('email','google'))";
+      return json({ indexedAccounts: Number(this.rows('SELECT count(*) AS n FROM accounts WHERE state<2')[0].n),
+        orphanAccounts: Number(this.rows('SELECT count(*) AS n ' + eligible)[0].n),
+        users: this.rows('SELECT uid ' + eligible + ' ORDER BY state DESC,uid LIMIT ?', data.limit).map(r => r.uid) });
+    }
+    if (path === '/maintenance/claim') {
+      // This check and the durable claim are serialized with ALL mapping writes.
+      // A claim survives failed cleanup and is retryable; linking cannot resurrect it.
+      const row = this.rows("SELECT uid FROM accounts WHERE uid=? AND state<2 AND claim_until<=? AND NOT EXISTS (SELECT 1 FROM mapping WHERE uid=? AND kind IN ('email','google'))", data.uid, now, data.uid)[0];
+      if (row) this.sql.exec('UPDATE accounts SET state=1,claim_until=? WHERE uid=?', now + 300_000, data.uid);
+      return json({ claimed: !!row });
+    }
+    if (path === '/maintenance/release') { this.sql.exec('UPDATE accounts SET claim_until=0 WHERE uid=? AND state=1', data.uid); return json({ ok: true }); }
+    // An already-authenticated request may finish reading its body after
+    // maintenance cleanup. Serialize the actor check with every group change
+    // so claimed/deleted users cannot recreate membership after removal.
+    if (path.startsWith('/groups/') && path !== '/groups/cleanup' && path !== '/groups/schedule') this.assertActive(data.uid);
     const groups = await handleGroupsRegistry(this.sql,this.env,path,data);
     if(groups) return groups;
     const feedback = handleFeedbackRegistry(this.sql, this.ctx.storage, path, data, now);
@@ -308,6 +388,7 @@ export class RegistryDO {
       }); return json({ ok: true });
     }
     if (path === '/email/verify') {
+      if (data.uid) this.assertActive(data.uid);
       const row = this.rows('SELECT * FROM email_codes WHERE id=?', data.key)[0];
       assert(row && Number(row.expires) > now && Number(row.attempts) < 5, 'That code is invalid or expired. Request a new code.', 401);
       const valid = constantTimeEqual(String(row.hash), data.hash) && (row.uid || undefined) === data.uid;
@@ -315,20 +396,21 @@ export class RegistryDO {
       this.sql.exec('DELETE FROM email_codes WHERE id=?', data.key); this.sql.exec('DELETE FROM email_test WHERE id=?', data.key);
       const old = this.rows('SELECT uid FROM mapping WHERE kind=? AND id=?', 'email', data.key)[0];
       assert(!data.uid || !old || old.uid === data.uid, 'That email already belongs to another account.', 409);
-      const uid = data.uid || old?.uid || crypto.randomUUID(); this.sql.exec('INSERT OR IGNORE INTO mapping VALUES(?,?,?)', 'email', data.key, uid); return json({ uid });
+      const uid = data.uid || old?.uid || crypto.randomUUID(); this.assertActive(uid); this.sql.exec('INSERT OR IGNORE INTO accounts(uid) VALUES(?)', uid); this.sql.exec('INSERT OR IGNORE INTO mapping VALUES(?,?,?)', 'email', data.key, uid); return json({ uid });
     }
     if (path === '/google') {
       const old = this.rows('SELECT uid FROM mapping WHERE kind=? AND id=?', 'google', data.sub)[0];
       const email = data.emailKey ? this.rows('SELECT uid FROM mapping WHERE kind=? AND id=?', 'email', data.emailKey)[0] : undefined;
       const uid = old?.uid || email?.uid || crypto.randomUUID();
+      this.assertActive(String(uid)); this.sql.exec('INSERT OR IGNORE INTO accounts(uid) VALUES(?)', uid);
       this.sql.exec('INSERT OR IGNORE INTO mapping VALUES(?,?,?)', 'google', data.sub, uid);
       // An existing Google identity wins; never steal another account's email.
       if (data.emailKey) this.sql.exec('INSERT OR IGNORE INTO mapping VALUES(?,?,?)', 'email', data.emailKey, uid);
       return json({ uid });
     }
-    if (path === '/schedule/set') { this.sql.exec('INSERT OR IGNORE INTO schedule VALUES(?,0)', data.uid); return json({ ok: true }); }
+    if (path === '/schedule/set') { this.assertActive(data.uid); this.sql.exec('INSERT OR IGNORE INTO accounts(uid) VALUES(?)', data.uid); this.sql.exec('INSERT OR IGNORE INTO schedule VALUES(?,0)', data.uid); return json({ ok: true }); }
     if (path === '/schedule/due') { const users = this.rows('SELECT uid FROM schedule WHERE next_at<=? ORDER BY next_at LIMIT 200', now).map(row => row.uid); for (const uid of users) this.sql.exec('UPDATE schedule SET next_at=? WHERE uid=?', now + 15 * 60_000, uid); return json({ users }); }
-    if (path === '/delete') { this.sql.exec('DELETE FROM mapping WHERE uid=?', data.uid); this.sql.exec("DELETE FROM challenges WHERE json_extract(value,'$.uid')=?", data.uid); this.sql.exec('DELETE FROM email_codes WHERE uid=?', data.uid); this.sql.exec('DELETE FROM schedule WHERE uid=?', data.uid); return json({ ok: true }); }
+    if (path === '/delete') { this.sql.exec('INSERT INTO accounts(uid,state) VALUES(?,2) ON CONFLICT(uid) DO UPDATE SET state=2', data.uid); this.sql.exec('DELETE FROM mapping WHERE uid=?', data.uid); this.sql.exec("DELETE FROM challenges WHERE json_extract(value,'$.uid')=?", data.uid); this.sql.exec('DELETE FROM email_codes WHERE uid=?', data.uid); this.sql.exec('DELETE FROM schedule WHERE uid=?', data.uid); return json({ ok: true }); }
     return json({ error: 'Not found' }, 404);
   } catch (e) { if (e instanceof ApiError || e instanceof GroupsError) return json({ error: e.message }, e.status); throw e; } }); }
 }
@@ -376,6 +458,7 @@ export class UserDO {
   private settings() { return withoutRetiredTyping({ groupShareTitles:true, groupReceivePrayer:true, ...(this.get('settings') || { appearance: 'system', weeklyGoal: 4, reminderTime: '09:00', timezone: 'UTC', remindersEnabled: false, keySounds: false, haptics: false, updatedAt: 0 }) }); }
   async fetch(request: Request) { return this.ctx.blockConcurrencyWhile(async () => { try {
     const data = await request.json<any>(), path = new URL(request.url).pathname;
+    if (path === '/maintenance/metadata') return json({ createdAt: this.get('profile')?.createdAt ?? null });
     if (path === '/delete') { await this.ctx.storage.deleteAll(); this.sql.exec('CREATE TABLE meta(key TEXT PRIMARY KEY,value TEXT NOT NULL)'); this.set('deleted', true); return json({ ok: true }); }
     assert(!this.get('deleted'), 'Account no longer exists', 401);
     if (path === '/init') {

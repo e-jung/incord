@@ -22,7 +22,7 @@ Incord is an offline-first app for memorizing Scripture, historic catechisms and
 
 The frontend is Svelte 5 + TypeScript + Vite. IndexedDB is authoritative during offline practice; a service worker caches the app shell and Bible books opened on the device. The DOM-free engine in `src/engine` handles tokenization, masking, grading, learning transitions and FSRS scheduling.
 
-One Cloudflare Worker serves assets, account APIs, ESV requests and MCP. SQLite-backed Durable Objects hold account state (`UserDO`), registry/rate-limit/feedback state (`RegistryDO`), aggregate usage counts (`StatsDO`), OAuth provider state (`OAuthStorageDO`) and group state (`GroupDO`). There is no D1 database or separate MCP Worker. Sync uses last-write-wins items, per-field preference clocks and append-only, idempotent review events; device-only items require an explicit ownership choice before account sync.
+Cloudflare serves existing static assets directly without invoking application code. One application Worker handles account APIs, ESV requests, MCP and extensionless app-route fallbacks. A separate, stateless legacy Worker redirects the old hostname. SQLite-backed Durable Objects hold account state (`UserDO`), registry/rate-limit/feedback state (`RegistryDO`), aggregate usage counts (`StatsDO`), OAuth provider state (`OAuthStorageDO`) and group state (`GroupDO`). There is no D1 database or separate MCP Worker. Sync uses last-write-wins items, per-field preference clocks and append-only, idempotent review events; device-only items require an explicit ownership choice before account sync.
 
 ## Development
 
@@ -71,7 +71,7 @@ Configure secrets with `npx wrangler secret put NAME`; do not put secret values 
 | --- | --- |
 | `SESSION_SECRET` | Required: strong random secret of at least 32 characters for sessions, identity hashes and OAuth encryption. Keep stable across releases. |
 | `APP_ORIGIN` | Required for deployment: your canonical HTTPS origin; set as a Wrangler variable or deploy-time `--var`. Leave unset for origin-agnostic local use. |
-| `STATS_TOKEN` | Optional private `/stats` dashboard access; use a separate strong random secret. Never put it in a URL. |
+| `STATS_TOKEN` | Optional private `/stats` dashboard and orphan-account maintenance access; use a separate strong random secret. Never put it in a URL. |
 | `RESEND_API_KEY` | Optional email-code sign-in and feedback email notifications via Resend. |
 | `EMAIL_FROM` | Sender identity for Resend. Set your own verified sender; otherwise the maintained service's default sender is used. |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Optional Google sign-in. Register your origin's `/api/auth/google/callback` as the callback. |
@@ -86,6 +86,36 @@ npx wrangler deploy --var APP_ORIGIN:https://your-own-domain.example
 ```
 
 Wrangler rebuilds assets before upload. A production smoke test is not part of normal checks: `scripts/prod-smoke.mjs` targets the maintained live service by default and has operator-specific mailbox integration. Do not run it unchanged for a fork; use your own test account, code reader and explicit `SMOKE_URL`.
+
+### Asset routing and the legacy hostname
+
+Existing JS, CSS, fonts and content files are served directly by Workers Static Assets, avoiding an application Worker invocation. `assets.run_worker_first` reserves dynamic paths for the Worker. We deliberately retain `not_found_handling: "none"`: Cloudflare's automatic SPA mode can turn missing asset navigations into `index.html`. Instead, the Worker supplies a shell only for extensionless HTML app-route misses; missing `/assets/*` and `/content/*` files stay 404. `public/_headers` mirrors the Worker's security headers, including CSP, HSTS and `no-transform`; the service worker is revalidated with `no-cache`.
+
+The maintained legacy host, `byheart.jesklabs.com`, uses the tiny, independent [legacy redirect Worker](cloudflare/legacy-redirect/worker.ts). It preserves path/query redirects to Incord, returns 410 for old APIs and serves the self-unregistering service worker. It has no assets or Durable Object bindings. For this route migration, deploy in this order:
+
+1. Deploy the main Worker with the updated root `wrangler.jsonc`, which removes its old-host custom-domain route. Keep the existing `byheart` Worker name and persistent bindings.
+2. Deploy the redirect Worker to claim that released route:
+
+   ```sh
+   npx wrangler deploy --config cloudflare/legacy-redirect/wrangler.jsonc
+   ```
+
+There may be a short old-host gap between those deployments. Forks without a legacy hostname need only the main Worker; otherwise adapt both the legacy route and redirect destination. The main deploy script does not deploy the redirect Worker.
+
+### Orphan-account maintenance
+
+After retiring a sign-in method, an operator can inspect accounts with **neither an email nor a Google mapping**. `POST /stats/maintenance/orphans` uses the same signed administrator cookie as `/stats`, or `Authorization: Bearer $STATS_TOKEN`. Send a matching `Origin` header and JSON. The default is a dry run; an empty body or `{}` does not delete anything.
+
+```sh
+# Set ORIGIN to your instance and supply STATS_TOKEN in your shell environment.
+curl --fail-with-body "$ORIGIN/stats/maintenance/orphans" \
+  -H "Authorization: Bearer $STATS_TOKEN" -H "Origin: $ORIGIN" \
+  -H 'Content-Type: application/json' --data '{"limit":10}'
+```
+
+The response includes counts and selected creation dates only (UTC dates, or `null` if unavailable), never account IDs or library contents. `limit` defaults to 10 and is capped at 25 to bound each request's work. Inspect the dry run before sending `{"confirm":true,"limit":10}` to permanently delete the selected orphans. Repeat bounded batches until none remain. Confirmation runs the same deletion path as the app: OAuth revocation, group removal, UserDO data and push subscriptions, then registry mappings. Mapping checks and durable deletion claims prevent an email/Google-linked account from being selected during a concurrent sign-in. A failed batch may have completed earlier deletions; retrying is safe.
+
+Cloudflare does not enumerate named UserDOs. Maintenance discovers historical accounts from retained registry mappings, scheduling entries, pending identity challenges and group memberships, and maintains a durable index thereafter. A historical object with no surviving registry reference cannot be found by this endpoint. HTTP GET never performs maintenance. Keep the stats token private; do not put it in a URL or logs.
 
 ## MCP
 

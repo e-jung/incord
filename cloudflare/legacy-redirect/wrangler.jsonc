@@ -1,0 +1,9 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "byheart-legacy-redirect",
+  "main": "worker.ts",
+  "compatibility_date": "2025-11-13",
+  "workers_dev": false,
+  "routes": [{ "pattern": "byheart.jesklabs.com", "custom_domain": true }],
+  "observability": { "enabled": true }
+}

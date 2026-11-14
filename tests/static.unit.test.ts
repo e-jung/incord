@@ -64,10 +64,11 @@ describe('N5/N6 response headers and N18 static routing', () => {
     expect(api.status).toBe(200); expect(api.headers.get('Strict-Transport-Security')).toBe('max-age=31536000');
     expect(api.headers.get('Cache-Control')).toBe('no-store');
   });
-  it('keeps every request worker-first and disables automatic asset SPA fallback', () => {
+  it('uses selective Worker-first routes and disables automatic asset SPA fallback', () => {
     const config = readFileSync('wrangler.jsonc', 'utf8');
     expect(config).toContain('"not_found_handling": "none"');
-    expect(config).toContain('"run_worker_first": true');
+    expect(config).toContain('"run_worker_first": [');
+    expect(config).not.toContain('"run_worker_first": true');
   });
   it('never serves the offline SPA shell for static-path navigations', async () => {
     const handlers: Record<string, (event: any) => void> = {};

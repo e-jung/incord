@@ -1,9 +1,13 @@
+# Static files bypass finish(); keep its security policy here as well.
+# no-transform on every asset includes all HTML aliases without a fragile list.
 /*
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
   Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'
   Strict-Transport-Security: max-age=31536000
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
   Permissions-Policy: camera=(), microphone=(), geolocation=()
 /sw.js
-  Cache-Control: no-cache
+  ! Cache-Control
+  Cache-Control: no-cache, no-transform
   Service-Worker-Allowed: /

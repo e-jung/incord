@@ -192,13 +192,14 @@ console.log(`Incord smoke: ${origin} (Chromium, iPhone 15 393×852)`);
 try {
   browser = await chromium.launch({ headless: true });
   let first, second;
-  const localLegacy = ['localhost','127.0.0.1'].includes(target.hostname) && !process.env.SMOKE_LEGACY_URL;
-  const canonicalOrigin = localLegacy ? 'https://incord.jesklabs.com' : origin;
-  const legacyOrigin = process.env.SMOKE_LEGACY_URL || (localLegacy ? origin : origin === 'https://incord.jesklabs.com' ? 'https://byheart.jesklabs.com' : '');
+  // Locally, point SMOKE_LEGACY_URL at the separate legacy Worker; a Host
+  // override on the asset-first application Worker no longer models routing.
+  const canonicalOrigin = 'https://incord.jesklabs.com';
+  const legacyOrigin = process.env.SMOKE_LEGACY_URL || (origin === canonicalOrigin ? 'https://byheart.jesklabs.com' : '');
   if (legacyOrigin) await check('Legacy origin redirects paths and retires APIs', async () => {
     const legacy = new URL(legacyOrigin);
     expect(['http:', 'https:'].includes(legacy.protocol) && !legacy.username && !legacy.password && !legacy.search && !legacy.hash, 'Valid legacy origin').toBe(true);
-    const context = await browser.newContext({ extraHTTPHeaders: localLegacy ? { Host: 'byheart.jesklabs.com' } : {} });
+    const context = await browser.newContext();
     contexts.push(context);
     const redirect = await context.request.get(legacy.origin + '/account?migration=smoke', { maxRedirects: 0 });
     expect(redirect.status()).toBe(301);
