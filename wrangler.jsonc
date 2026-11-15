@@ -29,5 +29,5 @@
   "routes": [ { "pattern": "incord.jesklabs.com", "custom_domain": true } ],
   // APP_ORIGIN is passed at deploy time (scripts/deploy.sh) so local dev stays origin-agnostic.
   // Optional public support URL. Leave blank to hide all support links.
-  "vars": { "ACCOUNTS_GOOGLE": "0", "DONATE_URL": "https://ko-fi.com/jesklabs" }
+  "vars": { "ACCOUNTS_GOOGLE": "1", "DONATE_URL": "https://ko-fi.com/jesklabs" }
 }

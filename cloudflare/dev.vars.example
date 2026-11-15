@@ -10,7 +10,7 @@ STATS_TOKEN="replace-with-a-separate-random-stats-access-token"
 # VAPID_SUBJECT="mailto:operator@example.com"
 
 # Email sign-in uses ACCOUNTS_SVC (wrangler service binding, IncordClient).
-# ACCOUNTS_GOOGLE=0 # Leave legacy Google default until prod verification.
+# ACCOUNTS_GOOGLE=1 # Google sign-in goes through Accounts (prod-verified 2026-11-15).
 # Resend below is for feedback notifications, not sign-in codes.
 # Replies go to incord@jesklabs.com.
 # RESEND_API_KEY=""
