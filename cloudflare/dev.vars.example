@@ -14,5 +14,5 @@ STATS_TOKEN="replace-with-a-separate-random-stats-access-token"
 # Resend below is for feedback notifications, not sign-in codes.
 # Replies go to incord@jesklabs.com.
 # RESEND_API_KEY=""
-# EMAIL_FROM="Incord <signin@incord.jesklabs.com>"
+# EMAIL_FROM="Incord <hello@jesklabs.com>" # Optional; this shared Jesklabs sender is the default.
 # EMAIL_TEST_SINK="1" # LOCAL ONLY: localhost/127.0.0.1 are also required.
