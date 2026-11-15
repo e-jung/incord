@@ -122,6 +122,9 @@ describe('N17 font bundle and precache', () => {
       expect(build()).toBe(result);
       writeFileSync(join(root,`dist/audio/${DEFAULT_KEY_SAMPLE}.mp3`),'updated-click');
       expect(build().match(/const CACHE='([^']+)'/)![1]).not.toBe(result.match(/const CACHE='([^']+)'/)![1]);
+      const before = build().match(/const CACHE='([^']+)'/)![1];
+      writeFileSync(join(root, 'dist/icon-192.png'), 'new-icon');
+      expect(build().match(/const CACHE='([^']+)'/)![1]).not.toBe(before);
       writeFileSync(join(root, 'dist/assets', 'app-new.js'), '');
       expect(build().match(/const CACHE='([^']+)'/)![1]).not.toBe(result.match(/const CACHE='([^']+)'/)![1]);
     } finally { rmSync(root, { recursive: true, force: true }); }

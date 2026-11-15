@@ -1,5 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Incord: a heart-shaped cord">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Incord: a cord tied into a heart">
+  <clipPath id="tile"><rect width="512" height="512" rx="112"/></clipPath>
   <rect width="512" height="512" rx="112" fill="#4D62D3"/>
-  <rect x="12" y="12" width="488" height="488" rx="102" fill="none" stroke="#fff" stroke-opacity=".12" stroke-width="2"/>
-  <path d="M256 359c-25-24-111-86-111-146 0-59 73-82 111-29 38-53 111-30 111 29 0 47-53 93-91 126-24 21-49 42-49 66" fill="none" stroke="#fff" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+  <g clip-path="url(#tile)"><g transform="translate(0.0 0.0) scale(1)" fill="none" stroke-linejoin="round">
+    <path d="M-200 388C90 388 196 390 256 330C316 270 390 246 390 192C390 146 356 118 320 118C294 118 268 132 256 158C244 132 218 118 192 118C156 118 122 146 122 192C122 246 196 270 256 330" stroke="#FBF3E2" stroke-width="36" stroke-linecap="round"/>
+    <path d="M122 192C122 246 196 270 256 330C316 390 422 388 712 388" stroke="#4D62D3" stroke-width="56"/>
+    <path d="M122 192C122 246 196 270 256 330C316 390 422 388 712 388" stroke="#FBF3E2" stroke-width="36"/>
+  </g></g>
 </svg>
