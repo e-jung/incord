@@ -105,9 +105,10 @@ async function account(page) {
 // (prints recent sign-in emails), optionally SMOKE_ENV_FILE for that command.
 const smokeEmail = process.env.SMOKE_EMAIL || '';
 const seenCodes = new Set();
-// Jesklabs Accounts sends the code in the body only, and identical subjects thread
-// together, so read the newest message rather than the thread.
-const defaultCodeCommand = smokeEmail ? `g='gog --account ${smokeEmail} --no-input'; id=$($g gmail messages search 'from:hello@jesklabs.com newer_than:10m' --max 1 | awk 'NR==2{print $1}'); [ -z "$id" ] || $g gmail get "$id"` : '';
+// Jesklabs Accounts sends from the shared hello@ sender for every app, so filter by
+// the Incord subject, and identical subjects thread together, so read the newest
+// message rather than the thread.
+const defaultCodeCommand = smokeEmail ? `g='gog --account ${smokeEmail} --no-input'; id=$($g gmail messages search 'from:hello@jesklabs.com subject:"Your Incord code" newer_than:10m' --max 1 | awk 'NR==2{print $1}'); [ -z "$id" ] || $g gmail get "$id"` : '';
 async function readCodes() {
   // Do not mutate the parent environment or expose command output/errors: they
   // may contain mailbox content, codes, or credentials from a custom reader.
