@@ -1,5 +1,5 @@
 import type {Env} from './worker';
-import {runMcpTool} from './mcp-tools';
+import {starters, documents, passages, topics, lookupReference, resolveCatalogItem, type BookPack, type Translation} from '../shared/domain/catalog';
 import {assertEsvLimit,esvReferenceKeys,isEsv} from '../shared/esv';
 const json=(data:unknown)=>Response.json(data,{headers:{'Cache-Control':'no-store'}});
 export class GroupsError extends Error { constructor(public status:number,message:string){super(message)} }
@@ -16,21 +16,25 @@ export async function groupsCall(target:DurableObjectStub,path:string,data:any={
 const user=(env:Env,uid:string,path:string,data:any={})=>groupsCall(env.USERS.get(env.USERS.idFromName(uid)),path,data);
 const registry=(env:Env,path:string,data:any={})=>groupsCall(env.REGISTRY.get(env.REGISTRY.idFromName('registry')),path,data);
 const groupObject=(env:Env,id:string)=>{check(env.GROUPS,'Groups unavailable',503);return env.GROUPS.get(env.GROUPS.idFromName(id))};
-const deps=(env:Env)=>({assets:env.ASSETS,read:async()=>({items:[],events:[],settings:{}}),add:async(items:any[])=>({results:items.map(i=>({id:i.id,status:'added'}))})});
+const bookLoader=(env:Env)=>async(id:string,tr:Translation):Promise<BookPack>=>{
+ const response=await env.ASSETS.fetch(new Request(`https://incord-assets.invalid/content/${tr.toLowerCase()}/${id}.json`));
+ if(!response.ok)throw Error('Bundled content is unavailable.');
+ return response.json() as Promise<BookPack>;
+};
 export async function resolveGroupGoal(env:Env,selection:any):Promise<{goal:any;items:any[]}>{
  if(selection===null)return {goal:null,items:[]};
  check(selection&&typeof selection==='object'&&!Array.isArray(selection));check(Object.keys(selection).every(k=>['kind','id','translation','start','end'].includes(k)),'Only catalog goals are allowed');
  check(['passage','topic','starter','document'].includes(selection.kind)&&typeof selection.id==='string'&&['BSB','KJV','WEB','ESV'].includes(selection.translation),'Invalid catalog selection');
- const catalog=await runMcpTool('list_collections',{},deps(env));let title='',items:any[]=[];
+ const loader=bookLoader(env);let title='',items:any[]=[];
  if(selection.kind==='passage'||selection.kind==='topic'){
-  check(selection.start===undefined&&selection.end===undefined,'Ranges require a document');const list=selection.kind==='passage'?catalog.passages.items:catalog.topics;const entry=list.find((x:any)=>x.id===selection.id);check(entry,'Unknown catalog selection');title=selection.kind==='passage'?entry.reference:entry.title;
-  const out=await runMcpTool('add_passages',{items:[{id:selection.id,translation:selection.translation}]},{...deps(env),add:async(found:any[])=>{items=found;return {results:found.map(i=>({id:i.id,status:'added'}))}}});check(out.results[0]?.status==='added','Goal exceeds content limits');
+  check(selection.start===undefined&&selection.end===undefined,'Ranges require a document');const list=selection.kind==='passage'?passages:topics.map(t=>({...t,id:`topic-${t.id}`}));const entry=list.find((x:any)=>x.id===selection.id);check(entry,'Unknown catalog selection');title='reference' in entry?entry.reference:entry.title;
+  try{items=await resolveCatalogItem(selection.id,selection.translation,loader,{maxVerses:500})}catch{throw new GroupsError(400,'Goal exceeds content limits')}
  }else{
-  const entry=(selection.kind==='starter'?catalog.starters:catalog.documents).find((x:any)=>x.id===selection.id);check(entry,'Unknown catalog selection');title=entry.title;items=entry.items;
+  const entry=(selection.kind==='starter'?starters:documents).find((x:any)=>x.id===selection.id);check(entry,'Unknown catalog selection');title=entry.title;items=entry.items;
   if(selection.kind==='document'){
    const max=Math.max(...items.map((i:any)=>i.number||1));const start=selection.start??1,end=selection.end??max;check(Number.isInteger(start)&&Number.isInteger(end)&&start>=1&&end>=start&&end<=max,'Invalid question range');items=items.filter((i:any)=>(i.number||1)>=start&&(i.number||1)<=end);
   }else{check(selection.start===undefined&&selection.end===undefined,'Ranges require a document');if(selection.translation!=='BSB'){
-   const converted:any[]=[];for(const item of items){if(item.collection!=='bible'){converted.push(item);continue}const found=await runMcpTool('lookup_passage',{reference:item.title,translation:selection.translation},deps(env));converted.push(...found.verses)}items=converted;
+   const converted:any[]=[];for(const item of items){if(item.collection!=='bible'){converted.push(item);continue}const found=await lookupReference(item.title,selection.translation,loader,{maxVerses:500});converted.push(...found)}items=converted;
   }}
  }
  check(items.length>0&&items.length<=1000,'Goal is too large');try{assertEsvLimit(items)}catch{throw new GroupsError(400,'Goal exceeds ESV content limits')}

@@ -1,3 +1,4 @@
+import {loadSettings,serverSettings,settingsSchema,settingsDefaults,mergeSettings as mergeSharedSettings} from '../shared/domain/settings';
 import { accountsCall, AccountsError, accountsReturnPath, maskedEmail, type AccountsService, type AccountsIdentity } from './accounts';
 import { generateSignInCode, normalizeCode, validCode } from '../shared/sign-in-code';
 import { GroupsError, handleGroups, initializeGroupsRegistry, handleGroupsRegistry, cleanupGroups, scheduleGroups, dispatchGroupReminders } from './groups';
@@ -666,26 +667,18 @@ type SyncRecord = ObjectData & { id: string; updatedAt: number | string; deleted
 export function timestamp(value: unknown) { const n = typeof value === 'string' ? Date.parse(value) : value; assert(typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= Date.now() + 300_000, 'Invalid updatedAt'); return n; }
 function record(value: unknown): asserts value is SyncRecord { assert(value && typeof value === 'object' && !Array.isArray(value)); const r = value as ObjectData; assert(typeof r.id === 'string' && r.id.length > 0 && r.id.length <= 160, 'Invalid id'); assert(JSON.stringify(value).length <= 50_000, 'Item too large'); timestamp(r.updatedAt); }
 export function localDay(now: Date, timezone: string) { return new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now); }
-const settingAliases:Record<string,string>={name:'displayName',theme:'appearance',goal:'weeklyGoal',timeZone:'timezone',pushEnabled:'remindersEnabled'};
-/** Older clients may still send removed preferences; ignore their clocks too. */
-function withoutRetiredSettings(settings:any){const result={...settings};delete result.typingMode;delete result.peekNoteDismissed;if(result.fieldUpdatedAt&&typeof result.fieldUpdatedAt==='object'&&!Array.isArray(result.fieldUpdatedAt)){result.fieldUpdatedAt={...result.fieldUpdatedAt};delete result.fieldUpdatedAt.typingMode;delete result.fieldUpdatedAt.peekNoteDismissed}return result}
-/** Per-field LWW; legacy records without field clocks use their record revision. */
-export function mergeServerSettings(old:any,incoming:any){old=withoutRetiredSettings(old);incoming=withoutRetiredSettings(incoming);const result={...old,fieldUpdatedAt:{...old.fieldUpdatedAt}};for(const key of Object.keys(old))if(key!=='updatedAt'&&key!=='fieldUpdatedAt'&&result.fieldUpdatedAt[key]===undefined)result.fieldUpdatedAt[key]=old.fieldUpdatedAt?0:old.updatedAt??0;for(const key of Object.keys(incoming)){if(key==='updatedAt'||key==='fieldUpdatedAt')continue;const before=old.fieldUpdatedAt?.[key]??(old.fieldUpdatedAt?0:old.updatedAt??0),after=incoming.fieldUpdatedAt?.[key]??(incoming.fieldUpdatedAt?0:incoming.updatedAt??0);if(after>before||(after===before&&JSON.stringify(incoming[key])>JSON.stringify(old[key]))){result[key]=incoming[key];result.fieldUpdatedAt[key]=after}}result.updatedAt=Math.max(old.updatedAt||0,incoming.updatedAt||0);return result}
-export function settingsRecord(input: unknown): ObjectData { assert(input && typeof input === 'object' && !Array.isArray(input), 'Invalid settings'); const s = withoutRetiredSettings(input) as ObjectData; timestamp(s.updatedAt);
-  if (s.name !== undefined) s.displayName = s.name; if (s.theme !== undefined) s.appearance = s.theme; if (s.goal !== undefined) s.weeklyGoal = s.goal; if (s.timeZone !== undefined) s.timezone = s.timeZone; if (s.pushEnabled !== undefined) s.remindersEnabled = s.pushEnabled;
-  for (const key of ['keySounds', 'haptics']) if (s[key] !== undefined) assert(typeof s[key] === 'boolean', 'Invalid keyboard feedback setting');
-  for(const key of ['groupShareTitles','groupReceivePrayer']) if(s[key]!==undefined) assert(typeof s[key]==='boolean','Invalid group preference');
-  if (s.remindersEnabled !== undefined) assert(typeof s.remindersEnabled === 'boolean', 'Invalid reminder setting');
-  if (s.displayName !== undefined) { assert(typeof s.displayName === 'string' && s.displayName.length <= 80, 'Invalid display name'); s.name = s.displayName = s.displayName.trim(); }
-  if (s.weeklyGoal !== undefined) assert([3, 4, 5, 7].includes(Number(s.weeklyGoal)), 'Invalid weekly goal');
-  if (s.defaultTranslation !== undefined) assert(['BSB', 'KJV', 'WEB', 'ESV'].includes(String(s.defaultTranslation)), 'Invalid default translation');
-  if (s.textSize !== undefined) assert(['small', 'default', 'large', 'extra-large'].includes(String(s.textSize)), 'Invalid text size');
-  if (s.appearance !== undefined) assert(['system', 'light', 'dark'].includes(String(s.appearance)), 'Invalid appearance');
-  if (s.reminderTime !== undefined) assert(typeof s.reminderTime === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(s.reminderTime), 'Invalid reminder time');
-  if (s.newPerDay !== undefined) assert([1,2,3,5].includes(Number(s.newPerDay)), 'Invalid daily limit');
-  if (s.timezone !== undefined) { assert(typeof s.timezone === 'string' && s.timezone.length > 0, 'Invalid timezone'); try { new Intl.DateTimeFormat('en', { timeZone: String(s.timezone) }).format(); } catch { throw new ApiError(400, 'Invalid timezone'); } }
-  if(s.fieldUpdatedAt !== undefined) { assert(s.fieldUpdatedAt && typeof s.fieldUpdatedAt === 'object' && !Array.isArray(s.fieldUpdatedAt), 'Invalid field timestamps'); for(const value of Object.values(s.fieldUpdatedAt)) timestamp(value); const times = {...s.fieldUpdatedAt as Record<string,unknown>}; for(const [from,to] of Object.entries(settingAliases)) if(times[from] !== undefined) times[to] = times[from]; s.fieldUpdatedAt = times; }
-  assert(JSON.stringify(s).length < 10_000, 'Settings too large'); return s;
+/** Internal aliases remain compatible with existing SQL records and server consumers. */
+export function mergeServerSettings(old:any,incoming:any){return serverSettings(mergeSharedSettings(old,incoming))}
+export function settingsRecord(input: unknown): ObjectData {
+  assert(input && typeof input === 'object' && !Array.isArray(input), 'Invalid settings');
+  const raw=input as ObjectData;
+  if(raw.fieldUpdatedAt!==undefined)assert(raw.fieldUpdatedAt && typeof raw.fieldUpdatedAt==='object' && !Array.isArray(raw.fieldUpdatedAt),'Invalid field timestamps');
+  const s=serverSettings(raw);timestamp(s.updatedAt);
+  const validated=settingsSchema.safeParse(s);
+  assert(validated.success, validated.success?'':validated.error.issues[0].message);
+  if(s.fieldUpdatedAt!==undefined)for(const value of Object.values(s.fieldUpdatedAt))timestamp(value);
+  assert(JSON.stringify(s).length < 10_000, 'Settings too large');
+  return serverSettings(validated.data!);
 }
 export class UserDO {
   private sql: SqlStorage;
@@ -702,7 +695,12 @@ export class UserDO {
   private get(key: string): any { const row = this.rows('SELECT value FROM meta WHERE key=?', key)[0]; return row ? JSON.parse(String(row.value)) : null; }
   private set(key: string, value: unknown) { this.sql.exec('INSERT INTO meta VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', key, JSON.stringify(value)); }
   private list(table: string) { assert(['items', 'events', 'subscriptions'].includes(table)); return this.rows(`SELECT value FROM ${table} ORDER BY ${table === 'subscriptions' ? 'endpoint' : 'id'}`).map(row => JSON.parse(String(row.value))); }
-  private settings() { return withoutRetiredSettings({ groupShareTitles:true, groupReceivePrayer:true, ...(this.get('settings') || { appearance: 'system', weeklyGoal: 4, reminderTime: '09:00', timezone: 'UTC', remindersEnabled: false, keySounds: false, haptics: false, updatedAt: 0 }) }); }
+  private settings() {
+    const stored=this.get('settings')||{},settings=serverSettings(loadSettings(stored));
+    // Profile names predate synced preferences: keep the existing profile fallback.
+    if(stored.name===undefined&&stored.displayName===undefined){delete settings.name;delete settings.displayName;delete settings.fieldUpdatedAt?.name;delete settings.fieldUpdatedAt?.displayName}
+    return settings;
+  }
   async fetch(request: Request) { return this.ctx.blockConcurrencyWhile(async () => { try {
     const data = await request.json<any>(), path = new URL(request.url).pathname;
     if (path === '/maintenance/metadata') return json({ createdAt: this.get('profile')?.createdAt ?? null });
@@ -801,7 +799,8 @@ export class UserDO {
           if (!existing || updated > Number(existing.updated) || (updated === Number(existing.updated) && serialized > String(existing.value))) this.sql.exec('INSERT INTO items VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET value=excluded.value,updated=excluded.updated', item.id, serialized, updated);
         }
         for (const event of events) this.sql.exec('INSERT OR IGNORE INTO events VALUES(?,?)', event.id, JSON.stringify(event));
-        if (settings) this.set('settings', mergeServerSettings(this.settings(), settings));
+        // Runtime fallbacks are not stored preferences and must not win a zero-clock tie.
+        if (settings) this.set('settings', mergeServerSettings(this.get('settings') || {}, settings));
       });
   }
   private async sendPush(test: boolean) {
@@ -811,7 +810,7 @@ export class UserDO {
       if (!settings.remindersEnabled || this.get('remindedDay') === today) return { sent: 0, failed: 0, results: [] };
       const clock = new Intl.DateTimeFormat('en-GB', { timeZone: settings.timezone || 'UTC', hourCycle: 'h23', hour: '2-digit', minute: '2-digit' }).format(now);
       // Cron is quarter-hourly: permit the 15-minute window following the chosen time.
-      const minutes = (s: string) => Number(s.slice(0, 2)) * 60 + Number(s.slice(3, 5)); const delta = (minutes(clock) - minutes(settings.reminderTime || '09:00') + 1440) % 1440; if (delta >= 15) return { sent: 0, failed: 0, results: [] };
+      const minutes = (s: string) => Number(s.slice(0, 2)) * 60 + Number(s.slice(3, 5)); const delta = (minutes(clock) - minutes(settings.reminderTime || settingsDefaults().reminderTime) + 1440) % 1440; if (delta >= 15) return { sent: 0, failed: 0, results: [] };
       if (this.list('events').some(e => localDay(new Date(e.timestamp ?? e.createdAt ?? e.at), settings.timezone || 'UTC') === today)) return { sent: 0, failed: 0, results: [] };
       dueCount = this.list('items').filter(i => !i.deleted && (!i.learned || !i.due && !i.dueAt && !i.card?.due || new Date(i.dueAt ?? i.due ?? i.card?.due).getTime() <= now.getTime())).length; if (!dueCount) return { sent: 0, failed: 0, results: [] };
       this.set('remindedDay', today); // Reserve before network I/O, so retries cannot duplicate a daily reminder.
