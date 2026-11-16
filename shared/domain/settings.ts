@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+// The app CSP forbids eval; skip zod's `new Function` JIT probe, which reports a violation.
+z.config({ jitless: true });
+
 /** Canonical names are the browser names. Legacy server names exist only at the boundary. */
 export type Settings = {
   groupShareTitles?: boolean;

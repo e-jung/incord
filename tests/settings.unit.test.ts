@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
+import { z } from 'zod';
 import {
   settingsDefaults,
   loadSettings,
@@ -11,6 +12,10 @@ import {
 import { UserDO, settingsRecord, mergeServerSettings, type Env } from '../cloudflare/worker';
 
 describe('shared settings boundary', () => {
+  it('keeps zod jitless so the browser never probes eval under the CSP', () => {
+    expect(z.config().jitless).toBe(true);
+  });
+
   it('uses one default set with an explicit browser timezone and the same evening reminder', () => {
     expect(settingsDefaults().reminderTime).toBe('19:00');
     expect(settingsDefaults('America/Los_Angeles')).toEqual({
