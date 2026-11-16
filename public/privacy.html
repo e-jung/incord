@@ -1,84 +1,265 @@
 <!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Privacy · Incord</title>
-<meta name="color-scheme" content="light dark">
-<link rel="icon" href="/icon.svg" type="image/svg+xml">
-<style>
-  :root { color-scheme: light dark; --bg: #faf8f4; --text: #26231f; --muted: #6f685f; --rule: #e6e0d6; --accent: #8a5a2b; }
-  @media (prefers-color-scheme: dark) { :root { --bg: #171614; --text: #ece7df; --muted: #a59d92; --rule: #2e2b27; --accent: #d9a46c; } }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
-  main { max-width: 640px; margin: 0 auto; padding: 48px 24px 72px; }
-  h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: -0.01em; }
-  h2 { font-size: 18px; margin: 32px 0 8px; }
-  p, li { margin: 0 0 12px; }
-  ul { padding-left: 20px; }
-  .muted { color: var(--muted); font-size: 15px; }
-  a { color: var(--accent); }
-  hr { border: 0; border-top: 1px solid var(--rule); margin: 32px 0; }
-</style>
-</head>
-<body>
-<main>
-  <h1>Privacy</h1>
-  <p class="muted">Incord · Last updated November 13, 2026</p>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Privacy · Incord</title>
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #faf8f4;
+        --text: #26231f;
+        --muted: #6f685f;
+        --rule: #e6e0d6;
+        --accent: #8a5a2b;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #171614;
+          --text: #ece7df;
+          --muted: #a59d92;
+          --rule: #2e2b27;
+          --accent: #d9a46c;
+        }
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font:
+          17px/1.6 -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          system-ui,
+          sans-serif;
+      }
+      main {
+        max-width: 640px;
+        margin: 0 auto;
+        padding: 48px 24px 72px;
+      }
+      h1 {
+        font-size: 28px;
+        margin: 0 0 4px;
+        letter-spacing: -0.01em;
+      }
+      h2 {
+        font-size: 18px;
+        margin: 32px 0 8px;
+      }
+      p,
+      li {
+        margin: 0 0 12px;
+      }
+      ul {
+        padding-left: 20px;
+      }
+      .muted {
+        color: var(--muted);
+        font-size: 15px;
+      }
+      a {
+        color: var(--accent);
+      }
+      hr {
+        border: 0;
+        border-top: 1px solid var(--rule);
+        margin: 32px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Privacy</h1>
+      <p class="muted">Incord · Last updated November 13, 2026</p>
 
-  <p>Incord is a free, non-commercial app for memorizing Scripture, catechisms and creeds. It has no ads, sells nothing, and uses no third-party trackers.</p>
+      <p>
+        Incord is a free, non-commercial app for memorizing Scripture, catechisms and creeds. It has
+        no ads, sells nothing, and uses no third-party trackers.
+      </p>
 
-  <h2>Without an account</h2>
-  <p>Your library and practice stay on your device, in your browser's storage. Feedback you choose to send is handled separately as described below.</p>
+      <h2>Without an account</h2>
+      <p>
+        Your library and practice stay on your device, in your browser's storage. Feedback you
+        choose to send is handled separately as described below.
+      </p>
 
-  <h2>With an account</h2>
-  <p>You can create an account with a private sign-in code instead of email or Google. Three kid-safe words and four digits act as your key: anyone who knows the code can sign in. The server stores only a one-way keyed hash of it, never the readable code. A copy is kept only in browsers where you create or enter the code, so you can reveal it with a tap; it is not included in library sync or exports and is removed from this browser when you sign out. Regenerating a code invalidates the old one but does not sign out existing devices. Without another linked sign-in method, a lost code cannot be recovered. Save it privately, or add email or Google to the same account.</p>
-  <p>Optional Jesklabs sign-in is shared by Jesklabs apps; it stores your email and which Jesklabs apps you use. The shared sign-in service at accounts.jesklabs.com sends short-lived, six-digit codes through our email delivery provider and stores the verified address, not for marketing. Incord’s lasting account records contain only a one-way keyed fingerprint of the address and an app-specific Jesklabs identity. To ask you to confirm an existing Jesklabs session, Incord temporarily keeps the address in a pending sign-in record valid for five minutes, removed when you confirm or cancel or during expired-record cleanup. Codes are stored as hashes, expire after 10 minutes, and can be used only once. Signing in through another Jesklabs app always asks you to confirm before signing in to Incord. Signing out of Incord signs out this app only.</p>
-  <p>Passkey and recovery-code sign-in have been retired. Dormant public keys or hashed recovery records from earlier versions may remain until account deletion; they are no longer used for authentication.</p>
-  <p>If you create an account, Incord stores what it needs to sync your library across devices:</p>
-  <ul>
-    <li>the display name you choose and your app settings;</li>
-    <li>your library (passage references and text you added yourself) and your practice history;</li>
-    <li>a one-way keyed hash of your email address if you choose email or Google sign-in, and an app-specific identity from Jesklabs sign-in;</li>
-    <li>if you turn on reminders, your reminder time, time zone and the push address your browser provides.</li>
-  </ul>
-  <p>ESV text is fetched on demand and kept only on your device. It is never stored on Incord's servers.</p>
+      <h2>With an account</h2>
+      <p>
+        You can create an account with a private sign-in code instead of email or Google. Three
+        kid-safe words and four digits act as your key: anyone who knows the code can sign in. The
+        server stores only a one-way keyed hash of it, never the readable code. A copy is kept only
+        in browsers where you create or enter the code, so you can reveal it with a tap; it is not
+        included in library sync or exports and is removed from this browser when you sign out.
+        Regenerating a code invalidates the old one but does not sign out existing devices. Without
+        another linked sign-in method, a lost code cannot be recovered. Save it privately, or add
+        email or Google to the same account.
+      </p>
+      <p>
+        Optional Jesklabs sign-in is shared by Jesklabs apps; it stores your email and which
+        Jesklabs apps you use. The shared sign-in service at accounts.jesklabs.com sends
+        short-lived, six-digit codes through our email delivery provider and stores the verified
+        address, not for marketing. Incord’s lasting account records contain only a one-way keyed
+        fingerprint of the address and an app-specific Jesklabs identity. To ask you to confirm an
+        existing Jesklabs session, Incord temporarily keeps the address in a pending sign-in record
+        valid for five minutes, removed when you confirm or cancel or during expired-record cleanup.
+        Codes are stored as hashes, expire after 10 minutes, and can be used only once. Signing in
+        through another Jesklabs app always asks you to confirm before signing in to Incord. Signing
+        out of Incord signs out this app only.
+      </p>
+      <p>
+        Passkey and recovery-code sign-in have been retired. Dormant public keys or hashed recovery
+        records from earlier versions may remain until account deletion; they are no longer used for
+        authentication.
+      </p>
+      <p>
+        If you create an account, Incord stores what it needs to sync your library across devices:
+      </p>
+      <ul>
+        <li>the display name you choose and your app settings;</li>
+        <li>
+          your library (passage references and text you added yourself) and your practice history;
+        </li>
+        <li>
+          a one-way keyed hash of your email address if you choose email or Google sign-in, and an
+          app-specific identity from Jesklabs sign-in;
+        </li>
+        <li>
+          if you turn on reminders, your reminder time, time zone and the push address your browser
+          provides.
+        </li>
+      </ul>
+      <p>
+        ESV text is fetched on demand and kept only on your device. It is never stored on Incord's
+        servers.
+      </p>
 
-  <h2>Sign in with Google</h2>
-  <p>If you choose Google sign-in, Incord receives your Google account ID, your name, and your verified email address. It uses them only to sign you in, including recognizing the same verified email used for email sign-in. Incord’s lasting account records store your email only as the same one-way keyed fingerprint; the temporary confirmation record is described above. The shared Jesklabs sign-in service stores your verified email and optional Google account ID to recognize you across participating Jesklabs apps. Incord does not read your inbox, contacts, or files, and does not sell your Google information or use it for advertising.</p>
+      <h2>Sign in with Google</h2>
+      <p>
+        If you choose Google sign-in, Incord receives your Google account ID, your name, and your
+        verified email address. It uses them only to sign you in, including recognizing the same
+        verified email used for email sign-in. Incord’s lasting account records store your email
+        only as the same one-way keyed fingerprint; the temporary confirmation record is described
+        above. The shared Jesklabs sign-in service stores your verified email and optional Google
+        account ID to recognize you across participating Jesklabs apps. Incord does not read your
+        inbox, contacts, or files, and does not sell your Google information or use it for
+        advertising.
+      </p>
 
-  <h2>Groups you choose to join</h2>
-  <p>Groups share the display name you choose, your practiced days this week and weekly goal, learned-item count, current streak, and progress toward the group’s shared goal. By default, members also see the titles or references and translations of items you are memorizing or have learned. Turn off “Show what I’m memorizing to my groups” in Settings to hide those titles from future group views immediately after sync. Item text, slips, grades, review details, email addresses and account IDs are never shared with group members.</p>
-  <p>Invitations are expiring, revocable codes. Owners can require approval, remove members, transfer ownership or delete a group. Leaving or removal stops future group access; it cannot erase information another member already saw. Account deletion removes your memberships and deletes groups you own. Incord stores the membership, invitation hashes, shared goal, permissions and delivery state needed to operate groups; it reads current, privacy-filtered progress from your account instead of copying your library into a group.</p>
-  <p>Members can send a quiet prayer encouragement once per recipient per day. There are no prayer counters or read receipts. Turn off Prayer encouragements in Settings to stop them. When a group requires approval, a join request can notify its owner and admins once per requester, using your chosen display name; approval can notify you. Declines do not send a notification. All group notifications respect your push setting. An optional weekly group summary is on by default for members with push reminders enabled; turn it off inside any group. Summaries use positive aggregate progress, never a list of people who did not practice.</p>
+      <h2>Groups you choose to join</h2>
+      <p>
+        Groups share the display name you choose, your practiced days this week and weekly goal,
+        learned-item count, current streak, and progress toward the group’s shared goal. By default,
+        members also see the titles or references and translations of items you are memorizing or
+        have learned. Turn off “Show what I’m memorizing to my groups” in Settings to hide those
+        titles from future group views immediately after sync. Item text, slips, grades, review
+        details, email addresses and account IDs are never shared with group members.
+      </p>
+      <p>
+        Invitations are expiring, revocable codes. Owners can require approval, remove members,
+        transfer ownership or delete a group. Leaving or removal stops future group access; it
+        cannot erase information another member already saw. Account deletion removes your
+        memberships and deletes groups you own. Incord stores the membership, invitation hashes,
+        shared goal, permissions and delivery state needed to operate groups; it reads current,
+        privacy-filtered progress from your account instead of copying your library into a group.
+      </p>
+      <p>
+        Members can send a quiet prayer encouragement once per recipient per day. There are no
+        prayer counters or read receipts. Turn off Prayer encouragements in Settings to stop them.
+        When a group requires approval, a join request can notify its owner and admins once per
+        requester, using your chosen display name; approval can notify you. Declines do not send a
+        notification. All group notifications respect your push setting. An optional weekly group
+        summary is on by default for members with push reminders enabled; turn it off inside any
+        group. Summaries use positive aggregate progress, never a list of people who did not
+        practice.
+      </p>
 
-  <h2>Connected apps</h2>
-  <p>You can choose to connect an AI assistant or another MCP client to your account. Before it connects, Incord asks you to approve read and/or write permissions. Read access can expose your library, practice information and privacy-filtered groups to that app; write access lets it add memory items, not edit or delete existing ones. ESV text is never sent through the connector.</p>
-  <p>Incord stores the authorization records needed to keep the connection working, with tokens hashed and authorization properties encrypted; app names, permission scopes, connection dates and account identifiers remain in the authorization records. The connected app handles any information it receives under its own privacy policy. You can stop future access at any time in Settings → Connected apps; revocation does not erase information the app has already received. See <a href="/connect.html">how to connect an app</a>.</p>
+      <h2>Connected apps</h2>
+      <p>
+        You can choose to connect an AI assistant or another MCP client to your account. Before it
+        connects, Incord asks you to approve read and/or write permissions. Read access can expose
+        your library, practice information and privacy-filtered groups to that app; write access
+        lets it add memory items, not edit or delete existing ones. ESV text is never sent through
+        the connector.
+      </p>
+      <p>
+        Incord stores the authorization records needed to keep the connection working, with tokens
+        hashed and authorization properties encrypted; app names, permission scopes, connection
+        dates and account identifiers remain in the authorization records. The connected app handles
+        any information it receives under its own privacy policy. You can stop future access at any
+        time in Settings → Connected apps; revocation does not erase information the app has already
+        received. See <a href="/connect.html">how to connect an app</a>.
+      </p>
 
-  <h2>Feedback you choose to send</h2>
-  <p>Send feedback from Settings or ask a connected app to send it. Incord stores the kind (idea, problem or other), your message, the date, and any reply email you explicitly provide. The reply field starts blank: your sign-in email is never copied into it. Unlike hashed sign-in addresses, a reply address you provide in feedback is stored as readable text so Eric can respond.</p>
-  <p>Settings offers an optional, initially enabled checkbox to include the app version, device/platform and browser family, viewport size, and whether you are signed in. It does not include library contents, your account ID, or your full browser user-agent string. MCP feedback records the connected app’s name instead; it sends no device metadata.</p>
-  <p>Eric reads feedback through a private admin page and the Incord support mailbox at incord@jesklabs.com. Email is delivered through Resend to that support mailbox; a reply address is used as the reply-to address. A daily email cap means some messages are stored without an email notification. Short keyed references and temporary hashed IP/account rate-limit keys help prevent spam; raw IP addresses and account IDs are not included in feedback emails.</p>
-  <p>Feedback is kept separately from your synced library for review and follow-up. Deleting an Incord account does not remove feedback already received by the support mailbox. Avoid including secrets or anything you do not want the support team to read.</p>
+      <h2>Feedback you choose to send</h2>
+      <p>
+        Send feedback from Settings or ask a connected app to send it. Incord stores the kind (idea,
+        problem or other), your message, the date, and any reply email you explicitly provide. The
+        reply field starts blank: your sign-in email is never copied into it. Unlike hashed sign-in
+        addresses, a reply address you provide in feedback is stored as readable text so Eric can
+        respond.
+      </p>
+      <p>
+        Settings offers an optional, initially enabled checkbox to include the app version,
+        device/platform and browser family, viewport size, and whether you are signed in. It does
+        not include library contents, your account ID, or your full browser user-agent string. MCP
+        feedback records the connected app’s name instead; it sends no device metadata.
+      </p>
+      <p>
+        Eric reads feedback through a private admin page and the Incord support mailbox at
+        incord@jesklabs.com. Email is delivered through Resend to that support mailbox; a reply
+        address is used as the reply-to address. A daily email cap means some messages are stored
+        without an email notification. Short keyed references and temporary hashed IP/account
+        rate-limit keys help prevent spam; raw IP addresses and account IDs are not included in
+        feedback emails.
+      </p>
+      <p>
+        Feedback is kept separately from your synced library for review and follow-up. Deleting an
+        Incord account does not remove feedback already received by the support mailbox. Avoid
+        including secrets or anything you do not want the support team to read.
+      </p>
 
-  <h2>Anonymous usage counts</h2>
-  <p>Incord keeps daily totals, such as how many people practiced today or how many steps were passed, so the app can be improved. These totals contain no account identity, passage references or text. You can turn them off in Settings → Privacy. They are off automatically if your browser sends Global Privacy Control or Do Not Track.</p>
+      <h2>Anonymous usage counts</h2>
+      <p>
+        Incord keeps daily totals, such as how many people practiced today or how many steps were
+        passed, so the app can be improved. These totals contain no account identity, passage
+        references or text. You can turn them off in Settings → Privacy. They are off automatically
+        if your browser sends Global Privacy Control or Do Not Track.
+      </p>
 
-  <p>Incord also keeps aggregate server-side MCP operation counts to understand connector use and reliability. These contain no library content, passage references, prompts or ESV text. They respect the privacy preference when you authorize the connection, later account opt-outs, and privacy signals sent by the connected client.</p>
+      <p>
+        Incord also keeps aggregate server-side MCP operation counts to understand connector use and
+        reliability. These contain no library content, passage references, prompts or ESV text. They
+        respect the privacy preference when you authorize the connection, later account opt-outs,
+        and privacy signals sent by the connected client.
+      </p>
 
-  <h2>Where data lives</h2>
-  <p>Incord runs on Cloudflare. Data is sent over HTTPS and is not sold, rented or shared for advertising.</p>
+      <h2>Where data lives</h2>
+      <p>
+        Incord runs on Cloudflare. Data is sent over HTTPS and is not sold, rented or shared for
+        advertising.
+      </p>
 
-  <h2>Your choices</h2>
-  <ul>
-    <li><strong>Export:</strong> Settings → Export data downloads everything tied to your account.</li>
-    <li><strong>Revoke connected apps:</strong> Settings → Connected apps stops an app’s future access.</li>
-    <li><strong>Delete:</strong> Settings → Delete account permanently removes your account and its synced data.</li>
-  </ul>
+      <h2>Your choices</h2>
+      <ul>
+        <li>
+          <strong>Export:</strong> Settings → Export data downloads everything tied to your account.
+        </li>
+        <li>
+          <strong>Revoke connected apps:</strong> Settings → Connected apps stops an app’s future
+          access.
+        </li>
+        <li>
+          <strong>Delete:</strong> Settings → Delete account permanently removes your account and
+          its synced data.
+        </li>
+      </ul>
 
-  <hr>
-  <p>Questions? Email <a href="mailto:incord@jesklabs.com">incord@jesklabs.com</a>.</p>
-  <p><a href="/">Back to Incord</a></p>
-</main>
-</body>
+      <hr />
+      <p>Questions? Email <a href="mailto:incord@jesklabs.com">incord@jesklabs.com</a>.</p>
+      <p><a href="/">Back to Incord</a></p>
+    </main>
+  </body>
 </html>

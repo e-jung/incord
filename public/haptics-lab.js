@@ -5,9 +5,10 @@ for (const name of ['a', 'b', 'c', 'd', 'e']) {
   const button = document.querySelector(`[data-test="${name}"]`);
   let count = 0;
   let timer;
-  const record = event => {
+  const record = (event) => {
     output.value = String(++count);
-    document.getElementById('event-details').textContent = `${name.toUpperCase()}: trusted=${event.isTrusted}, checked=${input.checked}`;
+    document.getElementById('event-details').textContent =
+      `${name.toUpperCase()}: trusted=${event.isTrusted}, checked=${input.checked}`;
     if (button) {
       button.classList.add('pressed');
       clearTimeout(timer);
@@ -16,9 +17,10 @@ for (const name of ['a', 'b', 'c', 'd', 'e']) {
   };
   input.addEventListener('click', record);
   // Accessible button activation records once without synthesizing a switch tap.
-  if (button) button.addEventListener('click', event => {
-    if (event.target === button) record(event);
-  });
+  if (button)
+    button.addEventListener('click', (event) => {
+      if (event.target === button) record(event);
+    });
 }
 
 // Keep diagnostics outside the replaceable targets: navigation must not reset them.
@@ -59,7 +61,7 @@ function navigationTrial(name, deferred) {
         }
         render(); // Removes the switch and button, mimicking a navigation transition.
       });
-      input.addEventListener('click', event => {
+      input.addEventListener('click', (event) => {
         event.stopPropagation();
         record(event, input);
         if (name === 'h') button.classList.add('haptic-pressed');

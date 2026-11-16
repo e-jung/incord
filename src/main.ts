@@ -1,13 +1,13 @@
-import {installErrorReporting} from './telemetry';
+import { installErrorReporting } from './telemetry';
 installErrorReporting();
-import {mount} from 'svelte';
+import { mount } from 'svelte';
 import './fonts.css';
 import './tokens.css';
 import './app.css';
 import './viewport.css';
-import {installViewportGestures} from './viewport';
+import { installViewportGestures } from './viewport';
 import App from './App.svelte';
 const cleanupViewportGestures = installViewportGestures();
 import.meta.hot?.dispose(cleanupViewportGestures);
-mount(App,{target:document.getElementById('app')!});
-if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
+mount(App, { target: document.getElementById('app')! });
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');

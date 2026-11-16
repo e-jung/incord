@@ -3,7 +3,7 @@
  */
 export function installViewportGestures(target: Document = document): () => void {
   const preventZoom = (event: Event) => event.preventDefault();
-  const options = {passive: false};
+  const options = { passive: false };
   target.addEventListener('gesturestart', preventZoom, options);
   target.addEventListener('gesturechange', preventZoom, options);
   return () => {

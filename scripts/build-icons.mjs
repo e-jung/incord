@@ -3,10 +3,13 @@
 import { writeFileSync } from 'node:fs';
 import sharp from 'sharp';
 
-const TILE = '#4D62D3', CREAM = '#FBF3E2', WIDTH = 36;
+const TILE = '#4D62D3',
+  CREAM = '#FBF3E2',
+  WIDTH = 36;
 // One cord: in from the left, up the heart's right side, over both lobes,
 // down the left side, crossing over itself at the base and out to the right.
-const UNDER = 'M-200 388C90 388 196 390 256 330C316 270 390 246 390 192C390 146 356 118 320 118C294 118 268 132 256 158C244 132 218 118 192 118C156 118 122 146 122 192C122 246 196 270 256 330';
+const UNDER =
+  'M-200 388C90 388 196 390 256 330C316 270 390 246 390 192C390 146 356 118 320 118C294 118 268 132 256 158C244 132 218 118 192 118C156 118 122 146 122 192C122 246 196 270 256 330';
 const OVER = 'M122 192C122 246 196 270 256 330C316 390 422 388 712 388';
 
 function icon({ rounded = true, scale = 1, label = false } = {}) {
@@ -24,7 +27,10 @@ function icon({ rounded = true, scale = 1, label = false } = {}) {
 }
 
 // Render at 4x and downsample for clean edges; full-bleed squares drop the alpha channel (iOS shows alpha as black).
-const png = (svg, size, file, opaque = false) => { const image = sharp(Buffer.from(svg), { density: 72 * size / 512 * 4 }).resize(size, size); return (opaque ? image.removeAlpha() : image).png({ compressionLevel: 9 }).toFile(file); };
+const png = (svg, size, file, opaque = false) => {
+  const image = sharp(Buffer.from(svg), { density: ((72 * size) / 512) * 4 }).resize(size, size);
+  return (opaque ? image.removeAlpha() : image).png({ compressionLevel: 9 }).toFile(file);
+};
 writeFileSync('public/icon.svg', icon({ label: true }));
 await png(icon(), 192, 'public/icon-192.png');
 await png(icon(), 512, 'public/icon-512.png');

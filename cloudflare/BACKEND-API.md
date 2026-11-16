@@ -34,7 +34,6 @@ Use localhost for the test-only fake mailbox. The API tests sign in using six-di
 
 Passkey registration/login and recovery-code routes are removed (404). `/api/config` and user responses expose no passkey flags or recovery codes. Existing credential SQL tables are retained, unused; there is no destructive migration. The legacy host retains page 301 redirects, API 410 responses and the unregistering service worker; it no longer serves related-origin WebAuthn metadata.
 
-
 ## Invite-only groups
 
 `GROUPS` binds the SQLite-backed `GroupDO`; additive migration `v4-groups` creates it on deployment. Existing Worker, UserDO and registry identities do not change. No KV/D1 or manual Cloudflare provisioning is required. All public routes use the existing session and same-origin write checks.

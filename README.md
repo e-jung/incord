@@ -1,6 +1,6 @@
 # Incord
 
-*A little practice. A lasting word.*
+_A little practice. A lasting word._
 
 Incord is an offline-first app for memorizing Scripture, historic catechisms and creeds, or your own text. Read along, practice the first letters of words as they gradually disappear, and return for spaced reviews. Install it as a progressive web app on your phone or use it in a browser. You can practice without an account; optional sign-in keeps your library and progress across devices.
 
@@ -67,19 +67,19 @@ Preserve the Durable Object classes, bindings and additive migration sequence. F
 
 Configure secrets with `npx wrangler secret put NAME`; do not put secret values in Wrangler config or source control.
 
-| Setting | Purpose |
-| --- | --- |
-| `SESSION_SECRET` | Required: strong random secret of at least 32 characters for sessions, identity hashes and OAuth encryption. Keep stable across releases. |
-| `APP_ORIGIN` | Required for deployment: your canonical HTTPS origin; set as a Wrangler variable or deploy-time `--var`. Leave unset for origin-agnostic local use. |
-| `STATS_TOKEN` | Optional private `/stats` dashboard and orphan-account maintenance access; use a separate strong random secret. Never put it in a URL. |
-| `RESEND_API_KEY` | Optional feedback email notifications via Resend (sign-in mail is sent by Accounts). |
-| `EMAIL_FROM` | Sender identity for Resend. Set your own verified sender; otherwise the maintained service's default sender is used. |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Legacy Google sign-in, retained as the default until Accounts Google is verified in production. Register your origin's `/api/auth/google/callback`. |
-| `ACCOUNTS_SVC` | Cloudflare service binding to `jesklabs-accounts`, entrypoint `IncordClient`; enables shared email and explicit SSO sign-in. |
-| `ACCOUNTS_GOOGLE` | Public variable, `0` by default. Only `1` switches the Google button to Accounts. The direct `/api/auth/jesklabs?provider=google` route is always testable. |
-| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Optional Web Push: matching P-256 public/private keys and operator contact URI. Private key is the base64url raw scalar. Keep keys stable. |
-| `DONATE_URL` | Optional public Wrangler variable: HTTPS support link, shown only in About and Connect. |
-| `ESV_API_KEY` | Optional server-side Crossway API access, subject to Crossway's conditions. ESV is never bundled. |
+| Setting                                                  | Purpose                                                                                                                                                     |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SESSION_SECRET`                                         | Required: strong random secret of at least 32 characters for sessions, identity hashes and OAuth encryption. Keep stable across releases.                   |
+| `APP_ORIGIN`                                             | Required for deployment: your canonical HTTPS origin; set as a Wrangler variable or deploy-time `--var`. Leave unset for origin-agnostic local use.         |
+| `STATS_TOKEN`                                            | Optional private `/stats` dashboard and orphan-account maintenance access; use a separate strong random secret. Never put it in a URL.                      |
+| `RESEND_API_KEY`                                         | Optional feedback email notifications via Resend (sign-in mail is sent by Accounts).                                                                        |
+| `EMAIL_FROM`                                             | Sender identity for Resend. Set your own verified sender; otherwise the maintained service's default sender is used.                                        |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`               | Legacy Google sign-in, retained as the default until Accounts Google is verified in production. Register your origin's `/api/auth/google/callback`.         |
+| `ACCOUNTS_SVC`                                           | Cloudflare service binding to `jesklabs-accounts`, entrypoint `IncordClient`; enables shared email and explicit SSO sign-in.                                |
+| `ACCOUNTS_GOOGLE`                                        | Public variable, `0` by default. Only `1` switches the Google button to Accounts. The direct `/api/auth/jesklabs?provider=google` route is always testable. |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Optional Web Push: matching P-256 public/private keys and operator contact URI. Private key is the base64url raw scalar. Keep keys stable.                  |
+| `DONATE_URL`                                             | Optional public Wrangler variable: HTTPS support link, shown only in About and Connect.                                                                     |
+| `ESV_API_KEY`                                            | Optional server-side Crossway API access, subject to Crossway's conditions. ESV is never bundled.                                                           |
 
 MCP reuses `SESSION_SECRET` and `APP_ORIGIN`; no additional MCP secret is needed. Review service-specific sender/contact defaults before hosting your own instance. Build and commit your release before deployment so the displayed version matches the deployed source. After adapting configuration and setting secrets:
 
@@ -166,8 +166,9 @@ Bug reports, ideas and small focused pull requests are welcome; see [CONTRIBUTIN
 To include an optional support link in this static README, set `DONATE_URL` in `wrangler.jsonc` and run `npm run docs:support` before committing. With no URL set, no Support section renders.
 
 <!-- SUPPORT:START -->
+
 ## Support
 
-[Support Jesklabs](<https://ko-fi.com/jesklabs>)
+[Support Jesklabs](https://ko-fi.com/jesklabs)
 
 <!-- SUPPORT:END -->

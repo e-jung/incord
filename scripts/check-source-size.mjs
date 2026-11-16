@@ -8,14 +8,17 @@ const excluded = ['public/content/', 'content/', 'public/licenses/'];
 const source = /\.(?:ts|js|mjs|svelte|css|html|py|sh)$/;
 const files = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard'], {
   encoding: 'utf8',
-}).trim().split('\n');
+})
+  .trim()
+  .split('\n');
 const errors = [];
 for (const file of new Set(files)) {
-  if (!source.test(file) || excluded.some(prefix => file.startsWith(prefix))) continue;
+  if (!source.test(file) || excluded.some((prefix) => file.startsWith(prefix))) continue;
   const lines = readFileSync(file, 'utf8').trimEnd().split('\n');
   if (lines.length > 1000) errors.push(`${file}: ${lines.length} lines (limit 1000)`);
   lines.forEach((line, index) => {
-    if (line.length > 200) errors.push(`${file}:${index + 1}: ${line.length} characters (limit 200)`);
+    if (line.length > 200)
+      errors.push(`${file}:${index + 1}: ${line.length} characters (limit 200)`);
   });
 }
 if (errors.length) {

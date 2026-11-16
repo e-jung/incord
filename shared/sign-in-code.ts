@@ -23,19 +23,26 @@ SOFTWARE.
 */
 // 2,048 curated kid-safe compound words: 16 nature/color prefixes × 128 nouns.
 // Three independent 11-bit choices plus 10,000 suffixes = 46.28 bits of entropy.
-const prefixes='amber aqua autumn blue bright coral dawn fair gold green jade lilac mint silver sunny violet'.split(' ');
-const nouns='acorn apple apron arch aster badger bag bamboo banana basket bay beach bean bear bee bell berry birch bird boat book breeze brook brush bubble bunny butterfly cabin cactus cake camel candle canoe carrot castle cedar cherry chick cloud clover coast cocoa comet coral cotton crane creek cricket crown daisy deer dolphin dove dragon dream duck eagle earth elm feather fern field finch firefly fish flower forest fox frog garden gem goose grape grass grove gull harbor hare hawk hazel hedgehog hill honey horse island ivy jasmine kite kitten kiwi koala lake lamb lantern lark leaf lemon lily lion lotus maple meadow melon moon moss mouse nest oak ocean olive otter owl panda peach pearl pebble pine plum pond poppy rabbit rainbow raven reed ridge river robin rose'.split(' ');
-if(nouns.length!==128) throw Error('Code wordlist must contain 128 nouns');
-export const CODE_WORDS=Object.freeze(prefixes.flatMap(p=>nouns.map(n=>p+n)));
+const prefixes =
+  'amber aqua autumn blue bright coral dawn fair gold green jade lilac mint silver sunny violet'.split(
+    ' ',
+  );
+const nouns =
+  'acorn apple apron arch aster badger bag bamboo banana basket bay beach bean bear bee bell berry birch bird boat book breeze brook brush bubble bunny butterfly cabin cactus cake camel candle canoe carrot castle cedar cherry chick cloud clover coast cocoa comet coral cotton crane creek cricket crown daisy deer dolphin dove dragon dream duck eagle earth elm feather fern field finch firefly fish flower forest fox frog garden gem goose grape grass grove gull harbor hare hawk hazel hedgehog hill honey horse island ivy jasmine kite kitten kiwi koala lake lamb lantern lark leaf lemon lily lion lotus maple meadow melon moon moss mouse nest oak ocean olive otter owl panda peach pearl pebble pine plum pond poppy rabbit rainbow raven reed ridge river robin rose'.split(
+    ' ',
+  );
+if (nouns.length !== 128) throw Error('Code wordlist must contain 128 nouns');
+export const CODE_WORDS = Object.freeze(prefixes.flatMap((p) => nouns.map((n) => p + n)));
 export function generateSignInCode() {
-  const r=crypto.getRandomValues(new Uint32Array(4));
+  const r = crypto.getRandomValues(new Uint32Array(4));
   // Reject suffix range remainder to avoid modulo bias.
-  while(r[3]>=4294960000) r[3]=crypto.getRandomValues(new Uint32Array(1))[0];
-  return `${CODE_WORDS[r[0]&2047]}-${CODE_WORDS[r[1]&2047]}-${CODE_WORDS[r[2]&2047]}-${String(r[3]%10000).padStart(4,'0')}`;
+  while (r[3] >= 4294960000) r[3] = crypto.getRandomValues(new Uint32Array(1))[0];
+  return `${CODE_WORDS[r[0] & 2047]}-${CODE_WORDS[r[1] & 2047]}-${CODE_WORDS[r[2] & 2047]}-${String(r[3] % 10000).padStart(4, '0')}`;
 }
 
 /** Canonical concatenation; punctuation other than hyphens is not accepted. */
-export const normalizeCode = (value: unknown): string => typeof value === 'string' && value.length <= 256 ? value.replace(/[-\s]/g, '').toLowerCase() : '';
+export const normalizeCode = (value: unknown): string =>
+  typeof value === 'string' && value.length <= 256 ? value.replace(/[-\s]/g, '').toLowerCase() : '';
 const words = new Set<string>(CODE_WORDS);
 // Compound words vary in length; validate concatenations by segmentation, not hyphens.
 export function validCode(value: unknown): boolean {
@@ -45,7 +52,9 @@ export function validCode(value: unknown): boolean {
   let positions = new Set([0]);
   for (let part = 0; part < 3; part++) {
     const next = new Set<number>();
-    for (const start of positions) for (let end = start + 5; end <= Math.min(text.length, start + 24); end++) if (words.has(text.slice(start, end))) next.add(end);
+    for (const start of positions)
+      for (let end = start + 5; end <= Math.min(text.length, start + 24); end++)
+        if (words.has(text.slice(start, end))) next.add(end);
     positions = next;
   }
   return positions.has(text.length);

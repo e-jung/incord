@@ -6,11 +6,14 @@ export { DEFAULT_KEY_SAMPLE };
  */
 export function createKeySampleLoader(context: AudioContext) {
   let pending: Promise<AudioBuffer | undefined> | undefined;
-  return () => pending ??= (async () => {
-    try {
-      const response = await fetch(`/audio/${DEFAULT_KEY_SAMPLE}.mp3`);
-      if (!response.ok) return;
-      return await context.decodeAudioData(await response.arrayBuffer());
-    } catch { return; }
-  })();
+  return () =>
+    (pending ??= (async () => {
+      try {
+        const response = await fetch(`/audio/${DEFAULT_KEY_SAMPLE}.mp3`);
+        if (!response.ok) return;
+        return await context.decodeAudioData(await response.arrayBuffer());
+      } catch {
+        return;
+      }
+    })());
 }

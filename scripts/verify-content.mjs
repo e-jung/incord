@@ -5,35 +5,68 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const read = name => fs.readFile(path.join(root, 'public/content', name), 'utf8').then(JSON.parse);
+const read = (name) =>
+  fs.readFile(path.join(root, 'public/content', name), 'utf8').then(JSON.parse);
 let source = await fs.readFile(path.join(root, 'src/content.ts'), 'utf8');
-for (const [variable, file] of [['documentData','documents.json'],['starterData','starters.json'],['bookData','books.json']]) {
-  source = source.replace(new RegExp(`import ${variable} from '[^']+';`), `const ${variable} = ${JSON.stringify(await read(file))};`);
+for (const [variable, file] of [
+  ['documentData', 'documents.json'],
+  ['starterData', 'starters.json'],
+  ['bookData', 'books.json'],
+]) {
+  source = source.replace(
+    new RegExp(`import ${variable} from '[^']+';`),
+    `const ${variable} = ${JSON.stringify(await read(file))};`,
+  );
 }
-const copySource = await fs.readFile(path.join(root,'src/config/copy.ts'),'utf8');
+const copySource = await fs.readFile(path.join(root, 'src/config/copy.ts'), 'utf8');
 const lookupCopy = copySource.match(/export const contentCopy=[\s\S]*?} as const;/)?.[0];
 assert.ok(lookupCopy, 'canonical lookup copy exists');
-source = source.replace("import {contentCopy} from './config/copy';", lookupCopy.replace('export const', 'const'));
+source = source.replace(
+  "import {contentCopy} from './config/copy';",
+  lookupCopy.replace('export const', 'const'),
+);
 source = source.replaceAll('import.meta.env.BASE_URL', "'/'");
 let sharedSource = await fs.readFile(path.join(root, 'shared/esv.ts'), 'utf8');
-sharedSource = sharedSource.replace(/import books from [^;]+;/, `const books = ${JSON.stringify(await read('books.json'))};`);
-sharedSource = sharedSource.replace(/import chapterCounts from [^;]+;/, `const chapterCounts = ${await fs.readFile(path.join(root, 'shared/esv-structure.json'), 'utf8')};`);
-const sharedJS = ts.transpileModule(sharedSource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
-source = source.replace("'../shared/esv'", `"data:text/javascript;base64,${Buffer.from(sharedJS).toString('base64')}"`);
-const { outputText } = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } });
+sharedSource = sharedSource.replace(
+  /import books from [^;]+;/,
+  `const books = ${JSON.stringify(await read('books.json'))};`,
+);
+sharedSource = sharedSource.replace(
+  /import chapterCounts from [^;]+;/,
+  `const chapterCounts = ${await fs.readFile(path.join(root, 'shared/esv-structure.json'), 'utf8')};`,
+);
+const sharedJS = ts.transpileModule(sharedSource, {
+  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
+}).outputText;
+source = source.replace(
+  "'../shared/esv'",
+  `"data:text/javascript;base64,${Buffer.from(sharedJS).toString('base64')}"`,
+);
+const { outputText } = ts.transpileModule(source, {
+  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
+});
 let fetchCount = 0;
-globalThis.fetch = async url => {
+globalThis.fetch = async (url) => {
   fetchCount++;
-  if (String(url).startsWith('/api/esv?')) return {ok:true, text:async()=> 'Mock ESV passage.'};
+  if (String(url).startsWith('/api/esv?'))
+    return { ok: true, text: async () => 'Mock ESV passage.' };
   const relative = String(url).replace('/content/', '');
   return { ok: true, json: () => read(relative) };
 };
-const { lookupReference, fetchEsvText, starters, documents } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
+const { lookupReference, fetchEsvText, starters, documents } = await import(
+  `data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`
+);
 assert.equal(documents[0].items.length, 107);
 assert.equal(documents[1].items.length, 132);
-assert.equal(new Set(documents[1].items.map(q => q.lordsDay)).size, 52);
-assert.deepEqual(documents[1].items.filter(q => q.lordsDay === 1).map(q => q.number), [1, 2]);
-assert.deepEqual(documents[1].items.filter(q => q.lordsDay === 52).map(q => q.number), [127, 128, 129]);
+assert.equal(new Set(documents[1].items.map((q) => q.lordsDay)).size, 52);
+assert.deepEqual(
+  documents[1].items.filter((q) => q.lordsDay === 1).map((q) => q.number),
+  [1, 2],
+);
+assert.deepEqual(
+  documents[1].items.filter((q) => q.lordsDay === 52).map((q) => q.number),
+  [127, 128, 129],
+);
 assert.equal(starters.length, 5);
 assert.equal(starters[0].items.length, 10);
 assert.equal(starters[1].items.length, 12);
@@ -43,64 +76,115 @@ assert.equal((await lookupReference('Romans 8:28-30')).length, 3);
 assert.equal(fetchCount, 1);
 await lookupReference('Rom. 8:28');
 assert.equal(fetchCount, 1, 'same book cache');
-assert.match((await lookupReference('John 3:16','KJV'))[0].text, /only begotten Son/);
+assert.match((await lookupReference('John 3:16', 'KJV'))[0].text, /only begotten Son/);
 assert.equal((await lookupReference('John 3:36-4:2', 'KJV')).length, 3);
 assert.equal((await lookupReference('Psalm 23')).length, 6);
 assert.equal((await lookupReference('I John 1:9')).length, 1);
-assert.equal((await lookupReference('Genesis 1-2','WEB')).length, 56);
-for (const reference of ['Notabook 1:1','Romans 8:30-28','John 99','Romans 8:999','Romans 0:1','John 3:16-2:1','John 3:0','']) {
+assert.equal((await lookupReference('Genesis 1-2', 'WEB')).length, 56);
+for (const reference of [
+  'Notabook 1:1',
+  'Romans 8:30-28',
+  'John 99',
+  'Romans 8:999',
+  'Romans 0:1',
+  'John 3:16-2:1',
+  'John 3:0',
+  '',
+]) {
   await assert.rejects(() => lookupReference(reference), undefined, reference);
 }
-await assert.rejects(() => lookupReference('John 3:16','UNKNOWN'));
+await assert.rejects(() => lookupReference('John 3:16', 'UNKNOWN'));
 const esv = await lookupReference('John 3:16', 'ESV');
 assert.equal(esv[0].translation, 'ESV');
 assert.equal(esv[0].text, '', 'reference lookup never downloads ESV quotations');
 assert.equal(await fetchEsvText(esv[0].reference), 'Mock ESV passage.');
 assert.deepEqual(esv[0].esvVerseKeys, ['jhn-3-16']);
 // P1-13 / P2-24: common reference notation, all five one-chapter books.
-for (const [short, explicit] of [['Jude 3','Jude 1:3'], ['Jude 24–25','Jude 1:24-25'], ['Philemon 4','Philemon 1:4'], ['Obadiah 3','Obadiah 1:3'], ['2 John 4','2 John 1:4'], ['3 John 4','3 John 1:4'], ['John 3.16','John 3:16'], ['jn 3 16','John 3:16'], ['jn 3.16-18','John 3:16-18']]) {
+for (const [short, explicit] of [
+  ['Jude 3', 'Jude 1:3'],
+  ['Jude 24–25', 'Jude 1:24-25'],
+  ['Philemon 4', 'Philemon 1:4'],
+  ['Obadiah 3', 'Obadiah 1:3'],
+  ['2 John 4', '2 John 1:4'],
+  ['3 John 4', '3 John 1:4'],
+  ['John 3.16', 'John 3:16'],
+  ['jn 3 16', 'John 3:16'],
+  ['jn 3.16-18', 'John 3:16-18'],
+]) {
   assert.deepEqual(await lookupReference(short), await lookupReference(explicit), short);
 }
 // P1-11: twelve articles, bounded catechism parts, no words lost at seams.
 assert.equal(documents[2].items.length, 12);
 assert.equal(documents[3].items.length, 17);
 assert.equal(starters[3].items.length, 12);
-for (const doc of documents.filter(d => !['apostles','nicene'].includes(d.id))) {
+for (const doc of documents.filter((d) => !['apostles', 'nicene'].includes(d.id))) {
   for (const entry of doc.items) assert.ok(entry.text.split(/\s+/).length <= 150, entry.id);
 }
-for (const [number, wordCount, parts] of [[77,170,2],[92,345,3]]) {
-  const entries=documents[1].items.filter(i => i.number === number);
+for (const [number, wordCount, parts] of [
+  [77, 170, 2],
+  [92, 345, 3],
+]) {
+  const entries = documents[1].items.filter((i) => i.number === number);
   assert.equal(entries.length, parts);
-  assert.equal(entries.map(i => i.text).join(' ').split(/\s+/).length, wordCount);
-  entries.forEach((entry,i) => assert.match(entry.title, new RegExp(`Q${number} \\(${i+1}/${parts}\\)`)));
+  assert.equal(
+    entries
+      .map((i) => i.text)
+      .join(' ')
+      .split(/\s+/).length,
+    wordCount,
+  );
+  entries.forEach((entry, i) =>
+    assert.match(entry.title, new RegExp(`Q${number} \\(${i + 1}/${parts}\\)`)),
+  );
 }
 // P1-12: the first verse contains Scripture, while headings stay optional metadata.
-const psalms=await read('bsb/psa.json');
-assert.equal(Object.keys(psalms.headings).length,116);
+const psalms = await read('bsb/psa.json');
+assert.equal(Object.keys(psalms.headings).length, 116);
 assert.equal(psalms.headings['23'], 'A Psalm of David.');
-for (const [chapter, start] of [['3','O LORD'],['18','I love You'],['23','The LORD is my shepherd'],['51','Have mercy'],['52','Why do you boast'],['54','Save me'],['60','You have rejected'],['75','We give thanks'],['120','In my distress']]) {
+for (const [chapter, start] of [
+  ['3', 'O LORD'],
+  ['18', 'I love You'],
+  ['23', 'The LORD is my shepherd'],
+  ['51', 'Have mercy'],
+  ['52', 'Why do you boast'],
+  ['54', 'Save me'],
+  ['60', 'You have rejected'],
+  ['75', 'We give thanks'],
+  ['120', 'In my distress'],
+]) {
   assert.ok(psalms.chapters[chapter]['1'].startsWith(start), `Psalm ${chapter}:1`);
 }
-const rawBSB=await fs.readFile(path.join(root,'content/raw/bsb.txt'),'utf8');
+const rawBSB = await fs.readFile(path.join(root, 'content/raw/bsb.txt'), 'utf8');
 for (const line of rawBSB.split(/\r?\n/)) {
-  const verse=/^Psalm (\d+):1\t(.*)$/.exec(line);
+  const verse = /^Psalm (\d+):1\t(.*)$/.exec(line);
   if (!verse) continue;
-  const [, chapter, original]=verse;
-  assert.equal([psalms.headings[chapter],psalms.chapters[chapter]['1']].filter(Boolean).join(' '),original.trim(), `Psalm ${chapter} heading preserves source words`);
+  const [, chapter, original] = verse;
+  assert.equal(
+    [psalms.headings[chapter], psalms.chapters[chapter]['1']].filter(Boolean).join(' '),
+    original.trim(),
+    `Psalm ${chapter} heading preserves source words`,
+  );
 }
 assert.equal(psalms.headings['1'], undefined);
 assert.match(psalms.chapters['1']['1'], /^Blessed is the man/);
 assert.equal((await lookupReference('Psalm 23:1'))[0].title, 'Psalm 23:1');
 assert.equal((await lookupReference('Psalm 23:1'))[0].heading, 'A Psalm of David.');
-assert.ok(starters[4].items.every(i => i.title.startsWith('Psalm ') && !i.text.startsWith('A Psalm')));
+assert.ok(
+  starters[4].items.every((i) => i.title.startsWith('Psalm ') && !i.text.startsWith('A Psalm')),
+);
 // P1-15: network failure is friendly, and a failed download can be retried.
-const workingFetch=globalThis.fetch;
-globalThis.fetch=async()=>{throw new TypeError('Failed to fetch')};
-await assert.rejects(()=>lookupReference('Isaiah 1:1'), /This book isn.t saved on this device yet. Connect once to download it./);
-globalThis.fetch=workingFetch;
-assert.equal((await lookupReference('Isaiah 1:1')).length,1);
+const workingFetch = globalThis.fetch;
+globalThis.fetch = async () => {
+  throw new TypeError('Failed to fetch');
+};
+await assert.rejects(
+  () => lookupReference('Isaiah 1:1'),
+  /This book isn.t saved on this device yet. Connect once to download it./,
+);
+globalThis.fetch = workingFetch;
+assert.equal((await lookupReference('Isaiah 1:1')).length, 1);
 const counts = {};
-for (const translation of ['bsb','kjv','web']) {
+for (const translation of ['bsb', 'kjv', 'web']) {
   let count = 0;
   for (const book of await read('books.json')) {
     const pack = await read(`${translation}/${book.id}.json`);
@@ -112,56 +196,120 @@ for (const translation of ['bsb','kjv','web']) {
         count++;
         assert.ok(Number(verse) > 0);
         assert.equal(typeof text, 'string');
-        assert.ok(!text.includes('strong=') && !text.includes('\\'), `${translation}/${book.id} ${chapter}:${verse}: USFM leakage`);
+        assert.ok(
+          !text.includes('strong=') && !text.includes('\\'),
+          `${translation}/${book.id} ${chapter}:${verse}: USFM leakage`,
+        );
       }
     }
   }
   counts[translation] = count;
 }
 assert.deepEqual(counts, { bsb: 31102, kjv: 31102, web: 31098 });
-const ids = documents.flatMap(d => d.items.map(i => i.id));
+const ids = documents.flatMap((d) => d.items.map((i) => i.id));
 assert.equal(new Set(ids).size, ids.length);
 assert.equal(ids.length, 815);
-assert.ok(documents[1].items.find(i => i.number === 80).text.includes('accursed idolatry'));
-assert.ok(documents[2].items.map(i => i.text).join(' ').includes('resurrection of the body'));
-assert.ok(documents[3].items.map(i => i.text).join(' ').includes('proceedeth from the Father and the Son'));
-console.log('Content verified: 198 book packs / 93,302 verse records; 815 document items; five starters; lazy fetching, alias/range parsing, invalid-reference rejection, and pack integrity.');
+assert.ok(documents[1].items.find((i) => i.number === 80).text.includes('accursed idolatry'));
+assert.ok(
+  documents[2].items
+    .map((i) => i.text)
+    .join(' ')
+    .includes('resurrection of the body'),
+);
+assert.ok(
+  documents[3].items
+    .map((i) => i.text)
+    .join(' ')
+    .includes('proceedeth from the Father and the Son'),
+);
+console.log(
+  'Content verified: 198 book packs / 93,302 verse records; 815 document items; five starters; lazy fetching, alias/range parsing, invalid-reference rejection, and pack integrity.',
+);
 
 // Historic additions: complete question sequences and lossless long-answer splits.
-const compact = text => text.replace(/\s+/g, ' ').trim();
+const compact = (text) => text.replace(/\s+/g, ' ').trim();
 for (const [id, file, count] of [
-  ['baptist','1695_baptist_catechism.json',114],
-  ['spurgeon','puritan_catechism.json',82],
-  ['young-children','catechism_for_young_children.json',145],
+  ['baptist', '1695_baptist_catechism.json', 114],
+  ['spurgeon', 'puritan_catechism.json', 82],
+  ['young-children', 'catechism_for_young_children.json', 145],
 ]) {
-  const doc = documents.find(d => d.id === id);
-  assert.equal(doc.questionCount,count);
+  const doc = documents.find((d) => d.id === id);
+  assert.equal(doc.questionCount, count);
   assert.ok(doc.description);
-  const raw = JSON.parse(await fs.readFile(path.join(root,'content/raw',file),'utf8')).Data;
-  assert.deepEqual([...new Set(doc.items.map(i => i.number))],Array.from({length:count},(_,i)=>i+1));
+  const raw = JSON.parse(await fs.readFile(path.join(root, 'content/raw', file), 'utf8')).Data;
+  assert.deepEqual(
+    [...new Set(doc.items.map((i) => i.number))],
+    Array.from({ length: count }, (_, i) => i + 1),
+  );
   for (const qa of raw) {
-    const parts = doc.items.filter(i=>i.number===qa.Number);
-    const expected = id==='baptist' && qa.Number===100 ? qa.Answer.replace('Immersion, wore dipping','Immersion, or dipping') : qa.Answer;
-    assert.equal(parts.map(i=>i.text).join(' '),compact(expected),`${id} Q${qa.Number}: all source words retained`);
-    assert.ok(parts.every(i=>!/[\[\]]/.test(i.text)),`${id}: proof marker leakage`);
-    if(parts.length===1) assert.equal(parts[0].title,compact(qa.Question));
+    const parts = doc.items.filter((i) => i.number === qa.Number);
+    const expected =
+      id === 'baptist' && qa.Number === 100
+        ? qa.Answer.replace('Immersion, wore dipping', 'Immersion, or dipping')
+        : qa.Answer;
+    assert.equal(
+      parts.map((i) => i.text).join(' '),
+      compact(expected),
+      `${id} Q${qa.Number}: all source words retained`,
+    );
+    assert.ok(
+      parts.every((i) => !/[\[\]]/.test(i.text)),
+      `${id}: proof marker leakage`,
+    );
+    if (parts.length === 1) assert.equal(parts[0].title, compact(qa.Question));
   }
 }
-const wlc=documents.find(d=>d.id==='wlc');
-assert.equal(wlc.questionCount,196);
-assert.equal(wlc.items.length,206);
-assert.deepEqual([...new Set(wlc.items.map(i=>i.number))],Array.from({length:196},(_,i)=>i+1));
-const wlcSource=await fs.readFile(path.join(root,'content/raw/wlc-opc.html'),'utf8');
-const decode=text=>compact(text.replace(/<[^>]*>/g,'').replaceAll('&rsquo;','’').replaceAll('&ldquo;','“').replaceAll('&rdquo;','”').replaceAll('&amp;','&'));
-let verifiedWlc=0;
-for(const match of wlcSource.matchAll(/<p>Q\. (\d+)\. ([\s\S]*?)<br \/>\s*A\. ([\s\S]*?)(?:<\/p>|<\/div>)/g)){
- verifiedWlc++;
- const number=Number(match[1]);
- assert.ok(wlc.items.filter(i=>i.number===number).every(i=>i.title.endsWith(decode(match[2]))),`WLC Q${number}: question retained`);
- assert.equal(wlc.items.filter(i=>i.number===number).map(i=>i.text).join(' '),decode(match[3]),`WLC Q${number}: source and split seams`);
+const wlc = documents.find((d) => d.id === 'wlc');
+assert.equal(wlc.questionCount, 196);
+assert.equal(wlc.items.length, 206);
+assert.deepEqual(
+  [...new Set(wlc.items.map((i) => i.number))],
+  Array.from({ length: 196 }, (_, i) => i + 1),
+);
+const wlcSource = await fs.readFile(path.join(root, 'content/raw/wlc-opc.html'), 'utf8');
+const decode = (text) =>
+  compact(
+    text
+      .replace(/<[^>]*>/g, '')
+      .replaceAll('&rsquo;', '’')
+      .replaceAll('&ldquo;', '“')
+      .replaceAll('&rdquo;', '”')
+      .replaceAll('&amp;', '&'),
+  );
+let verifiedWlc = 0;
+for (const match of wlcSource.matchAll(
+  /<p>Q\. (\d+)\. ([\s\S]*?)<br \/>\s*A\. ([\s\S]*?)(?:<\/p>|<\/div>)/g,
+)) {
+  verifiedWlc++;
+  const number = Number(match[1]);
+  assert.ok(
+    wlc.items.filter((i) => i.number === number).every((i) => i.title.endsWith(decode(match[2]))),
+    `WLC Q${number}: question retained`,
+  );
+  assert.equal(
+    wlc.items
+      .filter((i) => i.number === number)
+      .map((i) => i.text)
+      .join(' '),
+    decode(match[3]),
+    `WLC Q${number}: source and split seams`,
+  );
 }
-assert.equal(verifiedWlc,196,'every WLC answer source-checked, including unclosed final HTML paragraph');
-assert.ok(!wlc.items.filter(i=>i.number===109).map(i=>i.text).join(' ').includes('tolerating a false religion'),'American revision, not original Scottish Q109');
-assert.equal(documents.find(d=>d.id==='young-children').items[0].title,'Who made you?');
-assert.equal(documents.find(d=>d.id==='young-children').items[0].text,'God.');
-console.log('Historic additions verified: 196 / 114 / 82 / 145 Q&A, original answer fidelity, American WLC Q109, and Engles Q1.');
+assert.equal(
+  verifiedWlc,
+  196,
+  'every WLC answer source-checked, including unclosed final HTML paragraph',
+);
+assert.ok(
+  !wlc.items
+    .filter((i) => i.number === 109)
+    .map((i) => i.text)
+    .join(' ')
+    .includes('tolerating a false religion'),
+  'American revision, not original Scottish Q109',
+);
+assert.equal(documents.find((d) => d.id === 'young-children').items[0].title, 'Who made you?');
+assert.equal(documents.find((d) => d.id === 'young-children').items[0].text, 'God.');
+console.log(
+  'Historic additions verified: 196 / 114 / 82 / 145 Q&A, original answer fidelity, American WLC Q109, and Engles Q1.',
+);

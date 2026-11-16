@@ -1,2 +1,2 @@
 /** Compatibility export: canonical product copy lives in copy.ts. */
-export {incordCopy} from './copy';
+export { incordCopy } from './copy';

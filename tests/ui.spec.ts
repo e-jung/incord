@@ -1,5 +1,5 @@
-import {finishEmailSignin} from './email-handoff';
-import {testIp} from './network';
+import { finishEmailSignin } from './email-handoff';
+import { testIp } from './network';
 import { test, expect, type Page, type TestInfo } from './accounts-playwright';
 import { mkdir } from 'node:fs/promises';
 
@@ -10,15 +10,36 @@ async function screen(page: Page, info: TestInfo, name: string) {
   expect(await page.locator('body').innerText()).not.toMatch(/\b(?:bible|wsc|personal)\b/);
   await mkdir('test-results/screens', { recursive: true });
   await page.evaluate(() => window.scrollTo(0, 0));
-  await page.screenshot({ path: `test-results/screens/${info.project.name}-${name}.png`, fullPage: false, animations: 'disabled' });
-  if (['today-due','library-empty','collection-own','documents-westminster','account-settings','verse-learned','document-nicene'].includes(name)) {
-    await page.screenshot({ path: `test-results/screens/${info.project.name}-${name}-full.png`, fullPage: true, animations: 'disabled' });
+  await page.screenshot({
+    path: `test-results/screens/${info.project.name}-${name}.png`,
+    fullPage: false,
+    animations: 'disabled',
+  });
+  if (
+    [
+      'today-due',
+      'library-empty',
+      'collection-own',
+      'documents-westminster',
+      'account-settings',
+      'verse-learned',
+      'document-nicene',
+    ].includes(name)
+  ) {
+    await page.screenshot({
+      path: `test-results/screens/${info.project.name}-${name}-full.png`,
+      fullPage: true,
+      animations: 'disabled',
+    });
   }
   await expect(page.locator('body')).not.toHaveJSProperty('scrollWidth', 0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 }
 async function tab(page: Page, name: string) {
-  await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name, exact: true }).click();
+  await page
+    .getByRole('navigation', { name: 'Main navigation' })
+    .getByRole('button', { name, exact: true })
+    .click();
   await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible();
 }
 async function account(page: Page) {
@@ -26,21 +47,30 @@ async function account(page: Page) {
   await page.getByRole('button', { name: 'Account settings', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Account', exact: true })).toBeVisible();
 }
-async function addOwn(page: Page, title = 'A quiet word', text = 'Grace and peace be with you always.') {
+async function addOwn(
+  page: Page,
+  title = 'A quiet word',
+  text = 'Grace and peace be with you always.',
+) {
   await tab(page, 'Discover');
   await page.getByRole('button', { name: 'Add your own', exact: true }).click();
   await page.getByRole('button', { name: 'Your text', exact: true }).click();
   await page.getByLabel('Title or question').fill(title);
   await page.getByLabel('Text to remember').fill(text);
   await page.getByRole('button', { name: 'Add your text', exact: true }).click();
-  await expect(page.locator('.action-feedback[role="status"]')).toHaveText('1 item added to your library.');
+  await expect(page.locator('.action-feedback[role="status"]')).toHaveText(
+    '1 item added to your library.',
+  );
   await tab(page, 'Library');
   await page.getByRole('button', { name: /^My texts/ }).click();
   await expect(page.getByRole('heading', { name: 'My texts', exact: true })).toBeVisible();
 }
 async function beginOwn(page: Page, title = 'A quiet word') {
   await tab(page, 'Today');
-  await page.getByRole('button').filter({ has: page.locator('b', { hasText: title }) }).click();
+  await page
+    .getByRole('button')
+    .filter({ has: page.locator('b', { hasText: title }) })
+    .click();
   await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
 }
 async function step(page: Page, n: number) {
@@ -48,18 +78,26 @@ async function step(page: Page, n: number) {
 }
 // Read token labels as a person reads the prompt. This does not import the
 // engine's masking, grading, or transition implementation into the assertions.
-async function typePassage(page: Page, options: { wrong?: boolean; onscreen?: boolean; learned?: boolean } = {}) {
+async function typePassage(
+  page: Page,
+  options: { wrong?: boolean; onscreen?: boolean; learned?: boolean } = {},
+) {
   const words = await page.locator('[data-word]').allTextContents();
   expect(words.length).toBeGreaterThan(0);
   for (const word of words) {
-    const initial = word.replace(/^[^\p{L}\p{N}]+/u, '').slice(0, 1).toLowerCase();
+    const initial = word
+      .replace(/^[^\p{L}\p{N}]+/u, '')
+      .slice(0, 1)
+      .toLowerCase();
     const key = options.wrong ? (initial === 'z' ? 'x' : 'z') : initial;
     if (options.onscreen) {
-      const toggle=page.getByRole('button',{name:/^[0-9]$/.test(key)?'Show numbers':'Show letters',exact:true});
-      if(await toggle.count())await toggle.click();
+      const toggle = page.getByRole('button', {
+        name: /^[0-9]$/.test(key) ? 'Show numbers' : 'Show letters',
+        exact: true,
+      });
+      if (await toggle.count()) await toggle.click();
       await page.getByRole('button', { name: key.toUpperCase(), exact: true }).click();
-    }
-    else await page.keyboard.press(key);
+    } else await page.keyboard.press(key);
   }
   if (options.learned) {
     await expect(page.locator('.learned .keepsake')).toBeVisible();
@@ -70,7 +108,7 @@ async function learned(page: Page) {
   await expect(page.getByRole('heading', { name: 'Learned', level: 1, exact: true })).toBeVisible();
   await expect(page.getByText(/Next review: /)).toBeVisible();
 }
-async function emailSignin(page: Page, email: string, addDeviceItems=false) {
+async function emailSignin(page: Page, email: string, addDeviceItems = false) {
   await page.getByLabel('Email address', { exact: true }).fill(email);
   await page.getByRole('button', { name: 'Email me a code', exact: true }).click();
   await expect(page.getByLabel('Six-digit code')).toBeVisible();
@@ -78,11 +116,22 @@ async function emailSignin(page: Page, email: string, addDeviceItems=false) {
   expect(response.ok()).toBe(true);
   const { code } = await response.json();
   expect(code).toMatch(/^\d{6}$/);
-  await finishEmailSignin(page,code,addDeviceItems?async()=>{
-    const merge=page.getByRole('dialog').filter({hasText:/items? on this device/});
-    await expect(page.getByRole('button',{name:'Account settings',exact:true})).toBeVisible();
-    if(await merge.isVisible()){await merge.getByRole('button',{name:'Add',exact:true}).click();await expect(merge).toHaveCount(0)}
-  }:undefined);
+  await finishEmailSignin(
+    page,
+    code,
+    addDeviceItems
+      ? async () => {
+          const merge = page.getByRole('dialog').filter({ hasText: /items? on this device/ });
+          await expect(
+            page.getByRole('button', { name: 'Account settings', exact: true }),
+          ).toBeVisible();
+          if (await merge.isVisible()) {
+            await merge.getByRole('button', { name: 'Add', exact: true }).click();
+            await expect(merge).toHaveCount(0);
+          }
+        }
+      : undefined,
+  );
 }
 async function register(page: Page, info?: TestInfo) {
   const email = `ui-${crypto.randomUUID()}@example.com`;
@@ -90,10 +139,9 @@ async function register(page: Page, info?: TestInfo) {
   const merge = page.getByRole('dialog').filter({ hasText: /items? on this device/ });
   if (await merge.count()) await merge.getByRole('button', { name: 'Add', exact: true }).click();
   if (info) await screen(page, info, 'account-email-created');
-  await expect(page.getByText('Signed in.', {exact:true})).toBeVisible();
-  return {email};
+  await expect(page.getByText('Signed in.', { exact: true })).toBeVisible();
+  return { email };
 }
-
 
 async function signout(page: Page) {
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
@@ -109,7 +157,9 @@ test.beforeEach(async ({ page, context }) => {
   await expect(page.getByRole('heading', { name: 'Today', exact: true })).toBeVisible();
 });
 
-test('empty Today, every tab, settings persistence, local export, and own-text validation', async ({ page }, info) => {
+test('empty Today, every tab, settings persistence, local export, and own-text validation', async ({
+  page,
+}, info) => {
   await expect(page.getByText('No items yet')).toBeVisible();
   await screen(page, info, 'today-empty');
   await page.getByRole('button', { name: 'Find something to memorize', exact: true }).click();
@@ -118,7 +168,10 @@ test('empty Today, every tab, settings persistence, local export, and own-text v
   await expect(page.getByText('No items yet.')).toBeVisible();
   await screen(page, info, 'library-empty');
   await page.getByRole('button', { name: '+ Add', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Add your own', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'Add your own', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
   await expect(page.getByLabel('Bible reference')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Discover', exact: true })).toBeVisible();
   await tab(page, 'Discover');
@@ -133,16 +186,29 @@ test('empty Today, every tab, settings persistence, local export, and own-text v
   await expect(page.getByRole('button', { name: 'Continue with Google' })).toBeVisible();
   await expect(page.getByLabel('Email address', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Email me a code', exact: true })).toBeEnabled();
-  expect(await page.getByLabel('Email address', { exact: true }).evaluate((input: HTMLInputElement) => input.validity.valueMissing)).toBe(true);
-  const reminders=page.getByRole('button', { name: 'Enable reminders', exact: true });
-  if(await reminders.isEnabled()){await reminders.click();await expect(page.getByRole('alert')).toHaveText('Sign in to enable reminders.')}else{await expect(page.getByRole('region',{name:'Reminders',exact:true})).toContainText(/Permission denied|Add to Home Screen/)}
+  expect(
+    await page
+      .getByLabel('Email address', { exact: true })
+      .evaluate((input: HTMLInputElement) => input.validity.valueMissing),
+  ).toBe(true);
+  const reminders = page.getByRole('button', { name: 'Enable reminders', exact: true });
+  if (await reminders.isEnabled()) {
+    await reminders.click();
+    await expect(page.getByRole('alert')).toHaveText('Sign in to enable reminders.');
+  } else {
+    await expect(page.getByRole('region', { name: 'Reminders', exact: true })).toContainText(
+      /Permission denied|Add to Home Screen/,
+    );
+  }
   await screen(page, info, 'account-signed-out');
   await page.getByLabel('Display name').fill('Ada');
   await page.getByLabel('Display name').press('Tab');
   await page.getByLabel('Weekly rhythm').selectOption('5');
   await page.getByLabel('Reminder time', { exact: true }).fill('18:30');
   await page.getByPlaceholder('Search time zones').fill('Los_Angeles');
-  await page.getByRole('combobox', { name: 'Time zone', exact: true }).selectOption('America/Los_Angeles');
+  await page
+    .getByRole('combobox', { name: 'Time zone', exact: true })
+    .selectOption('America/Los_Angeles');
   const theme = info.project.name.endsWith('dark') ? 'dark' : 'light';
   await page.getByLabel('Appearance').selectOption(theme);
   await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
@@ -151,30 +217,58 @@ test('empty Today, every tab, settings persistence, local export, and own-text v
   await expect(page.getByLabel('Display name')).toHaveValue('Ada');
   await expect(page.getByLabel('Weekly rhythm')).toHaveValue('5');
   await expect(page.getByLabel('Reminder time', { exact: true })).toHaveValue('18:30');
-  await expect(page.getByRole('combobox', { name: 'Time zone', exact: true })).toHaveValue('America/Los_Angeles');
+  await expect(page.getByRole('combobox', { name: 'Time zone', exact: true })).toHaveValue(
+    'America/Los_Angeles',
+  );
   await page.getByLabel('Appearance').selectOption(theme === 'dark' ? 'light' : 'dark');
-  await expect(page.locator('html')).toHaveAttribute('data-theme', theme === 'dark' ? 'light' : 'dark');
+  await expect(page.locator('html')).toHaveAttribute(
+    'data-theme',
+    theme === 'dark' ? 'light' : 'dark',
+  );
   await page.getByLabel('Appearance').selectOption('system');
   await screen(page, info, 'account-settings');
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Export your data', exact: true }).click();
   expect((await download).suggestedFilename()).toBe('incord.json');
-  await expect(page.getByRole('region',{name:'Data',exact:true}).getByRole('status').filter({hasText:'Your export is ready.'})).toHaveText('Your export is ready.');
+  await expect(
+    page
+      .getByRole('region', { name: 'Data', exact: true })
+      .getByRole('status')
+      .filter({ hasText: 'Your export is ready.' }),
+  ).toHaveText('Your export is ready.');
   await tab(page, 'Today');
   await expect(page.getByText('0 of 5 this week')).toBeVisible();
 });
 
-test('own words persist offline, collection detail buttons, restart and remove', async ({ page, context }, info) => {
-  await addOwn(page, 'An original promise', '“Alpha,” Bravo’s Charlie-Delta Delta Echo Foxtrot Golf Hotel India Juliet Kilo Lima Mike November Oscar Papa Quebec Romeo Sierra Tango Uniform Victor Whiskey Xray Yankee Zulu 1 2 3 4 5 6 7 8 9 0; 23 blessings.');
+test('own words persist offline, collection detail buttons, restart and remove', async ({
+  page,
+  context,
+}, info) => {
+  await addOwn(
+    page,
+    'An original promise',
+    '“Alpha,” Bravo’s Charlie-Delta Delta Echo Foxtrot Golf Hotel India Juliet Kilo Lima Mike November Oscar Papa Quebec Romeo Sierra Tango Uniform Victor Whiskey Xray Yankee Zulu 1 2 3 4 5 6 7 8 9 0; 23 blessings.',
+  );
   await screen(page, info, 'library-own');
   await screen(page, info, 'collection-own');
   await page.getByRole('button', { name: 'Add items', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Add your own', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'Add your own', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
   await expect(page.getByRole('heading', { name: 'Discover', exact: true })).toBeVisible();
   await tab(page, 'Library');
   await page.getByRole('button', { name: /My texts.*0 of 1 learned/ }).click();
   await page.getByRole('button', { name: 'Back to library', exact: true }).click();
-  await page.evaluate(async () => { await navigator.serviceWorker.ready; if (!navigator.serviceWorker.controller) await new Promise<void>(resolve => navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), { once: true })); });
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+    if (!navigator.serviceWorker.controller)
+      await new Promise<void>((resolve) =>
+        navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), {
+          once: true,
+        }),
+      );
+  });
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Today', exact: true })).toBeVisible();
   await context.setOffline(true);
@@ -206,7 +300,9 @@ test('add BSB verse by reference and complete all four ladder steps', async ({ p
   await expect(page.getByRole('button', { name: 'Add to library', exact: true })).toBeVisible();
   await screen(page, info, 'verse-search-results');
   await page.getByRole('button', { name: 'Add to library', exact: true }).click();
-  await expect(page.getByRole('status').filter({hasText:/^\d+ items? added to your library\.$/})).toHaveText(/\d+ items? added to your library\./);
+  await expect(
+    page.getByRole('status').filter({ hasText: /^\d+ items? added to your library\.$/ }),
+  ).toHaveText(/\d+ items? added to your library\./);
   await tab(page, 'Today');
   await expect(page.getByText('1 to practice', { exact: true })).toBeVisible();
   await expect(page.getByText('About 2 min', { exact: true })).toBeVisible();
@@ -221,12 +317,19 @@ test('add BSB verse by reference and complete all four ladder steps', async ({ p
     else expect(hidden).toBeGreaterThan(0);
     const keyboard = await page.getByLabel('Practice keyboard').boundingBox();
     expect(keyboard).not.toBeNull();
-    expect(Math.abs(keyboard!.y + keyboard!.height - page.viewportSize()!.height)).toBeLessThanOrEqual(1);
-    expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(page.viewportSize()!.height);
+    expect(
+      Math.abs(keyboard!.y + keyboard!.height - page.viewportSize()!.height),
+    ).toBeLessThanOrEqual(1);
+    expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(
+      page.viewportSize()!.height,
+    );
     await screen(page, info, `verse-step-${n}`);
     await typePassage(page, { onscreen: n === 2, learned: n === 4 });
     if (n < 4) await expect(page.getByRole('dialog')).toHaveAccessibleName(`Step ${n} passed`);
-    if (n > 1 && n < 4) await expect(page.getByRole('dialog')).toContainText(`${hidden} of ${hidden} from memory · 0 slips`);
+    if (n > 1 && n < 4)
+      await expect(page.getByRole('dialog')).toContainText(
+        `${hidden} of ${hidden} from memory · 0 slips`,
+      );
     await screen(page, info, `verse-result-${n}`);
     if (n < 4) await page.getByRole('button', { name: 'Continue', exact: true }).click();
   }
@@ -255,7 +358,11 @@ test('catechism browse and complete a full ladder', async ({ page }, info) => {
   await tab(page, 'Discover');
   await page.getByRole('button', { name: 'Catechisms & creeds', exact: true }).click();
   await screen(page, info, 'documents-picker');
-  await page.locator('.document-cards').getByRole('button').filter({has:page.locator('b',{hasText:'Westminster Shorter Catechism' })}).click();
+  await page
+    .locator('.document-cards')
+    .getByRole('button')
+    .filter({ has: page.locator('b', { hasText: 'Westminster Shorter Catechism' }) })
+    .click();
   await screen(page, info, 'documents-westminster');
   const title = (await page.locator('summary').first().innerText()).replace(/^Q1 · /, '');
   await expect(page.locator('details').first()).not.toHaveAttribute('open', '');
@@ -276,7 +383,9 @@ test('catechism browse and complete a full ladder', async ({ page }, info) => {
   await screen(page, info, 'catechism-learned');
 });
 
-test('failed step repeats, wrong letters are slips, result-close continues, shortcut fails to step 3 and then passes', async ({ page }, info) => {
+test('failed step repeats, wrong letters are slips, result-close continues, shortcut fails to step 3 and then passes', async ({
+  page,
+}, info) => {
   await addOwn(page);
   await beginOwn(page);
   await typePassage(page);
@@ -331,16 +440,18 @@ test('email signup, sync, signout, signin, export and account deletion', async (
   await page.getByLabel('Display name').press('Tab');
   const { email } = await register(page, info);
   await screen(page, info, 'account-signed-in');
-  await expect.poll(async () => {
-    const synced = await page.request.get('/api/export');
-    expect(synced.ok()).toBe(true);
-    return JSON.stringify(await synced.json());
-  }).toContain('Synced promise');
+  await expect
+    .poll(async () => {
+      const synced = await page.request.get('/api/export');
+      expect(synced.ok()).toBe(true);
+      return JSON.stringify(await synced.json());
+    })
+    .toContain('Synced promise');
   await signout(page);
   await expect(page.getByRole('button', { name: 'Email me a code', exact: true })).toBeVisible();
   expect(await (await page.request.get('/api/me')).json()).toMatchObject({ user: null });
   await emailSignin(page, email);
-  await expect(page.getByText('Signed in.',{exact:true})).toBeVisible();
+  await expect(page.getByText('Signed in.', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
   const download = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Export your data', exact: true }).click();
@@ -354,8 +465,24 @@ test('email signup, sync, signout, signin, export and account deletion', async (
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.getByRole('button', { name: 'Delete account', exact: true }).click();
   await page.getByRole('button', { name: 'Yes, delete account', exact: true }).click();
-  await expect(page.getByRole('region',{name:'Data',exact:true}).getByRole('status').filter({hasText:'Account deleted. Local practice is still on this device.'})).toHaveText('Account deleted. Local practice is still on this device.');
-  const cached=await page.evaluate(async()=>{const db=await new Promise<IDBDatabase>(resolve=>{const r=indexedDB.open('byheart',1);r.onsuccess=()=>resolve(r.result)});const value:any=await new Promise(resolve=>{const r=db.transaction('state').objectStore('state').get('current');r.onsuccess=()=>resolve(r.result)});db.close();return value.account});
+  await expect(
+    page
+      .getByRole('region', { name: 'Data', exact: true })
+      .getByRole('status')
+      .filter({ hasText: 'Account deleted. Local practice is still on this device.' }),
+  ).toHaveText('Account deleted. Local practice is still on this device.');
+  const cached = await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve) => {
+      const r = indexedDB.open('byheart', 1);
+      r.onsuccess = () => resolve(r.result);
+    });
+    const value: any = await new Promise((resolve) => {
+      const r = db.transaction('state').objectStore('state').get('current');
+      r.onsuccess = () => resolve(r.result);
+    });
+    db.close();
+    return value.account;
+  });
   expect(cached).toBeNull();
   expect(await (await page.request.get('/api/me')).json()).toMatchObject({ user: null });
   await screen(page, info, 'account-deleted');
@@ -363,80 +490,175 @@ test('email signup, sync, signout, signin, export and account deletion', async (
   await expect(page.getByRole('button', { name: /Synced promise/ })).toBeVisible();
 });
 
-test('push permission, mock subscription, test notification and disable', async ({ page }, info) => {
+test('push permission, mock subscription, test notification and disable', async ({
+  page,
+}, info) => {
   const subscriptions: unknown[] = [];
   let notificationTests = 0;
-  await page.route('**/api/config', route => route.fulfill({ json: { email: true, googleEnabled: false, vapidPublicKey: 'B' + 'A'.repeat(86) } }));
-  await page.route('**/api/push/subscribe', async route => {
+  await page.route('**/api/config', (route) =>
+    route.fulfill({
+      json: { email: true, googleEnabled: false, vapidPublicKey: 'B' + 'A'.repeat(86) },
+    }),
+  );
+  await page.route('**/api/push/subscribe', async (route) => {
     subscriptions.push(route.request().postDataJSON());
     await route.fulfill({ json: { ok: true } });
   });
-  await page.route('**/api/push/test', async route => {
+  await page.route('**/api/push/test', async (route) => {
     notificationTests++;
-    await route.fulfill({ json: { sent: 1,failed:0,results:[{host:'web.push.apple.com',status:201,reason:''}] } });
+    await route.fulfill({
+      json: {
+        sent: 1,
+        failed: 0,
+        results: [{ host: 'web.push.apple.com', status: 201, reason: '' }],
+      },
+    });
   });
-  await page.route('**/api/push/status*', route=>route.fulfill({json:{subscribed:true,results:[]}}));
+  await page.route('**/api/push/status*', (route) =>
+    route.fulfill({ json: { subscribed: true, results: [] } }),
+  );
   await page.addInitScript(() => {
     const subscription = {
       endpoint: 'https://push.example.invalid/byheart-test',
       keys: { p256dh: 'mock-p256dh', auth: 'mock-auth' },
     };
-    let subscribed=false;
-    Object.defineProperty(Notification,'permission',{configurable:true,get:()=>subscribed?'granted':'default'});
-    Object.defineProperty(Notification, 'requestPermission', { configurable: true, value: async () => {subscribed=true;return 'granted'} });
-    Object.defineProperty(PushManager.prototype, 'subscribe', { configurable: true, value: async () => ({ endpoint:subscription.endpoint,toJSON: () => subscription }) });
-    Object.defineProperty(PushManager.prototype, 'getSubscription', { configurable: true, value: async () => subscribed?({ endpoint:subscription.endpoint,toJSON:()=>subscription,unsubscribe: async () => {subscribed=false;return true} }):null });
+    let subscribed = false;
+    Object.defineProperty(Notification, 'permission', {
+      configurable: true,
+      get: () => (subscribed ? 'granted' : 'default'),
+    });
+    Object.defineProperty(Notification, 'requestPermission', {
+      configurable: true,
+      value: async () => {
+        subscribed = true;
+        return 'granted';
+      },
+    });
+    Object.defineProperty(PushManager.prototype, 'subscribe', {
+      configurable: true,
+      value: async () => ({ endpoint: subscription.endpoint, toJSON: () => subscription }),
+    });
+    Object.defineProperty(PushManager.prototype, 'getSubscription', {
+      configurable: true,
+      value: async () =>
+        subscribed
+          ? {
+              endpoint: subscription.endpoint,
+              toJSON: () => subscription,
+              unsubscribe: async () => {
+                subscribed = false;
+                return true;
+              },
+            }
+          : null,
+    });
   });
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Today', exact: true })).toBeVisible();
   await account(page);
   await register(page, info);
   await page.getByRole('button', { name: 'Enable reminders', exact: true }).click();
-  await expect(page.getByRole('region',{name:'Reminders',exact:true}).getByRole('status').filter({hasText:'Gentle reminders enabled.'})).toHaveText('Gentle reminders enabled.');
-  expect(subscriptions).toEqual([{ subscription: { endpoint: 'https://push.example.invalid/byheart-test', keys: { p256dh: 'mock-p256dh', auth: 'mock-auth' } } }]);
+  await expect(
+    page
+      .getByRole('region', { name: 'Reminders', exact: true })
+      .getByRole('status')
+      .filter({ hasText: 'Gentle reminders enabled.' }),
+  ).toHaveText('Gentle reminders enabled.');
+  expect(subscriptions).toEqual([
+    {
+      subscription: {
+        endpoint: 'https://push.example.invalid/byheart-test',
+        keys: { p256dh: 'mock-p256dh', auth: 'mock-auth' },
+      },
+    },
+  ]);
   await screen(page, info, 'account-push-enabled');
   await page.getByRole('button', { name: 'Send test notification', exact: true }).click();
-  await expect(page.getByRole('region',{name:'Reminders',exact:true}).getByRole('status').filter({hasText:"Sent to Apple. If it didn't appear, check Settings → Notifications → Incord."})).toHaveText("Sent to Apple. If it didn't appear, check Settings → Notifications → Incord.");
+  await expect(
+    page
+      .getByRole('region', { name: 'Reminders', exact: true })
+      .getByRole('status')
+      .filter({
+        hasText: "Sent to Apple. If it didn't appear, check Settings → Notifications → Incord.",
+      }),
+  ).toHaveText("Sent to Apple. If it didn't appear, check Settings → Notifications → Incord.");
   expect(notificationTests).toBe(1);
   await page.getByRole('button', { name: 'Disable reminders', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Enable reminders', exact: true })).toBeVisible();
-  expect(subscriptions.at(-1)).toEqual({ subscription: null,endpoint:'https://push.example.invalid/byheart-test' });
+  expect(subscriptions.at(-1)).toEqual({
+    subscription: null,
+    endpoint: 'https://push.example.invalid/byheart-test',
+  });
   await page.getByRole('button', { name: 'Delete account', exact: true }).click();
   await page.getByRole('button', { name: 'Yes, delete account', exact: true }).click();
 });
 
-for (const choice of ['Start', 'Check what I remember']) test(`gentle return welcome caps the backlog before and after ${choice}`, async ({ page }, info) => {
-  // Seed from a static same-origin document so a late app persist cannot overwrite the fixture.
-  await page.goto('/privacy.html');
-  await page.evaluate(async () => {
-    const db = await new Promise<IDBDatabase>((resolve, reject) => { const r = indexedDB.open('byheart', 1); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
-    const last = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
-    const state = {
-      settings: { name: '', theme: 'system', goal: 4, reminderTime: '19:00', timeZone: 'UTC', pushEnabled: false, days: [], lastActive: last },
-      events: [], queue: [],
-      items: Array.from({ length: 8 }, (_, n) => ({ id: `return-${n}`, title: `Familiar word ${n + 1}`, text: 'Peace be with you.', collection: 'personal', step: 4, learned: true, due: new Date(0).toISOString(), updatedAt: Date.now() })),
-    };
-    await new Promise<void>((resolve, reject) => { const tx = db.transaction('state', 'readwrite'); tx.objectStore('state').put(state, 'current'); tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); });
-    db.close();
+for (const choice of ['Start', 'Check what I remember'])
+  test(`gentle return welcome caps the backlog before and after ${choice}`, async ({
+    page,
+  }, info) => {
+    // Seed from a static same-origin document so a late app persist cannot overwrite the fixture.
+    await page.goto('/privacy.html');
+    await page.evaluate(async () => {
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        const r = indexedDB.open('byheart', 1);
+        r.onsuccess = () => resolve(r.result);
+        r.onerror = () => reject(r.error);
+      });
+      const last = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
+      const state = {
+        settings: {
+          name: '',
+          theme: 'system',
+          goal: 4,
+          reminderTime: '19:00',
+          timeZone: 'UTC',
+          pushEnabled: false,
+          days: [],
+          lastActive: last,
+        },
+        events: [],
+        queue: [],
+        items: Array.from({ length: 8 }, (_, n) => ({
+          id: `return-${n}`,
+          title: `Familiar word ${n + 1}`,
+          text: 'Peace be with you.',
+          collection: 'personal',
+          step: 4,
+          learned: true,
+          due: new Date(0).toISOString(),
+          updatedAt: Date.now(),
+        })),
+      };
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction('state', 'readwrite');
+        tx.objectStore('state').put(state, 'current');
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+      db.close();
+    });
+    await page.goto('/');
+    await expect(page.getByRole('dialog', { name: 'Welcome back' })).toBeVisible();
+    await expect(page.locator('.hero')).toContainText('3 to practice');
+    await expect(page.locator('.hero')).toContainText('About 1 min');
+    await screen(page, info, 'welcome-back');
+    await page.getByRole('button', { name: choice, exact: true }).click();
+    if (choice !== 'Start') {
+      await expect(
+        page.getByRole('heading', { name: 'Familiar word 1', exact: true }),
+      ).toBeVisible();
+      await page.getByRole('button', { name: 'Close practice', exact: true }).click();
+    }
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.getByText('3 to practice', { exact: true })).toBeVisible();
+    await expect(page.getByText('About 1 min', { exact: true })).toBeVisible();
+    await screen(page, info, 'today-gentle-return');
   });
-  await page.goto('/');
-  await expect(page.getByRole('dialog', { name: 'Welcome back' })).toBeVisible();
-  await expect(page.locator('.hero')).toContainText('3 to practice');
-  await expect(page.locator('.hero')).toContainText('About 1 min');
-  await screen(page, info, 'welcome-back');
-  await page.getByRole('button', { name: choice, exact: true }).click();
-  if (choice !== 'Start') {
-    await expect(page.getByRole('heading', { name: 'Familiar word 1', exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Close practice', exact: true }).click();
-  }
-  await expect(page.getByRole('dialog')).toHaveCount(0);
-  await expect(page.getByText('3 to practice', { exact: true })).toBeVisible();
-  await expect(page.getByText('About 1 min', { exact: true })).toBeVisible();
-  await screen(page, info, 'today-gentle-return');
-});
 
-
-test('all featured covers and document choices, collection sessions and Next item', async ({ page }, info) => {
+test('all featured covers and document choices, collection sessions and Next item', async ({
+  page,
+}, info) => {
   await tab(page, 'Library');
   await expect(page.locator('.covers')).toHaveCount(0);
   await page.getByRole('button', { name: 'Find something to memorize', exact: true }).click();
@@ -445,11 +667,22 @@ test('all featured covers and document choices, collection sessions and Next ite
   await expect(page.locator('.featured-cards .cover')).toHaveCount(3);
   for (let index = 0; index < covers.length; index++) {
     await tab(page, 'Discover');
-    await page.getByRole('button', { name: ['Topics', 'Passages', 'Catechisms & creeds'][index], exact: true }).click();
-    await page.locator('.featured-cards').getByRole('button').filter({ has: page.locator('b', { hasText: covers[index] }) }).click();
+    await page
+      .getByRole('button', {
+        name: ['Topics', 'Passages', 'Catechisms & creeds'][index],
+        exact: true,
+      })
+      .click();
+    await page
+      .locator('.featured-cards')
+      .getByRole('button')
+      .filter({ has: page.locator('b', { hasText: covers[index] }) })
+      .click();
     await expect(page.getByRole('dialog', { name: covers[index], exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Add to my library', exact: true }).click();
-    await expect(page.getByRole('heading', { level: 1, name: covers[index], exact: true })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { level: 1, name: covers[index], exact: true }),
+    ).toBeVisible();
     await screen(page, info, `featured-${index + 1}`);
     await page.getByRole('button', { name: 'Start practice', exact: true }).click();
     await step(page, 1);
@@ -469,9 +702,20 @@ test('all featured covers and document choices, collection sessions and Next ite
   await tab(page, 'Discover');
   await page.getByRole('button', { name: 'Catechisms & creeds', exact: true }).click();
   for (const doc of ['Heidelberg Catechism', 'Apostles’ Creed', 'Nicene Creed']) {
-    await page.locator('.document-cards').getByRole('button').filter({has:page.locator('b',{hasText:doc })}).click();
+    await page
+      .locator('.document-cards')
+      .getByRole('button')
+      .filter({ has: page.locator('b', { hasText: doc }) })
+      .click();
     await expect(page.locator('.document-add').first()).toBeVisible();
-    await screen(page, info, `document-${doc.split(' ')[0].replace(/[^a-z]/gi, '').toLowerCase()}`);
+    await screen(
+      page,
+      info,
+      `document-${doc
+        .split(' ')[0]
+        .replace(/[^a-z]/gi, '')
+        .toLowerCase()}`,
+    );
   }
   await page.getByRole('button', { name: 'Add your own', exact: true }).click();
   await page.getByRole('button', { name: 'Verses', exact: true }).click();
@@ -480,38 +724,41 @@ test('all featured covers and document choices, collection sessions and Next ite
   await expect(page.getByRole('alert')).toBeVisible();
   await screen(page, info, 'verse-search-invalid');
   for (const translation of ['KJV', 'WEB']) {
-    await page.getByRole('combobox', { name: 'Default translation', exact: true }).selectOption(translation);
+    await page
+      .getByRole('combobox', { name: 'Default translation', exact: true })
+      .selectOption(translation);
     await page.getByLabel('Bible reference').fill('Romans 8:28-30');
     await page.getByLabel('Bible reference').press('Enter');
     await expect(page.getByRole('button', { name: 'Add to library', exact: true })).toBeVisible();
     await expect(page.locator('.row')).toHaveCount(3);
     await screen(page, info, `verse-search-${translation.toLowerCase()}`);
     await page.getByRole('button', { name: 'Add to library', exact: true }).click();
-    await expect(page.getByRole('status').filter({hasText:/^\d+ items? added to your library\.$/})).toHaveText(/\d+ items? added to your library\./);
+    await expect(
+      page.getByRole('status').filter({ hasText: /^\d+ items? added to your library\.$/ }),
+    ).toHaveText(/\d+ items? added to your library\./);
     // Switching modes clears previous search results before the next request.
     await page.getByRole('button', { name: 'Your text', exact: true }).click();
     await page.getByRole('button', { name: 'Verses', exact: true }).click();
   }
 });
 
-
-test('375px segments fit and email input clears floating navigation', async ({page}, info) => {
-  await page.setViewportSize({width:375,height:812});
+test('375px segments fit and email input clears floating navigation', async ({ page }, info) => {
+  await page.setViewportSize({ width: 375, height: 812 });
   await tab(page, 'Discover');
   await page.getByRole('button', { name: 'Add your own', exact: true }).click();
-  for (const label of ['Verses','Your text']) {
-    const button=page.getByRole('button',{name:label,exact:true});
+  for (const label of ['Verses', 'Your text']) {
+    const button = page.getByRole('button', { name: label, exact: true });
     await button.click();
-    expect(await button.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
+    expect(await button.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
     expect((await button.boundingBox())!.height).toBeLessThan(45);
   }
-  await screen(page,info,'discover-375');
+  await screen(page, info, 'discover-375');
   await account(page);
-  await page.getByLabel('Email address', {exact:true}).scrollIntoViewIfNeeded();
-  const input=await page.getByLabel('Email address', {exact:true}).boundingBox();
-  const nav=await page.getByRole('navigation').boundingBox();
-  expect(input!.y+input!.height).toBeLessThan(nav!.y);
-  await page.evaluate(()=>window.scrollTo(0,document.documentElement.scrollHeight));
-  const last=await page.getByText('Incord (from Latin', {exact:false}).boundingBox();
-  expect(last!.y+last!.height).toBeLessThan(nav!.y);
+  await page.getByLabel('Email address', { exact: true }).scrollIntoViewIfNeeded();
+  const input = await page.getByLabel('Email address', { exact: true }).boundingBox();
+  const nav = await page.getByRole('navigation').boundingBox();
+  expect(input!.y + input!.height).toBeLessThan(nav!.y);
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  const last = await page.getByText('Incord (from Latin', { exact: false }).boundingBox();
+  expect(last!.y + last!.height).toBeLessThan(nav!.y);
 });

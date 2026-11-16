@@ -1,23 +1,158 @@
 @import './fonts.css';
 @import './tokens.css';
-:root{color-scheme:light dark}
-*{box-sizing:border-box}
-body{margin:0;background:var(--stage);color:var(--ink);font:16px Figtree,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
-main{max-width:1000px;margin:auto;padding:24px;min-width:0}
-h1{font-size:28px;letter-spacing:-.035em;margin:0 0 8px}h2{font-size:18px;margin:0 0 16px}
-p{color:var(--ink2);font-size:14px;line-height:1.55}
-section{margin:0 0 20px;padding:20px;background:var(--bg);border:1px solid var(--line);border-radius:20px;box-shadow:var(--sh);min-width:0}
-.today{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:20px 0;font-variant-numeric:tabular-nums}
-dt{font-size:12px;color:var(--ink2)}dd{margin:4px 0 0;font-size:28px;font-weight:800}
-.table-scroll{max-width:100%;overflow-x:auto;overscroll-behavior-x:contain}
-table{border-collapse:collapse;width:100%;font-size:14px;font-variant-numeric:tabular-nums}
-td,th{text-align:left;padding:12px 10px;border-bottom:1px solid var(--line);white-space:nowrap}th{font-weight:600;color:var(--ink2)}td:not(:first-child),th:not(:first-child){text-align:right}
-input,button{font:inherit;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--fill);color:var(--ink);max-width:100%}button{background:var(--acc);color:var(--on-acc);cursor:pointer}label{display:flex;flex-direction:column;gap:8px}form{display:flex;align-items:end;flex-wrap:wrap;gap:12px}
-:focus-visible{outline:3px solid var(--acc);outline-offset:3px}
-svg{display:block;width:100%;height:70px;color:var(--acc);margin-top:20px;overflow:visible}
-@media(max-width:500px){main{padding:16px}section{padding:16px}h1{font-size:24px}}
+:root {
+  color-scheme: light dark;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--stage);
+  color: var(--ink);
+  font:
+    16px Figtree,
+    system-ui,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+main {
+  max-width: 1000px;
+  margin: auto;
+  padding: 24px;
+  min-width: 0;
+}
+h1 {
+  font-size: 28px;
+  letter-spacing: -0.035em;
+  margin: 0 0 8px;
+}
+h2 {
+  font-size: 18px;
+  margin: 0 0 16px;
+}
+p {
+  color: var(--ink2);
+  font-size: 14px;
+  line-height: 1.55;
+}
+section {
+  margin: 0 0 20px;
+  padding: 20px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  box-shadow: var(--sh);
+  min-width: 0;
+}
+.today {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 20px 0;
+  font-variant-numeric: tabular-nums;
+}
+dt {
+  font-size: 12px;
+  color: var(--ink2);
+}
+dd {
+  margin: 4px 0 0;
+  font-size: 28px;
+  font-weight: 800;
+}
+.table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+td,
+th {
+  text-align: left;
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+th {
+  font-weight: 600;
+  color: var(--ink2);
+}
+td:not(:first-child),
+th:not(:first-child) {
+  text-align: right;
+}
+input,
+button {
+  font: inherit;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--fill);
+  color: var(--ink);
+  max-width: 100%;
+}
+button {
+  background: var(--acc);
+  color: var(--on-acc);
+  cursor: pointer;
+}
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+form {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+:focus-visible {
+  outline: 3px solid var(--acc);
+  outline-offset: 3px;
+}
+svg {
+  display: block;
+  width: 100%;
+  height: 70px;
+  color: var(--acc);
+  margin-top: 20px;
+  overflow: visible;
+}
+@media (max-width: 500px) {
+  main {
+    padding: 16px;
+  }
+  section {
+    padding: 16px;
+  }
+  h1 {
+    font-size: 24px;
+  }
+}
 
-.feedback article{padding:16px 0;border-top:1px solid var(--line)}
-.feedback h3{font-size:15px;overflow-wrap:anywhere}
-.feedback-message,.feedback pre{white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}
-.feedback pre{font-size:12px;color:var(--ink2);max-width:100%}
+.feedback article {
+  padding: 16px 0;
+  border-top: 1px solid var(--line);
+}
+.feedback h3 {
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+.feedback-message,
+.feedback pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.feedback pre {
+  font-size: 12px;
+  color: var(--ink2);
+  max-width: 100%;
+}
