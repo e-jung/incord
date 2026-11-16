@@ -13,18 +13,21 @@ An offline-first, open-source Scripture/catechism memory PWA. Svelte 5 + Vite + 
 - Screens compose reusable components; keep visual styling in app.css/tokens.css.
 
 ## Files
-src/App.svelte — screen and session composition.
+src/App.svelte — screen/session composition; src/screens and src/controllers own focused UI responsibilities.
+shared/domain — IO-free catalog, canonical ordering, planning and settings reconciliation.
 src/components — tactile reusable primitives.
 src/store.ts — IndexedDB, API client, reconciliation.
 src/content.ts — lazy Bible book lookup, bundled starters/documents.
 src/engine — DOM-free tokenization/masking/grading/transitions/scheduling/return.
-cloudflare/worker.ts — API, SQL Durable Objects, signed sessions, push encryption and cron.
+cloudflare/worker.ts — stable entry and persistent DO exports; focused modules own routing/auth, persistence, settings/sync and push/cron.
+cloudflare/adapters — optional operator-specific edges; base Wrangler config stays neutral.
 scripts/build-content.py — fetch/verify/rebuild content; committed generated content means normal builds need no downloads.
 public/sw.js — offline shell/book cache and notification receiver.
 
 ## Development
 Node 24. npm ci; npx playwright install chromium.
-npm run check; npm test; npm run build.
+npm run verify — non-writing formatter, app/Worker types, unit coverage, content, build and source budgets.
+npm run format — intentional mechanical formatting; CI runs verify on push/PR.
 npm run serve — local Wrangler at http://localhost:8793 (build hook runs automatically).
 For frontend HMR: npm run dev (API/account functionality requires Wrangler).
 npm run e2e — starts disposable localhost Worker when needed.

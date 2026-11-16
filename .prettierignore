@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.wrangler/
+coverage/
+test-results/
+playwright-report/
+package-lock.json
+content/
+public/content/
+public/licenses/
+public/icon.svg
+public/audio/

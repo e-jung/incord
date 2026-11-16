@@ -6,7 +6,7 @@ Thanks for helping improve Incord. Open a GitHub issue for a bug or idea; discus
 
 1. Use Node.js 24, run `npm ci`, and follow [README.md](README.md) for local configuration and Wrangler.
 2. Make a focused change. Read [AGENTS.md](AGENTS.md) for persistence, privacy, practice and deployment contracts.
-3. Run `npm run check`, `npm test`, `npm run build` and `npm run content:verify`. For UI/account changes, install Playwright browsers and run `npm run e2e` against a fresh local Worker. Add meaningful regression coverage for behavior changes.
+3. Run `npm run verify` (types, unit coverage, content, build, format and source budgets). For UI/account changes, install Playwright browsers and run `npm run e2e` against a fresh local Worker. Add meaningful regression coverage for behavior changes.
 4. Submit a pull request describing the problem, solution and checks performed. Include fresh screenshots for visual changes, with no personal data.
 
 Never include secrets, private account data, email codes or copyrighted Bible text. Normal tests use fixtures, not production accounts or live ESV requests. Content changes must follow [content/SOURCES.md](content/SOURCES.md), preserve original editions and commit source/generated changes together.

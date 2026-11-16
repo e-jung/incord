@@ -13,7 +13,11 @@
     "content:build": "python3 scripts/build-content.py",
     "content:verify": "node scripts/verify-content.mjs",
     "smoke:esv": "node scripts/esv-live-smoke.mjs",
-    "docs:support": "node scripts/readme-support.mjs"
+    "docs:support": "node scripts/readme-support.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check:size": "node scripts/check-source-size.mjs",
+    "verify": "npm run format:check && npm run check && npm test && npm run content:verify && npm run build && npm run check:size"
   },
   "dependencies": {
     "@cloudflare/workers-oauth-provider": "1.2.4",
@@ -33,6 +37,8 @@
     "@tsconfig/svelte": "5.0.5",
     "@types/node": "^24.19.2",
     "@vitest/coverage-v8": "5.1.0",
+    "prettier": "^3.10.1",
+    "prettier-plugin-svelte": "^4.1.1",
     "svelte-check": "4.3.3",
     "typescript": "5.9.3",
     "vite": "7.3.8",
