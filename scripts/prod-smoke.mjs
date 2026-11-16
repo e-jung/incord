@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Run manually: SMOKE_URL=http://localhost:8793 node scripts/prod-smoke.mjs
 // Uses real APIs and disposable browser profiles. Never mocks or seeds app state.
-import { chromium, devices, expect as baseExpect } from '@playwright/test';
+import { chromium, devices, request, expect as baseExpect } from '@playwright/test';
 import { execFile } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { parseEnv, promisify } from 'node:util';
@@ -15,7 +15,7 @@ if (process.argv.includes('--help')) {
       'count in finally. Requires configured email and push keys. SMOKE_CODE_CMD overrides t' +
       'he Gmail code reader (print a subject or six-digit code). Reader credentials come onl' +
       'y from the selected GOG vars in /home/ubuntu/.openclaw/.env. Two codes/run; rate limi' +
-      'ts may require a 15-minute wait. Legacy host checks run on production; override with ' +
+      'ts fail promptly; rerun after 15 minutes. Legacy host checks run on production; override with ' +
       'SMOKE_LEGACY_URL.',
   );
   process.exit(0);
@@ -45,6 +45,7 @@ const origin = target.origin;
 const expect = baseExpect.configure({ timeout: 15_000 });
 const results = [];
 const contexts = [];
+const cleanupStates = new Map();
 const diagnostics = [];
 const secrets = new Set();
 let browser,
@@ -70,7 +71,10 @@ async function check(name, action) {
   }
 }
 async function api(context, path, method = 'GET') {
-  const response = await context.request.fetch(origin + '/api' + path, {
+  // Keep authentication in memory so cleanup does not depend on a live browser.
+  if (contexts.includes(context)) cleanupStates.set(context, await context.storageState());
+  const client = context.request || context;
+  const response = await client.fetch(origin + '/api' + path, {
     method,
     headers: { Origin: origin },
     timeout: 15_000,
@@ -206,27 +210,19 @@ async function emailSignin(page, beforeVerify = () => {}) {
   // can never satisfy a new flow, including the second isolated browser.
   for (const code of await readCodes()) seenCodes.add(code);
   await page.getByLabel('Email address', { exact: true }).fill(smokeEmail);
-  for (let attempt = 0; ; attempt++) {
-    const [response] = await Promise.all([
-      page.waitForResponse(
-        (response) =>
-          new URL(response.url()).pathname === '/api/auth/email/start' &&
-          response.request().method() === 'POST',
-      ),
-      page.getByRole('button', { name: 'Email me a code', exact: true }).click(),
-    ]);
-    if (response.status() !== 429) {
-      expect(response.ok(), 'Email code request succeeded').toBe(true);
-      break;
-    }
-    if (attempt >= 1)
-      throw new Error(
-        'Email code send limit still active after waiting; no further sends attempted',
-      );
-    console.log('INFO Email send limit reached; waiting 15 minutes before one retry.');
-    await delay(15 * 60_000 + 1_000);
-    for (const code of await readCodes()) seenCodes.add(code);
-  }
+  const [response] = await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === '/api/auth/email/start' &&
+        response.request().method() === 'POST',
+    ),
+    page.getByRole('button', { name: 'Email me a code', exact: true }).click(),
+  ]);
+  // A 15-minute idle wait can outlive the caller's process budget and skip finally.
+  // Fail promptly, clean up existing sessions, and let the operator rerun later.
+  if (response.status() === 429)
+    throw new Error('Email send limit reached; rerun after 15 minutes. No retry attempted.');
+  expect(response.ok(), 'Email code request succeeded').toBe(true);
   await expect(page.getByLabel('Six-digit code')).toBeVisible();
   const deadline = Date.now() + 120_000;
   while (Date.now() < deadline) {
@@ -243,6 +239,7 @@ async function emailSignin(page, beforeVerify = () => {}) {
       );
       await page.getByLabel('Six-digit code').fill(code);
       await returned;
+      cleanupStates.set(page.context(), await page.context().storageState());
       return;
     }
     await delay(3_000);
@@ -440,6 +437,17 @@ try {
       console.log('INFO Removing a smoke account left by an interrupted run');
       await api(context, '/account', 'DELETE');
       await page.reload();
+      await expect.poll(async () => (await state(page)).account).toBeNull();
+      // Sign-in persisted an ownership choice before we deleted the leftover
+      // account. Reload reopens that modal; dismiss it without discarding the
+      // learned local item before trying to tap the navigation behind it.
+      const ownership = page.getByRole('dialog', {
+        name: 'Add the 10 items on this device to your account?',
+        exact: true,
+      });
+      await expect(ownership).toBeVisible();
+      await ownership.getByRole('button', { name: 'Close dialog', exact: true }).click();
+      await expect(ownership).toHaveCount(0);
       await account(page);
       await emailSignin(page);
     }
@@ -533,28 +541,35 @@ try {
     results.push({ name: 'Smoke setup', ok: false, error: safe(error) });
 } finally {
   // Independent of UI state: a failure after email sign-in must not leave an account.
-  // APIRequestContext shares each isolated profile's cookies and sends the required Origin.
+  // Fresh APIRequestContexts restore each profile's cookies and send the required Origin.
   await check('Cleanup: no smoke account remains', async () => {
     const failures = [];
     if (creationAttempted) {
+      const cleanupContexts = [];
       for (const context of contexts) {
         try {
-          const me = await api(context, '/me');
+          const storageState = await context.storageState().catch(() => cleanupStates.get(context));
+          if (!storageState) throw new Error('No session snapshot available for cleanup');
+          const fresh = await request.newContext({ storageState });
+          cleanupContexts.push(fresh);
+          const me = await api(fresh, '/me');
           if (me.user) {
             if (userId && me.user.id !== userId)
               throw new Error('Unexpected account identity during cleanup');
-            await api(context, '/account', 'DELETE');
+            await api(fresh, '/account', 'DELETE');
           }
         } catch (error) {
           failures.push(safe(error));
         }
       }
-      // Check every session, including the one whose cookie deletion did not clear.
-      for (const context of contexts) {
+      // Check and close each independent cleanup session, even after deletion fails.
+      for (const context of cleanupContexts) {
         try {
           expect(await api(context, '/me')).toEqual({ user: null });
         } catch (error) {
           failures.push(safe(error));
+        } finally {
+          await context.dispose();
         }
       }
     }
