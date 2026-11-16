@@ -23,6 +23,7 @@ function fixture() {
     async () => new Response('<h1>Incord</h1>', { headers: { 'Content-Type': 'text/html' } }),
   );
   const env = {
+    DEPLOYMENT_ADAPTER: 'jesklabs',
     SESSION_SECRET: 'migration-unit-test-secret-over-32-characters',
     ASSETS: { fetch: assets },
     REGISTRY: {

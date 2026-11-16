@@ -30,19 +30,17 @@ Use Node.js 24 and npm. Normal builds use committed content and do not download 
 
 ```sh
 npm ci
-cp cloudflare/dev.vars.example .dev.vars
-npm run dev
-```
-
-Edit the ignored `.dev.vars` with fresh local values, replacing the example placeholders. Alternatively, before creating that file, `node scripts/local-secrets.mjs` generates local session, stats and VAPID keys; it preserves an existing file. Never commit credentials.
-
-`npm run dev` starts Vite's frontend development server. **It does not run the Worker API and has no API proxy configured.** For the complete app, including sign-in, sync and MCP, run Wrangler instead:
-
-```sh
+cp .dev.vars.example .dev.vars
+# Replace SESSION_SECRET with a fresh random value (at least 32 characters).
+# For example: node -e "console.log(require('node:crypto').randomBytes(48).toString('base64url'))"
 npm run serve
 ```
 
-Open http://localhost:8793. Wrangler's build hook rebuilds the frontend automatically. Local Durable Object state stays in `.wrangler`; browser practice stays in IndexedDB. Local operation does not deploy anything. Shared email sign-in requires the Accounts service binding; legacy Google, ESV and push require their optional configuration below.
+Open http://localhost:8793. This is the complete app: Wrangler builds the frontend and runs the local Worker and SQLite Durable Objects. **Only `SESSION_SECRET` is required**, including for email-free sign-in-code accounts, sync, adding text and practice. No Cloudflare login, Accounts service, Google, email provider or ESV key is needed locally. Never commit `.dev.vars`; use fresh local values, not production credentials. `node scripts/local-secrets.mjs` can generate local session, stats and push keys instead and preserves an existing file.
+
+To try it: open Account settings → Create an account with a sign-in code, save the code and acknowledge it. Discover → Add your own → Your text adds a passage; open it in Library to practice. Sign out and use the saved code to recover the same library.
+
+Local Durable Object state stays in `.wrangler`; browser practice stays in IndexedDB. Local operation never deploys anything. `npm run dev` is an optional Vite-only frontend HMR server: it does **not** run the Worker API or proxy it. Email/SSO, legacy Google, ESV and push require the optional configuration below.
 
 ### Checks
 
@@ -61,27 +59,26 @@ For local email-code testing, the Playwright configuration starts `cloudflare/te
 
 ## Deploy your own instance
 
-You need a Cloudflare account with Workers and SQLite Durable Objects, and Wrangler authentication (`npx wrangler login`, or your own Cloudflare CI credentials). Copy/adapt `wrangler.jsonc`: use your own Worker name and routes (or enable your own `workers.dev` address), and set `APP_ORIGIN` to your deployed HTTPS origin. The committed routes and `scripts/deploy.sh` target the maintained Incord service; do not use them unchanged for a fork.
+You need a Cloudflare account with Workers and SQLite Durable Objects, and Wrangler authentication (`npx wrangler login`, or your own Cloudflare CI credentials). The base `wrangler.jsonc` is neutral: no custom domains, Accounts binding, donation link or personal contact defaults; `workers.dev` is enabled. For a **new** fork choose your own Worker name, configure your own route (or use `workers.dev`), and set `APP_ORIGIN` to your deployed HTTPS origin. Do not rename an existing deployed Worker. `scripts/deploy.sh` is explicitly the maintained Jesklabs production deploy, not a fork deployment command.
 
 Preserve the Durable Object classes, bindings and additive migration sequence. For an existing deployment, never rename persistent Worker/DO identities or internal storage keys: doing so can strand accounts. Wrangler creates the declared Durable Objects through migrations; no manual KV namespace or D1 provisioning is needed. The included 15-minute cron checks reminders.
 
 Configure secrets with `npx wrangler secret put NAME`; do not put secret values in Wrangler config or source control.
 
-| Setting                                                  | Purpose                                                                                                                                                     |
-| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SESSION_SECRET`                                         | Required: strong random secret of at least 32 characters for sessions, identity hashes and OAuth encryption. Keep stable across releases.                   |
-| `APP_ORIGIN`                                             | Required for deployment: your canonical HTTPS origin; set as a Wrangler variable or deploy-time `--var`. Leave unset for origin-agnostic local use.         |
-| `STATS_TOKEN`                                            | Optional private `/stats` dashboard and orphan-account maintenance access; use a separate strong random secret. Never put it in a URL.                      |
-| `RESEND_API_KEY`                                         | Optional feedback email notifications via Resend (sign-in mail is sent by Accounts).                                                                        |
-| `EMAIL_FROM`                                             | Sender identity for Resend. Set your own verified sender; otherwise the maintained service's default sender is used.                                        |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`               | Legacy Google sign-in, retained as the default until Accounts Google is verified in production. Register your origin's `/api/auth/google/callback`.         |
-| `ACCOUNTS_SVC`                                           | Cloudflare service binding to `jesklabs-accounts`, entrypoint `IncordClient`; enables shared email and explicit SSO sign-in.                                |
-| `ACCOUNTS_GOOGLE`                                        | Public variable, `0` by default. Only `1` switches the Google button to Accounts. The direct `/api/auth/jesklabs?provider=google` route is always testable. |
-| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Optional Web Push: matching P-256 public/private keys and operator contact URI. Private key is the base64url raw scalar. Keep keys stable.                  |
-| `DONATE_URL`                                             | Optional public Wrangler variable: HTTPS support link, shown only in About and Connect.                                                                     |
-| `ESV_API_KEY`                                            | Optional server-side Crossway API access, subject to Crossway's conditions. ESV is never bundled.                                                           |
+| Setting                                                  | Purpose                                                                                                                                                                                                     |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SESSION_SECRET`                                         | Required: strong random secret of at least 32 characters for sessions, identity hashes and OAuth encryption. Keep stable across releases.                                                                   |
+| `APP_ORIGIN`                                             | Required for deployment: your canonical HTTPS origin; set as a Wrangler variable or deploy-time `--var`. Leave unset for origin-agnostic local use.                                                         |
+| `STATS_TOKEN`                                            | Optional private `/stats` dashboard and orphan-account maintenance access; use a separate strong random secret. Never put it in a URL.                                                                      |
+| `RESEND_API_KEY`, `EMAIL_FROM`, `FEEDBACK_TO`            | Optional feedback email notifications via Resend, enabled only with all three configured. Without them submissions are still durably stored and visible in private stats. Sign-in mail is sent by Accounts. |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`               | Legacy Google sign-in, retained as the default until Accounts Google is verified in production. Register your origin's `/api/auth/google/callback`.                                                         |
+| `ACCOUNTS_SVC`, `ACCOUNTS_ORIGIN`, `ACCOUNTS_CLIENT`     | Optional compatible Accounts RPC binding, HTTPS browser origin and registered client (default `incord`). Not needed for sign-in-code accounts. The maintained adapter supplies Jesklabs values.             |
+| `ACCOUNTS_GOOGLE`                                        | Public variable, `0` by default. Only `1` switches the Google button to Accounts. The direct `/api/auth/jesklabs?provider=google` route is always testable.                                                 |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Optional Web Push: matching P-256 public/private keys and operator contact URI. Private key is the base64url raw scalar. Keep keys stable.                                                                  |
+| `DONATE_URL`                                             | Optional public Wrangler variable: HTTPS support link, shown only in About and Connect.                                                                                                                     |
+| `ESV_API_KEY`                                            | Optional server-side Crossway API access, subject to Crossway's conditions. ESV is never bundled.                                                                                                           |
 
-MCP reuses `SESSION_SECRET` and `APP_ORIGIN`; no additional MCP secret is needed. Review service-specific sender/contact defaults before hosting your own instance. Build and commit your release before deployment so the displayed version matches the deployed source. After adapting configuration and setting secrets:
+MCP reuses `SESSION_SECRET` and `APP_ORIGIN`; no additional MCP secret is needed. Build and commit your release before deployment so the displayed version matches the deployed source. After adapting configuration and setting secrets:
 
 ```sh
 npx wrangler deploy --var APP_ORIGIN:https://your-own-domain.example
@@ -95,7 +92,7 @@ Existing JS, CSS, fonts and content files are served directly by Workers Static 
 
 The maintained legacy host, `byheart.jesklabs.com`, uses the tiny, independent [legacy redirect Worker](cloudflare/legacy-redirect/worker.ts). It preserves path/query redirects to Incord, returns 410 for old APIs and serves the self-unregistering service worker. It has no assets or Durable Object bindings. For this route migration, deploy in this order:
 
-1. Deploy the main Worker with the updated root `wrangler.jsonc`, which removes its old-host custom-domain route. Keep the existing `byheart` Worker name and persistent bindings.
+1. Deploy the main Worker with `scripts/deploy.sh`, whose generated configuration has only the canonical custom-domain route. Keep the existing `byheart` Worker name and persistent bindings.
 2. Deploy the redirect Worker to claim that released route:
 
    ```sh
@@ -103,6 +100,14 @@ The maintained legacy host, `byheart.jesklabs.com`, uses the tiny, independent [
    ```
 
 There may be a short old-host gap between those deployments. Forks without a legacy hostname need only the main Worker; otherwise adapt both the legacy route and redirect destination. The main deploy script does not deploy the redirect Worker.
+
+### Maintained-service overlay (not required for forks)
+
+`node scripts/production-config.mjs` generates the ignored root `wrangler.production.generated.json` from the neutral base. `scripts/deploy.sh` always generates and selects it. It preserves the production Worker name `byheart`, all DO bindings/classes/migrations, cron, asset routes, observability, Accounts binding, custom domain, Google switch and support URL; it sets the same production `APP_ORIGIN` previously passed on the command line. Do not use Wrangler environments for this transition: changing deployment identity could strand existing data.
+
+The existing production `APP_ORIGIN` selects `cloudflare/adapters/jesklabs.ts` for maintained Accounts URLs, feedback contact defaults, VAPID subject and legacy-host/push migration. An explicit `DEPLOYMENT_ADAPTER=jesklabs` selector is also supported, but no new variable is added to production. The neutral base never selects it. Explicit `ACCOUNTS_ORIGIN`, `ACCOUNTS_CLIENT`, `EMAIL_FROM`, `FEEDBACK_TO` and `VAPID_SUBJECT` settings override defaults. Forks without push configuration do not send notifications; configured push requires an operator contact URI. The print card uses the current instance hostname, and return paths are validated against the request origin. Historical storage/identity keys remain untouched.
+
+Run `node scripts/check-core-personal-values.mjs` to catch operator hostnames/addresses accidentally reintroduced into runtime core. Optional adapter, historical legacy Worker and test fixtures are excluded; product names, attribution and persistent identity names are not personal configuration.
 
 ### Shared Jesklabs sign-in
 

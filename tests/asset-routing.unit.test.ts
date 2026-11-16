@@ -71,7 +71,10 @@ describe('asset-first routing configuration', () => {
     expect(
       config.assets.run_worker_first.every((pattern: string) => !pattern.startsWith('!')),
     ).toBe(true);
-    expect(config.routes).toEqual([{ pattern: 'incord.jesklabs.com', custom_domain: true }]);
+    expect(config.routes).toEqual([]);
+    expect(config.services).toBeUndefined();
+    expect(config.vars).toEqual({});
+    expect(config.workers_dev).toBe(true);
   });
   it('isolates the old host in a Worker without application state or assets', () => {
     const redirect = ts.parseConfigFileTextToJson(

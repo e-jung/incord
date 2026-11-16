@@ -17,7 +17,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check:size": "node scripts/check-source-size.mjs",
-    "verify": "npm run format:check && npm run check && npm test && npm run content:verify && npm run build && npm run check:size"
+    "verify": "npm run format:check && npm run check && npm test && npm run content:verify && npm run build && npm run check:size && node scripts/check-core-personal-values.mjs"
   },
   "dependencies": {
     "@cloudflare/workers-oauth-provider": "1.2.4",

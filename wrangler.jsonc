@@ -5,7 +5,7 @@
   "main": "cloudflare/worker.ts",
   "compatibility_date": "2025-11-13",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
-  "workers_dev": false,
+  "workers_dev": true,
   // Existing files bypass the Worker. Keep missing-asset handling disabled here:
   // SPA mode also rewrites missing /assets/* and /content/* navigations to HTML.
   // The Worker supplies the extensionless HTML app-route fallback on misses only.
@@ -26,9 +26,6 @@
       "/join/*",
     ],
   },
-  "services": [
-    { "binding": "ACCOUNTS_SVC", "service": "jesklabs-accounts", "entrypoint": "IncordClient" },
-  ],
   "durable_objects": {
     "bindings": [
       { "name": "GROUPS", "class_name": "GroupDO" },
@@ -51,8 +48,6 @@
   // Optional: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET; VAPID_PUBLIC_KEY,
   // VAPID_PRIVATE_KEY (base64url raw P-256 scalar), VAPID_SUBJECT.
   // Set APP_ORIGIN to the deployed https origin after review.
-  "routes": [{ "pattern": "incord.jesklabs.com", "custom_domain": true }],
-  // APP_ORIGIN is passed at deploy time (scripts/deploy.sh) so local dev stays origin-agnostic.
-  // Optional public support URL. Leave blank to hide all support links.
-  "vars": { "ACCOUNTS_GOOGLE": "1", "DONATE_URL": "https://ko-fi.com/jesklabs" },
+  "routes": [],
+  "vars": {},
 }

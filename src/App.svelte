@@ -39,7 +39,7 @@
     <h1>{ui.codeAccount.printTitle}</h1>
     <p class="signin-code-value">{vm.printableCode}</p>
     <p>{ui.codeAccount.printHelp}</p>
-    <p>incord.jesklabs.com</p>
+    <p>{location.host}</p>
   </article>{/if}
 <svelte:window onkeydown={vm.physical} />
 <main

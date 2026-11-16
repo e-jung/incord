@@ -1,0 +1,58 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "byheart",
+  "build": { "command": "npm run build" },
+  "main": "cloudflare/worker.ts",
+  "compatibility_date": "2025-11-13",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "workers_dev": false,
+  // Existing files bypass the Worker. Keep missing-asset handling disabled here:
+  // SPA mode also rewrites missing /assets/* and /content/* navigations to HTML.
+  // The Worker supplies the extensionless HTML app-route fallback on misses only.
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "none",
+    "run_worker_first": [
+      "/api",
+      "/api/*",
+      "/mcp*",
+      "/oauth",
+      "/oauth/*",
+      "/.well-known/*",
+      "/auth/jesklabs/callback",
+      "/stats*",
+      "/join",
+      "/join/*",
+    ],
+  },
+  "services": [
+    { "binding": "ACCOUNTS_SVC", "service": "jesklabs-accounts", "entrypoint": "IncordClient" },
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "GROUPS", "class_name": "GroupDO" },
+      { "name": "USERS", "class_name": "UserDO" },
+      { "name": "REGISTRY", "class_name": "RegistryDO" },
+      { "name": "STATS", "class_name": "StatsDO" },
+      { "name": "OAUTH_STORAGE", "class_name": "OAuthStorageDO" },
+    ],
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["UserDO", "RegistryDO"] },
+    { "tag": "v2-stats", "new_sqlite_classes": ["StatsDO"] },
+    { "tag": "v3-oauth", "new_sqlite_classes": ["OAuthStorageDO"] },
+    { "tag": "v4-groups", "new_sqlite_classes": ["GroupDO"] },
+  ],
+  "triggers": { "crons": ["*/15 * * * *"] },
+  "observability": { "enabled": true },
+  // Required secret: SESSION_SECRET (at least 32 random characters).
+  // ESV_API_KEY enables the ESV proxy; STATS_TOKEN protects /stats.
+  // Optional: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET; VAPID_PUBLIC_KEY,
+  // VAPID_PRIVATE_KEY (base64url raw P-256 scalar), VAPID_SUBJECT.
+  // Set APP_ORIGIN to the deployed https origin after review.
+  "routes": [{ "pattern": "incord.jesklabs.com", "custom_domain": true }],
+  // APP_ORIGIN is passed at deploy time (scripts/deploy.sh) so local dev stays origin-agnostic.
+  // Optional public support URL. Leave blank to hide all support links.
+  "vars": { "ACCOUNTS_GOOGLE": "1", "DONATE_URL": "https://ko-fi.com/jesklabs" },
+}

@@ -16,6 +16,7 @@ config.services = [
 ];
 config.vars = {
   ...config.vars,
+  DEPLOYMENT_ADAPTER: 'jesklabs',
   EMAIL_TEST_SINK: '1',
   ACCOUNTS_GOOGLE: '1',
   GOOGLE_CLIENT_ID: 'fake-local-only',

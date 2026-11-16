@@ -208,7 +208,7 @@ export const copy = {
   },
 
   feedbackTitle: 'Send feedback',
-  feedbackDetail: 'An idea, a problem, or something else — Eric would love to hear it.',
+  feedbackDetail: 'An idea, a problem, or something else — we would love to hear it.',
   feedbackKind: 'Kind',
   feedbackKinds: ['Idea', 'Problem', 'Other'] as const,
   feedbackMessage: 'Message',
@@ -220,7 +220,7 @@ export const copy = {
     'Only app version, device and browser type, screen size, and whether you’re signed in. No account details or library.',
   feedbackSend: 'Send feedback',
   feedbackSending: 'Sending…',
-  feedbackThanks: 'Thanks — Eric reads every one.',
+  feedbackThanks: 'Thanks — your feedback has been saved.',
   feedbackLengthError: 'Please write between 10 and 4000 characters.',
   feedbackContactError: 'Please enter a valid email address, or leave it blank.',
   feedbackSendError: 'Your feedback couldn’t be sent. Please try again when you’re online.',

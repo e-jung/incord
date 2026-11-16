@@ -1,12 +1,18 @@
-# Copy to .dev.vars (ignored), or run node scripts/local-secrets.mjs.
-# Never use these placeholders in production.
+# Copy to .dev.vars (ignored); replace this with fresh random local characters.
+# This is the ONLY required setting, including for sign-in-code accounts and sync.
 SESSION_SECRET="replace-with-at-least-32-random-characters"
-STATS_TOKEN="replace-with-a-separate-random-stats-access-token"
-# Optional features; leave unset to disable.
+# Optional independent private dashboard key:
+# STATS_TOKEN="replace-with-a-separate-random-stats-access-token"
 # ESV_API_KEY="your-crossway-api-key"
 # GOOGLE_CLIENT_ID=""
 # GOOGLE_CLIENT_SECRET=""
 # VAPID_PUBLIC_KEY=""
 # VAPID_PRIVATE_KEY=""
 # VAPID_SUBJECT="mailto:you@example.com"
-# APP_ORIGIN is intentionally unset locally; scripts/deploy.sh supplies production.
+# RESEND_API_KEY=""
+# EMAIL_FROM="Incord <you@example.com>"
+# FEEDBACK_TO="you@example.com"
+# ACCOUNTS_ORIGIN="https://accounts.example.com"
+# ACCOUNTS_CLIENT="incord"
+# Accounts also needs a compatible ACCOUNTS_SVC binding in Wrangler.
+# APP_ORIGIN is intentionally unset for origin-agnostic local development.

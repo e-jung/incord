@@ -28,7 +28,10 @@ function fixture() {
     blockConcurrencyWhile: (fn: () => unknown) => fn(),
   } as unknown as DurableObjectState;
   const registry = new RegistryDO(state),
-    env = { SESSION_SECRET: 'feedback-unit-secret-longer-than-32-chars' } as Env;
+    env = {
+      DEPLOYMENT_ADAPTER: 'jesklabs',
+      SESSION_SECRET: 'feedback-unit-secret-longer-than-32-chars',
+    } as Env;
   env.REGISTRY = {
     idFromName: () => '',
     get: () => ({
@@ -56,6 +59,17 @@ afterEach(() => {
   vi.useRealTimers();
 });
 describe('Feedback boundary', () => {
+  it('stores neutral feedback with a mail API key but no configured sender or recipient', async () => {
+    const f = fixture();
+    delete f.env.DEPLOYMENT_ADAPTER;
+    f.env.RESEND_API_KEY = 'unit-key';
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    await f.send();
+    expect(f.rows()).toHaveLength(1);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(f.rows()[0].emailed).toBe(0);
+  });
   it('trims messages/contact, permits blank contact and accepts only bounded structured metadata', () => {
     expect(
       validateFeedback({ ...input, message: '  ' + input.message + '  ', contact: '  ' }),
@@ -105,7 +119,7 @@ describe('Feedback boundary', () => {
         { uid: 'raw-private-account', clientName: 'Desktop' },
         'mcp',
       ),
-    ).toEqual({ ok: true, message: 'Thanks — Eric reads every one.' });
+    ).toEqual({ ok: true, message: 'Thanks — your feedback has been saved.' });
     expect(f.rows()[0]).toMatchObject({
       kind: 'Idea',
       source: 'mcp',

@@ -235,9 +235,18 @@ describe('Code-only accounts', () => {
     ])
       expect(validCode(value)).toBe(false);
   });
-  it('creates and restores a code-only identity with HMAC-only SQL storage and non-secret revision', async () => {
-    const f = fixture(),
-      account = await create(f),
+  it('creates and restores an identity with SESSION_SECRET only and HMAC-only storage', async () => {
+    const f = fixture();
+    delete f.env.ACCOUNTS_SVC;
+    delete f.env.EMAIL_TEST_SINK;
+    const config = await (await f.call('/api/config')).json<any>();
+    expect(config).toMatchObject({
+      accountsOrigin: null,
+      email: false,
+      google: false,
+      push: false,
+    });
+    const account = await create(f),
       { code, user } = account.body;
     expect(validCode(code)).toBe(true);
     expect(user).toMatchObject({

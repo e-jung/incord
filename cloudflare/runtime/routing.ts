@@ -1,3 +1,4 @@
+import { deployment } from '../deployment';
 import { generateSignInCode, validCode } from '../../shared/sign-in-code';
 import { supportUrl } from '../../shared/support';
 import { accountsCall } from '../accounts';
@@ -101,6 +102,8 @@ export async function api(request: Request, env: Env): Promise<Response> {
   }
   if (path === '/api/config' && request.method === 'GET')
     return json({
+      accountsOrigin: deployment(env).accountsOrigin || null,
+      accountsClient: deployment(env).accountsClient,
       donateUrl: supportUrl(env.DONATE_URL),
       email: emailEnabled(env, request),
       google: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET),

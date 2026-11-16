@@ -33,6 +33,7 @@ function state(id: string) {
 }
 function fixture() {
   const env = {
+    DEPLOYMENT_ADAPTER: 'jesklabs',
     SESSION_SECRET: 'email-unit-only-secret-more-than-32-chars',
     EMAIL_TEST_SINK: '1',
   } as Env;

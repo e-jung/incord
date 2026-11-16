@@ -1,3 +1,4 @@
+import { deployment } from './deployment';
 import type { Env } from './worker';
 
 export class FeedbackError extends Error {
@@ -162,6 +163,7 @@ export async function submitFeedback(
     ...(account ? { accountRef: account.slice(0, 16) } : {}),
     ...(value.meta ? { meta: { ...value.meta, signedIn: !!identity } } : {}),
   };
+  const settings = deployment(env);
   const sink =
     env.EMAIL_TEST_SINK === '1' &&
     ['localhost', '127.0.0.1', '[::1]'].includes(new URL(request.url).hostname);
@@ -171,7 +173,7 @@ export async function submitFeedback(
       row,
       ip,
       account,
-      email: !!env.RESEND_API_KEY || sink,
+      email: !!(env.RESEND_API_KEY && settings.emailFrom && settings.feedbackTo) || sink,
     });
   } catch (e) {
     if (e instanceof FeedbackError) throw e;
@@ -183,8 +185,8 @@ export async function submitFeedback(
         ? `\n\n${saved.more} more stored feedback submissions are available in private stats.`
         : '';
       const payload = {
-        from: env.EMAIL_FROM || 'Incord <hello@jesklabs.com>',
-        to: 'incord@jesklabs.com',
+        from: settings.emailFrom || 'Incord <local@example.test>',
+        to: settings.feedbackTo || 'local@example.test',
         ...(value.contact ? { reply_to: value.contact } : {}),
         subject: `[Incord feedback] ${value.kind}: ${value.message.replace(/[\x00-\x1f\x7f-\x9f\u2028\u2029]/g, ' ').slice(0, 60)}`,
         text: `\
@@ -235,7 +237,7 @@ ${summary}\
       }
     }
   }
-  return { ok: true, message: 'Thanks — Eric reads every one.' };
+  return { ok: true, message: 'Thanks — your feedback has been saved.' };
 }
 
 /** Additive tables in the existing RegistryDO, never a new binding. */

@@ -211,10 +211,10 @@ export function createSigninController(
         await vm.afterSignin(!out.ssoTicket);
       }
       if (out.ssoTicket) {
-        const attach = new URL('https://accounts.jesklabs.com/sso/attach');
+        const attach = new URL('/sso/attach', vm.config.accountsOrigin);
         attach.search = new URLSearchParams({
           ticket: out.ssoTicket,
-          client: 'incord',
+          client: vm.config.accountsClient || 'incord',
           return: wasSignedIn ? '/?googleLink=linked' : returnPath,
         }).toString();
         location.assign(attach.href);

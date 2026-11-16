@@ -143,9 +143,10 @@
           vm.confirmEverywhere = true;
         }}>{ui.signoutEverywhere}</Button
       >{:else}<p>{ui.localAccountNotice}</p>
-      <Button disabled={!!vm.emailBusy || !!vm.codeBusy || vm.jlBusy} onclick={vm.primarySignin}
-        >{ui.jesklabs.signIn}</Button
-      >{#if vm.jlError}<p role="alert">
+      {#if vm.config.accountsOrigin}<Button
+          disabled={!!vm.emailBusy || !!vm.codeBusy || vm.jlBusy}
+          onclick={vm.primarySignin}>{ui.jesklabs.signIn}</Button
+        >{/if}{#if vm.jlError}<p role="alert">
           {vm.jlError}
         </p>{/if}{#if vm.config.googleEnabled ?? vm.config.google}<Button
           disabled={!!vm.emailBusy || !!vm.codeBusy}

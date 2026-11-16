@@ -1,3 +1,4 @@
+import { deployment } from '../deployment';
 import { normalizeCode } from '../../shared/sign-in-code';
 import {
   accountsCall,
@@ -209,8 +210,8 @@ export async function authChallenge(env: Env, request: Request, kind: string) {
 export const jlCookie = (id: string, age: number) =>
   `__Host-jl_auth=${id}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${age}`;
 
-export function jlTarget(path: string, flags: Record<string, string>) {
-  const url = new URL(accountsReturnPath(path), 'https://incord.jesklabs.com');
+export function jlTarget(path: string, flags: Record<string, string>, origin: string) {
+  const url = new URL(accountsReturnPath(path, origin), origin);
   for (const [key, value] of Object.entries(flags)) url.searchParams.set(key, value);
   return url.pathname + url.search + url.hash;
 }
@@ -245,7 +246,7 @@ export async function jesklabsAuth(request: Request, env: Env): Promise<Response
     const id = random(),
       state = random(),
       verifier = random(48),
-      returnPath = accountsReturnPath(url.searchParams.get('return'));
+      returnPath = accountsReturnPath(url.searchParams.get('return'), origin);
     const previous = cookies(request)['__Host-jl_auth'];
     if (previous) await registry(env, '/challenge/take', { id: previous });
     await registry(env, '/challenge/set', {
@@ -260,9 +261,11 @@ export async function jesklabsAuth(request: Request, env: Env): Promise<Response
       ttl: 1_800_000,
       value: { kind: 'jl-return', returnPath },
     });
-    const target = new URL('https://accounts.jesklabs.com/authorize');
+    const settings = deployment(env);
+    assert(settings.accountsOrigin && env.ACCOUNTS_SVC, 'Accounts is not configured', 503);
+    const target = new URL('/authorize', settings.accountsOrigin);
     target.search = new URLSearchParams({
-      client: 'incord',
+      client: settings.accountsClient,
       redirect_uri: origin + '/auth/jesklabs/callback',
       state,
       code_challenge: await digest(verifier),
@@ -297,12 +300,16 @@ export async function jesklabsAuth(request: Request, env: Env): Promise<Response
         assert((await signedIn(request, env)).uid === flow.uid, 'Sign-in account changed', 401);
       if (url.searchParams.has('error'))
         return jlRedirect(
-          jlTarget(returnPath, {
-            jlOptions: '1',
-            ...(url.searchParams.get('error') === 'login_required'
-              ? {}
-              : { jlError: 'Sign-in was not completed. Please try again.' }),
-          }),
+          jlTarget(
+            returnPath,
+            {
+              jlOptions: '1',
+              ...(url.searchParams.get('error') === 'login_required'
+                ? {}
+                : { jlError: 'Sign-in was not completed. Please try again.' }),
+            },
+            origin,
+          ),
         );
       const code = url.searchParams.get('code');
       assert(code, 'Sign-in was not completed. Please try again.', 401);
@@ -317,12 +324,12 @@ export async function jesklabsAuth(request: Request, env: Env): Promise<Response
           id: pendingId,
           value: { kind: 'jl-pending', sub: identity.sub, email: identity.email, returnPath },
         });
-        return jlRedirect(jlTarget(returnPath, { jlConfirm: '1' }), pendingId, 300);
+        return jlRedirect(jlTarget(returnPath, { jlConfirm: '1' }, origin), pendingId, 300);
       }
       const uid = await resolveAccounts(env, identity, flow.uid);
       const login = await issue(env, uid, origin);
       return jlRedirect(
-        jlTarget(returnPath, flow.uid ? { googleLink: 'success' } : { signedIn: '1' }),
+        jlTarget(returnPath, flow.uid ? { googleLink: 'success' } : { signedIn: '1' }, origin),
         '',
         0,
         login.headers.get('Set-Cookie')!,
@@ -333,16 +340,20 @@ export async function jesklabsAuth(request: Request, env: Env): Promise<Response
           ? error.message
           : 'Sign-in is temporarily unavailable. Please try again shortly.';
       return jlRedirect(
-        jlTarget(returnPath, {
-          jlOptions: '1',
-          jlError: message,
-          ...(flow?.uid
-            ? {
-                googleLink:
-                  error instanceof ApiError && error.status === 409 ? 'collision' : 'failed',
-              }
-            : {}),
-        }),
+        jlTarget(
+          returnPath,
+          {
+            jlOptions: '1',
+            jlError: message,
+            ...(flow?.uid
+              ? {
+                  googleLink:
+                    error instanceof ApiError && error.status === 409 ? 'collision' : 'failed',
+                }
+              : {}),
+          },
+          origin,
+        ),
       );
     }
   }

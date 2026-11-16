@@ -274,6 +274,7 @@ async function pushFixture() {
     'verify',
   ]);
   const env = {
+    DEPLOYMENT_ADAPTER: 'jesklabs',
     SESSION_SECRET: 'unit-test-secret-more-than-32-characters',
     VAPID_PUBLIC_KEY: b64(new Uint8Array(await crypto.subtle.exportKey('raw', vapid.publicKey))),
     VAPID_PRIVATE_KEY: (await crypto.subtle.exportKey('jwk', vapid.privateKey)).d,

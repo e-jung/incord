@@ -1,3 +1,4 @@
+import { deployment } from '../deployment';
 import { loadSettings, serverSettings, settingsDefaults } from '../../shared/domain/settings';
 import { assertEsvLimit, stripEsvText } from '../esv';
 import { GroupsError } from '../groups';
@@ -326,6 +327,7 @@ export class UserDO {
             settings: this.settings(),
           });
         if (path === '/push/subscribe') {
+          const migration = deployment(this.env).migration;
           if (data.subscription === null || data.enabled === false) {
             if (data.endpoint)
               this.sql.exec('DELETE FROM subscriptions WHERE endpoint=?', data.endpoint);
@@ -337,8 +339,9 @@ export class UserDO {
           assert(
             this.list('subscriptions').filter(
               (existing) =>
-                data.origin !== 'https://incord.jesklabs.com' ||
-                (existing.origin && existing.origin !== 'https://byheart.jesklabs.com'),
+                !migration ||
+                data.origin !== migration.origin ||
+                (existing.origin && existing.origin !== migration?.legacyOrigin),
             ).length < 5 ||
               this.rows('SELECT endpoint FROM subscriptions WHERE endpoint=?', sub.endpoint).length,
             'Device limit reached',
@@ -349,13 +352,14 @@ export class UserDO {
             sub.endpoint,
             JSON.stringify({ ...sub, origin: data.origin }),
           );
-          if (data.origin === 'https://incord.jesklabs.com')
+          if (migration && data.origin === migration.origin)
             for (const old of this.list('subscriptions'))
-              if (!old.origin || old.origin === 'https://byheart.jesklabs.com')
+              if (!old.origin || old.origin === migration?.legacyOrigin)
                 this.sql.exec('DELETE FROM subscriptions WHERE endpoint=?', old.endpoint);
           return json({ ok: true });
         }
         if (path === '/push/status') {
+          const migration = deployment(this.env).migration;
           const endpointHashes = await Promise.all(
             this.list('subscriptions').map((sub) => endpointHash(sub.endpoint)),
           );
@@ -363,9 +367,10 @@ export class UserDO {
             subscribed: !!data.endpointHash && endpointHashes.includes(data.endpointHash),
             endpointHashes,
             oldOriginOnly:
+              !!migration &&
               this.list('subscriptions').length > 0 &&
               this.list('subscriptions').every(
-                (sub) => !sub.origin || sub.origin === 'https://byheart.jesklabs.com',
+                (sub) => !sub.origin || sub.origin === migration?.legacyOrigin,
               ),
             results: this.get('pushResults') || [],
           });

@@ -1,3 +1,4 @@
+import { deployment } from '../deployment';
 import { dispatchGroupReminders, scheduleGroups } from '../groups';
 import { ApiError, assert, b64, encoder, registry, unb64 } from './common';
 import { Env } from './types';
@@ -156,7 +157,7 @@ export async function sendWebPush(
     false,
     ['sign'],
   );
-  const subject = env.VAPID_SUBJECT || 'mailto:hello@jesklabs.com';
+  const subject = deployment(env).vapidSubject;
   assert(
     /^(?:mailto:[^\s@]+@[^\s@]+|https:\/\/[^\s]+)$/.test(subject),
     'Invalid VAPID subject',

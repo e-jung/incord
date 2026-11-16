@@ -44,7 +44,7 @@ function state() {
   } as unknown as DurableObjectState;
 }
 export function fixture() {
-  const env = {} as Env;
+  const env = { VAPID_SUBJECT: 'mailto:test@example.com' } as Env;
   const users = new Map<string, UserDO>(),
     groups = new Map<string, GroupDO>();
   const registry = new RegistryDO(state(), env);

@@ -86,7 +86,10 @@ export async function accountsCall<K extends keyof AccountsService>(
   if (result && 'error' in result) throw accountsError(result);
   return result as Exclude<typeof result, AccountsFailure>;
 }
-export function accountsReturnPath(value: string | null): string {
+export function accountsReturnPath(
+  value: string | null,
+  origin = 'https://return.invalid',
+): string {
   if (
     !value ||
     !value.startsWith('/') ||
@@ -95,10 +98,8 @@ export function accountsReturnPath(value: string | null): string {
   )
     return '/';
   try {
-    const url = new URL(value, 'https://incord.jesklabs.com');
-    return url.origin === 'https://incord.jesklabs.com'
-      ? url.pathname + url.search + url.hash
-      : '/';
+    const url = new URL(value, origin);
+    return url.origin === new URL(origin).origin ? url.pathname + url.search + url.hash : '/';
   } catch {
     return '/';
   }

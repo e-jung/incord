@@ -1,6 +1,7 @@
+import type { DeploymentEnv } from '../deployment';
 import { type AccountsService } from '../accounts';
 
-export interface Env {
+export interface Env extends DeploymentEnv {
   ACCOUNTS_SVC?: AccountsService;
   ACCOUNTS_GOOGLE?: string;
   ASSETS: Fetcher;
@@ -15,13 +16,11 @@ export interface Env {
   APP_ORIGIN?: string;
   DONATE_URL?: string;
   RESEND_API_KEY?: string;
-  EMAIL_FROM?: string;
   EMAIL_TEST_SINK?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
   VAPID_PUBLIC_KEY?: string;
   VAPID_PRIVATE_KEY?: string;
-  VAPID_SUBJECT?: string;
 }
 
 export type ObjectData = Record<string, unknown>;

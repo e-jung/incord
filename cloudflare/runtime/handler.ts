@@ -1,3 +1,4 @@
+import { deployment } from '../deployment';
 import { AccountsError } from '../accounts';
 import { FeedbackError } from '../feedback';
 import { GroupsError } from '../groups';
@@ -37,14 +38,19 @@ export function secure(response: Response) {
   return new Response(response.body, { status: response.status, headers });
 }
 
-export const legacyServiceWorker =
-  "self.addEventListener('install',()=>self.skipWaiting());\nself.addEventListener('activate'," +
-  'event=>event.waitUntil((async()=>{await self.registration.unregister();for(const client of' +
-  " await self.clients.matchAll({type:'window',includeUncontrolled:true})){const url=new URL(" +
-  "client.url);url.hostname='incord.jesklabs.com';url.protocol='https:';url.port='';await cli" +
-  "ent.navigate(url.href)}})()));\nself.addEventListener('fetch',event=>{const url=new URL(eve" +
-  "nt.request.url);if(event.request.mode==='navigate'){url.hostname='incord.jesklabs.com';url" +
-  ".protocol='https:';url.port='';event.respondWith(Response.redirect(url.href,301))}});";
+export function legacyServiceWorker(origin: string) {
+  const hostname = new URL(origin).hostname;
+  return (
+    "self.addEventListener('install',()=>self.skipWaiting());\n" +
+    "self.addEventListener('activate',event=>event.waitUntil((async()=>{" +
+    'await self.registration.unregister();for(const client of await self.clients.matchAll(' +
+    "{type:'window',includeUncontrolled:true})){const url=new URL(client.url);" +
+    `url.hostname='${hostname}';url.protocol='https:';url.port='';await client.navigate(url.href)}})()));\n` +
+    "self.addEventListener('fetch',event=>{const url=new URL(event.request.url);" +
+    `if(event.request.mode==='navigate'){url.hostname='${hostname}';url.protocol='https:';` +
+    "url.port='';event.respondWith(Response.redirect(url.href,301))}});"
+  );
+}
 
 const handler = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -95,10 +101,11 @@ const handler = {
     try {
       const url = new URL(request.url),
         path = url.pathname;
-      if (url.hostname === 'byheart.jesklabs.com') {
+      const migration = deployment(env).migration;
+      if (migration && url.hostname === new URL(migration.legacyOrigin).hostname) {
         if (path === '/sw.js')
           return finish(
-            new Response(legacyServiceWorker, {
+            new Response(legacyServiceWorker(migration.origin), {
               headers: {
                 'Content-Type': 'application/javascript',
                 'Cache-Control': 'no-store',
@@ -110,15 +117,9 @@ const handler = {
           return await finish(await jesklabsAuth(request, env));
         if (path.startsWith('/api/'))
           return finish(
-            json(
-              { error: 'Incord has moved. Update this app at https://incord.jesklabs.com.' },
-              410,
-            ),
+            json({ error: `Incord has moved. Update this app at ${migration.origin}.` }, 410),
           );
-        url.hostname = 'incord.jesklabs.com';
-        url.protocol = 'https:';
-        url.port = '';
-        return finish(Response.redirect(url.href, 301));
+        return finish(Response.redirect(migration.origin + url.pathname + url.search, 301));
       }
       const mcpResponse = /^\/(?:mcp(?:\/|$)|oauth\/(?:token|register)$|\.well-known\/oauth-)/.test(
         path,

@@ -1,18 +1,2 @@
-# Copy to ../.dev.vars locally; never commit actual credentials.
-SESSION_SECRET="replace-with-at-least-32-random-characters"
-STATS_TOKEN="replace-with-a-separate-random-stats-access-token"
-# ESV_API_KEY="your-crossway-api-key"
-# APP_ORIGIN="http://localhost:8793"
-# GOOGLE_CLIENT_ID=""
-# GOOGLE_CLIENT_SECRET=""
-# VAPID_PUBLIC_KEY="base64url-uncompressed-public-P256-key"
-# VAPID_PRIVATE_KEY="base64url-private-P256-scalar"
-# VAPID_SUBJECT="mailto:operator@example.com"
-
-# Email sign-in uses ACCOUNTS_SVC (wrangler service binding, IncordClient).
-# ACCOUNTS_GOOGLE=1 # Google sign-in goes through Accounts (prod-verified 2026-11-15).
-# Resend below is for feedback notifications, not sign-in codes.
-# Replies go to incord@jesklabs.com.
-# RESEND_API_KEY=""
-# EMAIL_FROM="Incord <hello@jesklabs.com>" # Optional; this shared Jesklabs sender is the default.
-# EMAIL_TEST_SINK="1" # LOCAL ONLY: localhost/127.0.0.1 are also required.
+# Local configuration example moved to ../.dev.vars.example.
+# From the repository root: cp .dev.vars.example .dev.vars
