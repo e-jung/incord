@@ -140,19 +140,17 @@ test.describe('Secure-origin worker integration', () => {
       .get('set-cookie')!
       .split(';')[0]
       .slice('incord_stats='.length);
-    await page
-      .context()
-      .addCookies([
-        {
-          name: 'incord_stats',
-          value,
-          domain: 'incord.jesklabs.com',
-          path: '/stats',
-          httpOnly: true,
-          secure: true,
-          sameSite: 'Strict',
-        },
-      ]);
+    await page.context().addCookies([
+      {
+        name: 'incord_stats',
+        value,
+        domain: 'incord.jesklabs.com',
+        path: '/stats',
+        httpOnly: true,
+        secure: true,
+        sameSite: 'Strict',
+      },
+    ]);
     await page.goto(origin + '/stats');
     await expect(page.getByRole('heading', { name: 'Incord · Private counts' })).toBeVisible();
     const cookie = (await page.context().cookies()).find((c) => c.name === 'incord_stats')!;

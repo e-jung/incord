@@ -48,7 +48,14 @@ describe('optional support configuration', () => {
     }
   });
   it('omits an unset README section and renders a configured support link', () => {
-    const script = `import {supportSection} from ${JSON.stringify('file://' + resolve('scripts/readme-support.mjs'))}; if(supportSection('')!=='')throw Error('unset'); if(!supportSection('https://example.org/support').includes('[Support Jesklabs]'))throw Error('configured'); let rejected=false;try{supportSection('javascript:alert(1)')}catch{rejected=true}if(!rejected)throw Error('unsafe');`;
+    const script = `\
+import {supportSection} from \
+${JSON.stringify('file://' + resolve('scripts/readme-support.mjs'))}\
+; if(supportSection('')!=='')throw Error('unset'); if(!supportSection('https://example.org\
+/support').includes('[Support Jesklabs]'))throw Error('conf\
+igured'); let rejected=false;try{supportSection('javascript:alert(1)')}catch{rejected=true\
+}if(!rejected)throw Error('unsafe');\
+`;
     execFileSync(process.execPath, ['--input-type=module', '-e', script]);
   });
 });

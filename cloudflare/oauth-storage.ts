@@ -64,13 +64,11 @@ export class SqliteOAuthKV {
       ),
     ];
     const complete = rows.length <= limit,
-      keys = rows
-        .slice(0, limit)
-        .map((row) => ({
-          name: row.name,
-          ...(row.expiration === null ? {} : { expiration: row.expiration }),
-          ...(row.metadata === null ? {} : { metadata: JSON.parse(row.metadata) }),
-        }));
+      keys = rows.slice(0, limit).map((row) => ({
+        name: row.name,
+        ...(row.expiration === null ? {} : { expiration: row.expiration }),
+        ...(row.metadata === null ? {} : { metadata: JSON.parse(row.metadata) }),
+      }));
     return {
       keys,
       list_complete: complete,

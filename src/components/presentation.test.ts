@@ -20,7 +20,10 @@ beforeAll(async () => {
     if ((req as { url?: string }).url !== '/') return next();
     res.setHeader('Content-Type', 'text/html');
     res.end(
-      '<!doctype html><html><body><main class="practicing"><section class="practice"><header style="height:44px"></header><div class="prompt"><h1>Long passage</h1></div><div id="verse" style="display:contents"></div><div id="keys" style="display:contents"></div></section></main></body></html>',
+      '<!doctype html><html><body><main class="practicing"><section class="practice"><header' +
+        ' style="height:44px"></header><div class="prompt"><h1>Long passage</h1></div><div id=' +
+        '"verse" style="display:contents"></div><div id="keys" style="display:contents"></div>' +
+        '</section></main></body></html>',
     );
   });
   await server.listen();

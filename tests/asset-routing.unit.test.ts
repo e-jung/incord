@@ -1,14 +1,13 @@
+import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import legacy from '../cloudflare/legacy-redirect/worker';
 
-const config = JSON.parse(
-  readFileSync('wrangler.jsonc', 'utf8')
-    .split('\n')
-    .filter((line) => !line.trim().startsWith('//'))
-    .join('\n'),
-);
+const config = ts.parseConfigFileTextToJson(
+  'wrangler.jsonc',
+  readFileSync('wrangler.jsonc', 'utf8'),
+).config;
 // Cloudflare documents deep '*' matching; negative matches override all positives,
 // regardless of order. No negations are used: they force asset-only misses too.
 function workerFirst(path: string) {
@@ -75,7 +74,10 @@ describe('asset-first routing configuration', () => {
     expect(config.routes).toEqual([{ pattern: 'incord.jesklabs.com', custom_domain: true }]);
   });
   it('isolates the old host in a Worker without application state or assets', () => {
-    const redirect = JSON.parse(readFileSync('cloudflare/legacy-redirect/wrangler.jsonc', 'utf8'));
+    const redirect = ts.parseConfigFileTextToJson(
+      'legacy.jsonc',
+      readFileSync('cloudflare/legacy-redirect/wrangler.jsonc', 'utf8'),
+    ).config;
     expect(redirect.name).toBe('byheart-legacy-redirect');
     expect(redirect.routes).toEqual([{ pattern: 'byheart.jesklabs.com', custom_domain: true }]);
     expect(redirect.assets).toBeUndefined();

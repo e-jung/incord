@@ -10,7 +10,13 @@ const run = promisify(execFile);
 
 if (process.argv.includes('--help')) {
   console.log(
-    'Usage: SMOKE_URL=http://localhost:8793 node scripts/prod-smoke.mjs\nDefault: https://incord.jesklabs.com\nSigns in with jung.ai.assistant@gmail.com and deletes the smoke account in finally. Requires configured email and push keys. SMOKE_CODE_CMD overrides the Gmail code reader (print a subject or six-digit code). Reader credentials come only from the selected GOG vars in /home/ubuntu/.openclaw/.env. Two codes/run; rate limits may require a 15-minute wait. Legacy host checks run on production; override with SMOKE_LEGACY_URL.',
+    'Usage: SMOKE_URL=http://localhost:8793 node scripts/prod-smoke.mjs\nDefault: https://i' +
+      'ncord.jesklabs.com\nSigns in with jung.ai.assistant@gmail.com and deletes the smoke ac' +
+      'count in finally. Requires configured email and push keys. SMOKE_CODE_CMD overrides t' +
+      'he Gmail code reader (print a subject or six-digit code). Reader credentials come onl' +
+      'y from the selected GOG vars in /home/ubuntu/.openclaw/.env. Two codes/run; rate limi' +
+      'ts may require a 15-minute wait. Legacy host checks run on production; override with ' +
+      'SMOKE_LEGACY_URL.',
   );
   process.exit(0);
 }
@@ -157,7 +163,8 @@ const seenCodes = new Set();
 // the Incord subject, and identical subjects thread together, so read the newest
 // message rather than the thread.
 const defaultCodeCommand = smokeEmail
-  ? `g='gog --account ${smokeEmail} --no-input'; id=$($g gmail messages search 'from:hello@jesklabs.com subject:"Your Incord code" newer_than:10m' --max 1 | awk 'NR==2{print $1}'); [ -z "$id" ] || $g gmail get "$id"`
+  ? `g='gog --account ${smokeEmail} --no-input'; id=$($g gmail messages search 'from:hello@jesklabs.com subject:"Your Incord code" newer_than:10m' --max 1 | awk 'NR==2{print $1}'); [ -\
+z "$id" ] || $g gmail get "$id"`
   : '';
 async function readCodes() {
   // Do not mutate the parent environment or expose command output/errors: they

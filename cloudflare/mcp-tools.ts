@@ -63,12 +63,17 @@ const passageInput = z
 export const MCP_TOOL_SCHEMAS = {
   get_groups: {
     description:
-      'Read your groups, shared goals, and members’ privacy-filtered practice rhythm and optional item titles. Never returns quotations, private review details, email addresses or account IDs. Cannot create, join or change groups.',
+      'Read your groups, shared goals, and members’ privacy-filtered practice rhythm and opt' +
+      'ional item titles. Never returns quotations, private review details, email addresses ' +
+      'or account IDs. Cannot create, join or change groups.',
     inputSchema: z.object({}).strict(),
   },
   send_feedback: {
     description:
-      'Send an idea, problem or other feedback to the Incord team. Message must be 10–4000 characters. Include contact only if the user explicitly wants an email reply; never infer it from account details. Does not include library contents or device metadata. Available with any valid connection, including read-only access.',
+      'Send an idea, problem or other feedback to the Incord team. Message must be 10–4000 c' +
+      'haracters. Include contact only if the user explicitly wants an email reply; never in' +
+      'fer it from account details. Does not include library contents or device metadata. Av' +
+      'ailable with any valid connection, including read-only access.',
     inputSchema: z
       .object({
         kind: z.enum(['Idea', 'Problem', 'Other']),
@@ -90,12 +95,18 @@ export const MCP_TOOL_SCHEMAS = {
   },
   lookup_passage: {
     description:
-      'Look up a Bible reference in bundled BSB, KJV or WEB. Each reference is limited to 500 verses. ESV is one reference-only item validated against bundled BSB coordinates; no ESV text is fetched or returned.',
+      'Look up a Bible reference in bundled BSB, KJV or WEB. Each reference is limited to 50' +
+      '0 verses. ESV is one reference-only item validated against bundled BSB coordinates; n' +
+      'o ESV text is fetched or returned.',
     inputSchema: z.object({ reference: z.string().trim().min(1).max(200), translation }).strict(),
   },
   add_passages: {
     description:
-      'Add up to 50 Bible references or custom title/text items. Strings are Bible references; objects can specify reference and translation, or a catalog id. Each reference is limited to 500 verses and each call to 1000 expanded items. as_one_passage joins each range; otherwise each verse is one item. ESV always stays one reference-only passage regardless of as_one_passage. Existing items retain all edits and progress.',
+      'Add up to 50 Bible references or custom title/text items. Strings are Bible reference' +
+      's; objects can specify reference and translation, or a catalog id. Each reference is ' +
+      'limited to 500 verses and each call to 1000 expanded items. as_one_passage joins each' +
+      ' range; otherwise each verse is one item. ESV always stays one reference-only passage' +
+      ' regardless of as_one_passage. Existing items retain all edits and progress.',
     inputSchema: z
       .object({
         items: z

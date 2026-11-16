@@ -1,0 +1,632 @@
+/* Readable secondary text and finger-sized controls in both themes. */
+.icon {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+}
+.text-button {
+  min-height: 44px;
+  padding: 10px 0;
+}
+.segments .segment {
+  min-height: 44px;
+}
+.tabbar button {
+  min-height: 48px;
+  color: var(--ink2);
+}
+.tabbar svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.week-dots li {
+  color: var(--ink2);
+}
+.hero small,
+.cover small,
+.keepsake small {
+  color: #fff;
+}
+.hero small {
+  font-weight: 500;
+}
+.cover b,
+.cover small {
+  isolation: isolate;
+}
+.verse {
+  overscroll-behavior: contain;
+  overflow-anchor: none;
+  scroll-padding-top: 20px;
+}
+.verse span {
+  color: var(--ink2);
+}
+.verse .hidden {
+  color: transparent;
+}
+.verse .done {
+  color: var(--ink);
+}
+.verse .slip {
+  color: var(--slip);
+  animation: nudge 0.3s;
+}
+.digits .number-key {
+  height: 50px;
+  min-width: 44px;
+  width: auto;
+  max-width: 100px;
+  flex: 1;
+  font-size: 21px;
+}
+@media (max-height: 700px) {
+  .practice .prompt {
+    padding-top: 14px;
+  }
+  .keyboard {
+    gap: 5px;
+    padding-top: 8px;
+  }
+  .key {
+    height: 44px;
+  }
+}
+
+.cover::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: #0002;
+  pointer-events: none;
+}
+.toggle {
+  flex-direction: row;
+  align-items: center;
+  font-weight: 500;
+}
+.toggle input {
+  width: 22px;
+  height: 22px;
+  flex: none;
+}
+.bulk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.bulk-actions button {
+  font-size: 13px;
+  padding: 10px 14px !important;
+}
+.list details {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
+}
+.list summary {
+  cursor: pointer;
+  min-height: 44px;
+  line-height: 1.5;
+  font-weight: 600;
+}
+.list details p {
+  padding: 12px 0;
+}
+.item-menu {
+  align-self: flex-end;
+  min-width: 44px;
+  font-size: 24px;
+}
+.undo-toast {
+  position: fixed;
+  bottom: 110px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 7;
+  border: 1px solid var(--line);
+  background: var(--bar);
+  border-radius: 16px;
+  box-shadow: var(--sh);
+  padding: 8px 18px;
+  white-space: nowrap;
+  display: flex;
+  gap: 18px;
+  align-items: center;
+}
+
+/* Compact collection composition and independent trailing touch controls. */
+.page > header.collection-header {
+  justify-content: flex-start;
+  margin-bottom: 16px;
+}
+.cover.compact {
+  width: 100%;
+  min-height: 120px;
+  height: 120px;
+  gap: 8px;
+  justify-content: center;
+  padding: 20px 24px;
+}
+.cover.compact h1 {
+  font-size: 23px;
+  max-width: 85%;
+  z-index: 1;
+  line-height: 1.25;
+  letter-spacing: -0.025em;
+}
+.row-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  background: none !important;
+  color: inherit !important;
+  text-align: left;
+  padding: 0 !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  font-weight: inherit !important;
+}
+.row .item-menu {
+  flex: none;
+  align-self: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+}
+.collection-practice {
+  margin-top: 24px;
+}
+.collection-practice button {
+  width: 100%;
+}
+.document-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  border-bottom: 1px solid var(--line);
+}
+.document-row details {
+  flex: 1;
+  min-width: 0;
+  border-bottom: 0;
+  padding: 12px 0;
+}
+.document-row summary {
+  display: list-item;
+  list-style-position: inside;
+  align-content: center;
+}
+.document-row .document-add {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  margin: 12px 0;
+  background: var(--fill);
+  color: var(--acc);
+}
+.document-add:disabled {
+  opacity: 1;
+  color: var(--ink3);
+}
+.added-toast {
+  position: fixed;
+  bottom: 110px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9;
+  max-width: calc(100% - 32px);
+  background: var(--bar);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--sh);
+  padding: 14px 20px;
+  text-align: center;
+}
+
+.week-dots .done.today {
+  color: var(--bg);
+}
+.bulk-actions button,
+.toggle,
+.segment {
+  min-height: 44px;
+}
+.toggle {
+  padding-block: 6px;
+}
+.sheet-backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+.sheet {
+  position: relative;
+}
+.passage-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.passage-segments {
+  flex-wrap: wrap;
+}
+.passage-segments .segment {
+  white-space: normal;
+}
+.prompt-title {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit !important;
+  background: none !important;
+  color: inherit !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
+.prompt.collapsed .prompt-title-scroll {
+  font-size: 18px !important;
+  font-weight: 600 !important;
+  line-height: 1.3 !important;
+  max-height: 3lh;
+}
+.prompt.expanded .prompt-title-scroll {
+  max-height: 30dvh;
+}
+@media (max-height: 699px) {
+  .prompt h1 {
+    font-size: 20px;
+  }
+}
+
+.text-button,
+.prompt-title {
+  min-height: 44px;
+}
+.sheet-backdrop {
+  transform: none !important;
+}
+
+/* Reserve a notification lane above navigation; content never sits beneath it. */
+.page.has-toast {
+  height: calc(100dvh - 182px - env(safe-area-inset-bottom));
+  overflow-y: auto;
+  padding-bottom: 24px;
+}
+.added-toast,
+.undo-toast {
+  bottom: calc(100px + env(safe-area-inset-bottom));
+  min-height: 56px;
+  max-width: min(calc(100% - 32px), 472px);
+}
+.added-toast {
+  pointer-events: none;
+}
+
+/* Device typography: Apple's system body size honors Dynamic Type where supported. */
+html {
+  font: -apple-system-body;
+}
+:root {
+  --memory-scale: 1;
+  --list-scale: 1;
+}
+:root[data-text-size='small'] {
+  --memory-scale: 0.875;
+  --list-scale: 0.95;
+}
+:root[data-text-size='large'] {
+  --memory-scale: 1.2;
+  --list-scale: 1.08;
+}
+:root[data-text-size='extra-large'] {
+  --memory-scale: 1.4;
+  --list-scale: 1.16;
+}
+.verse {
+  font-size: calc(1.5rem * var(--memory-scale));
+  overscroll-behavior: contain;
+  overflow-anchor: none;
+}
+.keepsake p {
+  font-size: calc(1.125rem * var(--memory-scale));
+}
+.row b {
+  font-size: calc(1rem * var(--list-scale));
+}
+.row small {
+  font-size: calc(0.8125rem * var(--list-scale));
+}
+/* Isolate practice from document scroll/focus restoration, including installed iOS. */
+main.practicing {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+.practice {
+  height: 100%;
+  padding-top: calc(16px + env(safe-area-inset-top));
+  overflow: hidden;
+  outline: none;
+}
+.practice .verse {
+  scroll-behavior: auto;
+}
+@media (max-height: 699px) {
+  .practice .prompt {
+    padding-top: 16px;
+  }
+  .practice .verse {
+    padding-top: 16px;
+    padding-bottom: 16px;
+  }
+}
+
+.esv-attribution {
+  display: block;
+  color: var(--ink2);
+}
+.esv-attribution a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+  text-underline-offset: 3px;
+}
+.source-row .row-title {
+  display: block;
+  background: none;
+  color: inherit;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 0;
+  text-align: left;
+  min-height: 44px;
+}
+.keepsake .esv-attribution {
+  color: inherit;
+}
+
+/* Safari time controls have an intrinsic content width; constrain every flex ancestor. */
+.settings-group,
+.settings-group label,
+.settings-group form {
+  min-width: 0;
+  max-width: 100%;
+}
+.settings-group input,
+.settings-group select,
+.settings-group textarea {
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
+}
+.settings-group input[type='time'] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  inline-size: 100%;
+}
+.settings-group input[type='time']::-webkit-date-and-time-value {
+  min-width: 0;
+  text-align: left;
+}
+.settings-group .toggle input,
+.settings-group input[type='checkbox'] {
+  width: 22px;
+  flex: none;
+}
+
+.passage-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+.passage-cards .cover {
+  min-width: 0;
+  width: 100%;
+  flex: auto;
+}
+@media (max-width: 350px) {
+  .passage-cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Account connections use the same quiet, tactile settings surfaces. */
+.mcp-consent {
+  padding-top: calc(36px + env(safe-area-inset-top));
+  padding-bottom: calc(36px + env(safe-area-inset-bottom));
+}
+.mcp-consent h1 {
+  font-size: 30px;
+}
+.mcp-client-name {
+  font-size: 22px;
+}
+.mcp-client-name,
+.mcp-app h3,
+.mcp-consent small,
+.mcp-consent p {
+  overflow-wrap: anywhere;
+}
+.mcp-scopes {
+  margin: 0;
+  padding-left: 22px;
+  color: var(--ink2);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.mcp-app {
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+.mcp-consent form button {
+  width: 100%;
+}
+.mcp-consent .notice {
+  margin: 0;
+}
+
+.translation-picker {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.translation-picker select {
+  width: auto;
+  min-width: 100px;
+  padding: 8px 12px;
+}
+.translation-badge {
+  display: inline-block !important;
+  width: fit-content;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border: 1px solid currentColor;
+  border-radius: 5px;
+  padding: 0 5px;
+  margin: 4px 0;
+}
+.feedback-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+.feedback-setting small {
+  display: block;
+}
+.feedback-controls .toggle {
+  flex: 1;
+}
+
+.scripture-card {
+  position: relative;
+  min-width: 0;
+}
+.scripture-card .cover {
+  padding-top: 42px;
+}
+.card-badge {
+  position: absolute;
+  top: 10px;
+  left: 18px;
+  color: white;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.source-row .esv-attribution a,
+.prompt .esv-attribution a,
+.keepsake .esv-attribution a {
+  display: inline-block;
+  width: fit-content;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border: 1px solid currentColor;
+  border-radius: 5px;
+  padding: 0 5px;
+  margin: 4px 0;
+}
+
+/* Settings feedback stays local to its form, including the submit outcome. */
+.feedback-form textarea {
+  background: var(--bg);
+}
+.feedback-form .toggle {
+  align-items: flex-start;
+  line-height: 1.5;
+}
+.feedback-form .toggle input {
+  margin: 0;
+  margin-top: 1px;
+  height: 22px;
+}
+.feedback-form .feedback-sending {
+  transform: translateY(2px);
+  box-shadow: none;
+  opacity: 0.75;
+}
+.feedback-form .feedback-result {
+  margin: 0;
+  overflow-wrap: anywhere;
+  scroll-margin-block: 24px;
+}
+.feedback-form .feedback-failed {
+  color: var(--slip);
+}
+.feedback-result:focus-visible {
+  outline: 2px solid var(--acc);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+/* Discover keeps its small catalog filters on one horizontal, scrollable row. */
+.featured-cards {
+  margin-top: 16px;
+}
+.featured-cards .cover {
+  padding-top: 42px;
+}
+.discover-filters {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  max-width: 100%;
+  padding: 4px 1px;
+}
+.discover-filters .text-button {
+  flex: none;
+  white-space: nowrap;
+  padding: 8px 12px;
+  border-radius: 22px;
+  border: 1px solid var(--line);
+  font-size: 13px;
+}
+.discover-filters .active {
+  background: var(--fill);
+  color: var(--ink);
+}
+.library-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 28px 0;
+}
+.document-cards {
+  margin-bottom: 24px;
+}
+.document-cards .cover {
+  min-height: 200px;
+}
+#document-browser {
+  scroll-margin-top: 20px;
+}
+
+.topic-cards .cover {
+  padding-top: 42px;
+}

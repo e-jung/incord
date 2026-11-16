@@ -234,15 +234,13 @@ describe('Private feedback stats', () => {
     expect(rendered).toContain('&lt;script&gt;');
     expect(rendered).toContain('Separate from the anonymous usage counts');
     const f = fixture(),
-      fetch = vi
-        .fn()
-        .mockResolvedValue(
-          Response.json({
-            feedback: [
-              { id: 'one', at: Date.now(), kind: 'Idea', source: 'app', message: dangerous },
-            ],
-          }),
-        );
+      fetch = vi.fn().mockResolvedValue(
+        Response.json({
+          feedback: [
+            { id: 'one', at: Date.now(), kind: 'Idea', source: 'app', message: dangerous },
+          ],
+        }),
+      );
     f.env.REGISTRY = {
       idFromName: () => '',
       get: () => ({ fetch }),

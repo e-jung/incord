@@ -240,7 +240,8 @@ const escape = (s: string) =>
   );
 const html = (content: string, status = 200) =>
   new Response(
-    `<!doctype html><html lang="en" data-theme="system"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Incord · Private counts</title><link rel="stylesheet" href="/assets/stats.css"><main>${content}</main></html>`,
+    `<!doctype html><html lang="en" data-theme="system"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>In\
+cord · Private counts</title><link rel="stylesheet" href="/assets/stats.css"><main>${content}</main></html>`,
     {
       status,
       headers: {
@@ -254,22 +255,56 @@ const html = (content: string, status = 200) =>
     },
   );
 export function renderFeedback(feedback: FeedbackRow[]) {
-  return `<section class="feedback" aria-label="Feedback"><h2>Latest feedback</h2><p>Voluntarily submitted messages and optional contact details. Separate from the anonymous usage counts above; visible only to the stats administrator. Latest 100, newest first.</p>${feedback.length ? feedback.map((r) => `<article><h3>${escape(r.kind)} · ${escape(r.source)} · ${escape(new Date(Number(r.at)).toISOString())}</h3>${r.contact ? `<p>Contact: ${escape(r.contact)}</p>` : ''}${r.clientName ? `<p>Client: ${escape(r.clientName)}</p>` : ''}<p class="feedback-message">${escape(r.message)}</p><pre>${escape(JSON.stringify(r.meta || {}))}</pre></article>`).join('') : '<p>No feedback yet.</p>'}</section>`;
+  return `\
+<section class="feedback" aria-label="Feedback"><h2>Latest feedback</h2><p>Voluntarily sub\
+mitted messages and optional contact details. Separate from\
+ the anonymous usage counts above; visible only to the stats administrator. Latest 100, ne\
+west first.</p>\
+${
+  feedback.length
+    ? feedback
+        .map(
+          (r) => `\
+<article><h3>\
+${escape(r.kind)}\
+ · \
+${escape(r.source)}\
+ · \
+${escape(new Date(Number(r.at)).toISOString())}\
+</h3>\
+${r.contact ? `<p>Contact: ${escape(r.contact)}</p>` : ''}\
+\
+${r.clientName ? `<p>Client: ${escape(r.clientName)}</p>` : ''}\
+<p class="feedback-message">\
+${escape(r.message)}\
+</p><pre>\
+${escape(JSON.stringify(r.meta || {}))}\
+</pre></article>\
+`,
+        )
+        .join('')
+    : '<p>No feedback yet.</p>'
+}\
+</section>\
+`;
 }
 export function renderStats(days: StatsDay[], feedback?: FeedbackRow[]) {
   days = [...days].sort((a, b) => a.day.localeCompare(b.day));
   const today = days.at(-1);
   const total = (event: string) => days.reduce((n, d) => n + (d.counters[event] || 0), 0);
   const group = (title: string, prefix: string) =>
-    `<section><h2>${title}</h2><div class="table-scroll" tabindex="0" role="region" aria-label="${title}"><table><tr><th>Category</th><th>Count</th></tr>${STATS_EVENTS.filter(
-      (x) => x.startsWith(prefix),
-    )
-      .sort((a, b) => (prefix === 'starter_added:' ? total(b) - total(a) : 0))
-      .map(
-        (event) =>
-          `<tr><td>${escape(event.slice(prefix.length))}</td><td>${total(event)}</td></tr>`,
-      )
-      .join('')}</table></div></section>`;
+    `\
+<section><h2>\
+${title}\
+</h2><div class="table-scroll" tabindex="0" role="region" aria-label="\
+${title}\
+"><table><tr><th>Category</th><th>Count</th></tr>\
+${STATS_EVENTS.filter((x) => x.startsWith(prefix))
+  .sort((a, b) => (prefix === 'starter_added:' ? total(b) - total(a) : 0))
+  .map((event) => `<tr><td>${escape(event.slice(prefix.length))}</td><td>${total(event)}</td></tr>`)
+  .join('')}\
+</table></div></section>\
+`;
   const max = Math.max(1, ...days.map((d) => d.activeDevices));
   const points = days
     .map(
@@ -278,17 +313,66 @@ export function renderStats(days: StatsDay[], feedback?: FeedbackRow[]) {
     .join(' ');
   const sent = total('push_test:sent'),
     failed = total('push_test:failed');
-  return `<section class="summary"><h1>Incord · Private counts</h1><p>Last 30 UTC days · anonymous aggregate counts only.</p><dl class="today"><div><dt>Devices today</dt><dd>${today?.activeDevices || 0}</dd></div><div><dt>Practice starts</dt><dd>${today?.counters.practice_start || 0}</dd></div><div><dt>Learned</dt><dd>${today?.counters.learned || 0}</dd></div></dl><svg viewBox="0 0 100 65" preserveAspectRatio="none" role="img" aria-label="Daily active devices, oldest to newest over 30 days"><polyline points="${points}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"/></svg></section><section><h2>Daily activity</h2><div class="table-scroll" tabindex="0" role="region" aria-label="Daily activity"><table><tr><th>Date (UTC)</th><th>Devices</th><th>Practice starts</th><th>Learned</th><th>Client errors</th></tr>${[
-    ...days,
-  ]
-    .reverse()
-    .map(
-      (d) =>
-        `<tr><td>${escape(d.day)}</td><td>${d.activeDevices}</td><td>${d.counters.practice_start || 0}</td><td>${d.counters.learned || 0}</td><td>${d.counters.client_error || 0}</td></tr>`,
-    )
-    .join(
-      '',
-    )}</table></div></section>${group('Ladder passes', 'step_pass:')}${group('Ladder failures', 'step_fail:')}${group('Review grades', 'review:')}${group('Starters', 'starter_added:')}${group('Translation mix', 'translation_added:')}<section><h2>Reminders & push tests</h2><p>Reminders enabled: ${total('reminders_enabled')}</p><p>Push tests: ${sent} sent / ${failed} failed · success ${sent + failed ? Math.round((sent / (sent + failed)) * 100) + '%' : '—'}</p></section><p>Last 7 days: ${days.slice(-7).reduce((n, d) => n + d.activeDevices, 0)} active device-days (sum of daily devices; not deduplicated weekly people). Local-day token rotation makes daily devices approximate.</p>${feedback ? renderFeedback(feedback) : ''}<form method="post" action="/stats/logout"><button>Sign out of stats</button></form>`;
+  return `\
+<section class="summary"><h1>Incord · Private counts</h1><p>Last 30 UTC days · anonymous a\
+ggregate counts only.</p><dl class="today"><div><dt>Devices today</dt><dd>\
+${today?.activeDevices || 0}\
+</dd></div><div><dt>Practice starts</dt><dd>\
+${today?.counters.practice_start || 0}\
+</dd></div><div><dt>Learned</dt><dd>\
+${today?.counters.learned || 0}\
+</dd></div></dl><svg viewBox="0 0 100 65" preserveAspectRatio="none" role="img" aria-label\
+="Daily active devices, oldest to newest over 30 days"><polyline points="\
+${points}\
+" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"/><\
+/svg></section><section><h2>Daily activity</h2><div class="\
+table-scroll" tabindex="0" role="region" aria-label="Daily activity"><table><tr><th>Date (\
+UTC)</th><th>Devices</th><th>Practice starts</th><th>Learned\
+</th><th>Client errors</th></tr>\
+${[...days]
+  .reverse()
+  .map(
+    (d) =>
+      `\
+<tr><td>\
+${escape(d.day)}\
+</td><td>\
+${d.activeDevices}\
+</td><td>\
+${d.counters.practice_start || 0}\
+</td><td>\
+${d.counters.learned || 0}\
+</td><td>\
+${d.counters.client_error || 0}\
+</td></tr>\
+`,
+  )
+  .join('')}\
+</table></div></section>\
+${group('Ladder passes', 'step_pass:')}\
+\
+${group('Ladder failures', 'step_fail:')}\
+\
+${group('Review grades', 'review:')}\
+\
+${group('Starters', 'starter_added:')}\
+\
+${group('Translation mix', 'translation_added:')}\
+<section><h2>Reminders & push tests</h2><p>Reminders enabled: \
+${total('reminders_enabled')}\
+</p><p>Push tests: \
+${sent}\
+ sent / \
+${failed}\
+ failed · success \
+${sent + failed ? Math.round((sent / (sent + failed)) * 100) + '%' : '—'}\
+</p></section><p>Last 7 days: \
+${days.slice(-7).reduce((n, d) => n + d.activeDevices, 0)}\
+ active device-days (sum of daily devices; not deduplicated weekly people). Local-day toke\
+n rotation makes daily devices approximate.</p>\
+${feedback ? renderFeedback(feedback) : ''}\
+<form method="post" action="/stats/logout"><button>Sign out of stats</button></form>\
+`;
 }
 /** Route /api/stats and /stats[/logout] before SPA fallback. Apply worker security headers.
  * No session or account is consulted. Never forward the original request into StatsDO.
@@ -329,7 +413,13 @@ export async function handleStatsRequest(
     });
   const form = (invalid = false) =>
     html(
-      `<h1>Private counts</h1>${invalid ? '<p>Token not accepted. Try again later.</p>' : ''}<form method="post" action="/stats"><label>Stats token <input name="token" type="password" required autocomplete="off" maxlength="1024"></label> <button>View counts</button></form>`,
+      `\
+<h1>Private counts</h1>\
+${invalid ? '<p>Token not accepted. Try again later.</p>' : ''}\
+<form method="post" action="/stats"><label>Stats token <input name="token" type="password"\
+ required autocomplete="off" maxlength="1024"></label> <but\
+ton>View counts</button></form>\
+`,
       invalid ? 401 : 200,
     );
   if (request.method === 'POST') {

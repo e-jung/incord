@@ -27,10 +27,17 @@ const prefixes =
   'amber aqua autumn blue bright coral dawn fair gold green jade lilac mint silver sunny violet'.split(
     ' ',
   );
-const nouns =
-  'acorn apple apron arch aster badger bag bamboo banana basket bay beach bean bear bee bell berry birch bird boat book breeze brook brush bubble bunny butterfly cabin cactus cake camel candle canoe carrot castle cedar cherry chick cloud clover coast cocoa comet coral cotton crane creek cricket crown daisy deer dolphin dove dragon dream duck eagle earth elm feather fern field finch firefly fish flower forest fox frog garden gem goose grape grass grove gull harbor hare hawk hazel hedgehog hill honey horse island ivy jasmine kite kitten kiwi koala lake lamb lantern lark leaf lemon lily lion lotus maple meadow melon moon moss mouse nest oak ocean olive otter owl panda peach pearl pebble pine plum pond poppy rabbit rainbow raven reed ridge river robin rose'.split(
-    ' ',
-  );
+const nouns = (
+  'acorn apple apron arch aster badger bag bamboo banana basket bay beach bean bear bee ' +
+  'bell berry birch bird boat book breeze brook brush bubble bunny butterfly cabin cactu' +
+  's cake camel candle canoe carrot castle cedar cherry chick cloud clover coast cocoa c' +
+  'omet coral cotton crane creek cricket crown daisy deer dolphin dove dragon dream duck' +
+  ' eagle earth elm feather fern field finch firefly fish flower forest fox frog garden ' +
+  'gem goose grape grass grove gull harbor hare hawk hazel hedgehog hill honey horse isl' +
+  'and ivy jasmine kite kitten kiwi koala lake lamb lantern lark leaf lemon lily lion lo' +
+  'tus maple meadow melon moon moss mouse nest oak ocean olive otter owl panda peach pea' +
+  'rl pebble pine plum pond poppy rabbit rainbow raven reed ridge river robin rose'
+).split(' ');
 if (nouns.length !== 128) throw Error('Code wordlist must contain 128 nouns');
 export const CODE_WORDS = Object.freeze(prefixes.flatMap((p) => nouns.map((n) => p + n)));
 export function generateSignInCode() {

@@ -247,7 +247,9 @@ test('own words persist offline, collection detail buttons, restart and remove',
   await addOwn(
     page,
     'An original promise',
-    '“Alpha,” Bravo’s Charlie-Delta Delta Echo Foxtrot Golf Hotel India Juliet Kilo Lima Mike November Oscar Papa Quebec Romeo Sierra Tango Uniform Victor Whiskey Xray Yankee Zulu 1 2 3 4 5 6 7 8 9 0; 23 blessings.',
+    '“Alpha,” Bravo’s Charlie-Delta Delta Echo Foxtrot Golf Hotel India Juliet Kilo Lima M' +
+      'ike November Oscar Papa Quebec Romeo Sierra Tango Uniform Victor Whiskey Xray Yankee ' +
+      'Zulu 1 2 3 4 5 6 7 8 9 0; 23 blessings.',
   );
   await screen(page, info, 'library-own');
   await screen(page, info, 'collection-own');
@@ -575,12 +577,9 @@ test('push permission, mock subscription, test notification and disable', async 
   await screen(page, info, 'account-push-enabled');
   await page.getByRole('button', { name: 'Send test notification', exact: true }).click();
   await expect(
-    page
-      .getByRole('region', { name: 'Reminders', exact: true })
-      .getByRole('status')
-      .filter({
-        hasText: "Sent to Apple. If it didn't appear, check Settings → Notifications → Incord.",
-      }),
+    page.getByRole('region', { name: 'Reminders', exact: true }).getByRole('status').filter({
+      hasText: "Sent to Apple. If it didn't appear, check Settings → Notifications → Incord.",
+    }),
   ).toHaveText("Sent to Apple. If it didn't appear, check Settings → Notifications → Incord.");
   expect(notificationTests).toBe(1);
   await page.getByRole('button', { name: 'Disable reminders', exact: true }).click();

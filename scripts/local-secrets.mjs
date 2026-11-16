@@ -13,7 +13,17 @@ const publicKey = Buffer.concat([
 ]).toString('base64url');
 writeFileSync(
   '.dev.vars',
-  `SESSION_SECRET="${randomBytes(48).toString('base64url')}"\nSTATS_TOKEN="${randomBytes(32).toString('base64url')}"\nVAPID_PUBLIC_KEY="${publicKey}"\nVAPID_PRIVATE_KEY="${jwk.d}"\nVAPID_SUBJECT="mailto:local@example.test"\n`,
+  `\
+SESSION_SECRET="\
+${randomBytes(48).toString('base64url')}\
+"\nSTATS_TOKEN="\
+${randomBytes(32).toString('base64url')}\
+"\nVAPID_PUBLIC_KEY="\
+${publicKey}\
+"\nVAPID_PRIVATE_KEY="\
+${jwk.d}\
+"\nVAPID_SUBJECT="mailto:local@example.test"\n\
+`,
   { mode: 0o600 },
 );
 console.log('Created uncommitted local session/VAPID keys.');

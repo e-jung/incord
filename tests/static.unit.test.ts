@@ -1,6 +1,6 @@
 import { DEFAULT_KEY_SAMPLE } from '../public/audio/keyboard-samples.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -18,7 +18,14 @@ afterEach(() => {
 
 describe('Cloudflare runtime compatibility', () => {
   it('never configures Worker fetches with the unsupported error redirect mode', () => {
-    const source = readFileSync('cloudflare/worker.ts', 'utf8');
+    const source = [
+      'cloudflare/worker.ts',
+      ...readdirSync('cloudflare/runtime')
+        .filter((file) => file.endsWith('.ts'))
+        .map((file) => 'cloudflare/runtime/' + file),
+    ]
+      .map((file) => readFileSync(file, 'utf8'))
+      .join('\n');
     expect(source).not.toMatch(/(?:\bredirect|['"]redirect['"])\s*:\s*(['"])error\1/);
   });
 });

@@ -1,0 +1,212 @@
+/* Groups surfaces and their confirmation sheet; all rules stay within these roots. */
+.groups-panel {
+  margin-top: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.groups-panel .heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.groups-panel .heading h2 {
+  font-size: 22px;
+}
+.groups-panel .intro {
+  margin-top: -8px;
+}
+.groups-panel .panel {
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 16px;
+  background: var(--bez);
+}
+.groups-panel .group-list {
+  display: grid;
+  gap: 8px;
+}
+.groups-panel button,
+.group-confirmation button {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 44px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.groups-panel .group-choice {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 13px 16px !important;
+}
+.groups-panel .group-choice.chosen {
+  outline: 2px solid var(--acc);
+  outline-offset: -2px;
+}
+.groups-panel .group-choice small {
+  font-weight: 400;
+}
+.groups-panel .forms {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding-top: 14px;
+}
+.groups-panel .forms form + form {
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+.groups-panel :is(form, section, article, header, footer, label, div, nav, li),
+.group-confirmation {
+  min-width: 0;
+  max-width: 100%;
+}
+.groups-panel input,
+.groups-panel select {
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.groups-panel .check {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+}
+.groups-panel .check input {
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  flex: none;
+  accent-color: var(--acc);
+}
+.groups-panel summary {
+  cursor: pointer;
+  min-height: 44px;
+  align-content: center;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.groups-panel .management > .stack,
+.groups-panel .member-controls > .stack {
+  padding-top: 12px;
+}
+.groups-panel .group-name {
+  font-size: 20px;
+}
+.groups-panel .goal {
+  padding-block: 16px;
+  border-block: 1px solid var(--line);
+}
+.groups-panel .members {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.groups-panel .member {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--line);
+}
+.groups-panel .member:first-child {
+  padding-top: 0;
+}
+.groups-panel .member-heading {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  align-items: baseline;
+}
+.groups-panel .member-heading small {
+  text-transform: capitalize;
+}
+.groups-panel .metrics,
+.groups-panel .privacy {
+  font-size: 14px;
+}
+.groups-panel .titles {
+  width: 100%;
+}
+.groups-panel .titles ul {
+  margin: 0;
+  padding: 0 0 0 18px;
+}
+.groups-panel .titles li {
+  padding: 5px 0;
+}
+.groups-panel .titles li small {
+  margin-left: 8px;
+}
+.groups-panel .translation {
+  font-size: 11px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+.groups-panel .member-controls {
+  width: 100%;
+}
+.groups-panel .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.groups-panel .pending {
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--fill);
+}
+.groups-panel .feedback {
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.groups-panel .failed,
+.groups-panel .danger {
+  color: var(--slip);
+}
+.groups-panel .text-button {
+  align-self: flex-start;
+  text-align: left;
+}
+.groups-panel footer {
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 350px) {
+  .groups-panel .panel {
+    padding: 12px;
+  }
+  .groups-panel .heading {
+    align-items: flex-start;
+  }
+  .groups-panel {
+    gap: 14px;
+  }
+}
+
+.group-confirmation {
+  overflow-wrap: anywhere;
+}
+.group-confirmation .feedback {
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.group-confirmation .failed {
+  color: var(--slip);
+}

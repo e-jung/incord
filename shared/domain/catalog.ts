@@ -1,8 +1,8 @@
 /** IO-free catalog: bundled definitions plus resolvers supplied with a book loader. */
 import { assertEsvLimit, esvReferenceKeys } from '../esv';
 import { topics } from '../topics';
-import documentData from '../../public/content/documents.json';
-import starterData from '../../public/content/starters.json';
+import documentData from '../../public/content/documents.json' with { type: 'json' };
+import starterData from '../../public/content/starters.json' with { type: 'json' };
 import bookData from '../../public/content/books.json' with { type: 'json' };
 export { topics };
 export type Translation = 'BSB' | 'KJV' | 'WEB' | 'ESV';

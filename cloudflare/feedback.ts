@@ -187,7 +187,25 @@ export async function submitFeedback(
         to: 'incord@jesklabs.com',
         ...(value.contact ? { reply_to: value.contact } : {}),
         subject: `[Incord feedback] ${value.kind}: ${value.message.replace(/[\x00-\x1f\x7f-\x9f\u2028\u2029]/g, ' ').slice(0, 60)}`,
-        text: `${value.kind} feedback · ${source}\n${new Date(row.at).toISOString()}\n${clientName ? 'Client: ' + clientName + '\n' : ''}${row.accountRef ? 'Account reference: ' + row.accountRef + '\n' : ''}\n${value.message}\n\n${JSON.stringify(row.meta || {})}${summary}`,
+        text: `\
+\
+${value.kind}\
+ feedback · \
+${source}\
+\n\
+${new Date(row.at).toISOString()}\
+\n\
+${clientName ? 'Client: ' + clientName + '\n' : ''}\
+\
+${row.accountRef ? 'Account reference: ' + row.accountRef + '\n' : ''}\
+\n\
+${value.message}\
+\n\n\
+${JSON.stringify(row.meta || {})}\
+\
+${summary}\
+\
+`,
       };
       const success =
         sink ||
@@ -223,7 +241,9 @@ export async function submitFeedback(
 /** Additive tables in the existing RegistryDO, never a new binding. */
 export function initializeFeedbackStorage(sql: SqlStorage) {
   sql.exec(
-    'CREATE TABLE IF NOT EXISTS feedback(id TEXT PRIMARY KEY,at INTEGER NOT NULL,kind TEXT NOT NULL,message TEXT NOT NULL,contact TEXT,meta TEXT,source TEXT NOT NULL,clientName TEXT,accountRef TEXT,emailed INTEGER NOT NULL DEFAULT 0)',
+    'CREATE TABLE IF NOT EXISTS feedback(id TEXT PRIMARY KEY,at INTEGER NOT NULL,kind TEXT' +
+      ' NOT NULL,message TEXT NOT NULL,contact TEXT,meta TEXT,source TEXT NOT NULL,clientNam' +
+      'e TEXT,accountRef TEXT,emailed INTEGER NOT NULL DEFAULT 0)',
   );
   sql.exec('CREATE INDEX IF NOT EXISTS feedback_date ON feedback(at DESC)');
   sql.exec(

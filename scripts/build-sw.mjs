@@ -24,10 +24,13 @@ const files = readdirSync('dist', { recursive: true, withFileTypes: true })
 const hash = createHash('sha256').update(JSON.stringify(shell));
 for (const file of files) hash.update(file).update(readFileSync(file));
 const version = hash.digest('hex').slice(0, 16);
-const sw = readFileSync('public/sw.js', 'utf8')
-  .replace("const CACHE='byheart-v1';", "const CACHE='byheart-" + version + "';")
-  .replace(
-    "c.addAll(['/','/manifest.webmanifest','/icon-192.png'])",
-    'c.addAll(' + JSON.stringify(shell) + ')',
-  );
+const template = readFileSync('public/sw.js', 'utf8');
+const cacheMarker = /const CACHE\s*=\s*['"]byheart-v1['"];?/;
+const shellMarker = /c\.addAll\(\s*\[[\s\S]*?\]\s*\)/;
+if (!cacheMarker.test(template) || !shellMarker.test(template)) {
+  throw new Error('Service worker build markers are missing');
+}
+const sw = template
+  .replace(cacheMarker, "const CACHE='byheart-" + version + "';")
+  .replace(shellMarker, 'c.addAll(' + JSON.stringify(shell) + ')');
 writeFileSync('dist/sw.js', sw);

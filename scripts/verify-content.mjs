@@ -7,44 +7,39 @@ import ts from 'typescript';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (name) =>
   fs.readFile(path.join(root, 'public/content', name), 'utf8').then(JSON.parse);
-let source = await fs.readFile(path.join(root, 'src/content.ts'), 'utf8');
-for (const [variable, file] of [
-  ['documentData', 'documents.json'],
-  ['starterData', 'starters.json'],
-  ['bookData', 'books.json'],
-]) {
-  source = source.replace(
-    new RegExp(`import ${variable} from '[^']+';`),
-    `const ${variable} = ${JSON.stringify(await read(file))};`,
-  );
+// Compile the real local module graph so extraction and formatting do not change
+// which implementation the offline content verifier exercises.
+const compiled = new Map();
+async function moduleUrl(file) {
+  if (compiled.has(file)) return compiled.get(file);
+  const source = await fs.readFile(file, 'utf8');
+  let code = file.endsWith('.json')
+    ? `export default ${source};`
+    : ts.transpileModule(source.replaceAll('import.meta.env.BASE_URL', "'/'"), {
+        compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
+      }).outputText;
+  const syntax = ts.createSourceFile(file, code, ts.ScriptTarget.ES2022, true, ts.ScriptKind.JS);
+  const replacements = [];
+  for (const statement of syntax.statements) {
+    const specifier = statement.moduleSpecifier;
+    if (!specifier || !ts.isStringLiteral(specifier)) continue;
+    assert.ok(specifier.text.startsWith('.'), 'content modules use local dependencies');
+    let dependency = path.resolve(path.dirname(file), specifier.text);
+    if (!path.extname(dependency)) dependency += '.ts';
+    const end = statement.attributes?.end ?? specifier.end;
+    replacements.push([
+      specifier.getStart(syntax),
+      end,
+      JSON.stringify(await moduleUrl(dependency)),
+    ]);
+  }
+  for (const [start, end, replacement] of replacements.reverse())
+    code = code.slice(0, start) + replacement + code.slice(end);
+  const url = `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`;
+  compiled.set(file, url);
+  return url;
 }
-const copySource = await fs.readFile(path.join(root, 'src/config/copy.ts'), 'utf8');
-const lookupCopy = copySource.match(/export const contentCopy=[\s\S]*?} as const;/)?.[0];
-assert.ok(lookupCopy, 'canonical lookup copy exists');
-source = source.replace(
-  "import {contentCopy} from './config/copy';",
-  lookupCopy.replace('export const', 'const'),
-);
-source = source.replaceAll('import.meta.env.BASE_URL', "'/'");
-let sharedSource = await fs.readFile(path.join(root, 'shared/esv.ts'), 'utf8');
-sharedSource = sharedSource.replace(
-  /import books from [^;]+;/,
-  `const books = ${JSON.stringify(await read('books.json'))};`,
-);
-sharedSource = sharedSource.replace(
-  /import chapterCounts from [^;]+;/,
-  `const chapterCounts = ${await fs.readFile(path.join(root, 'shared/esv-structure.json'), 'utf8')};`,
-);
-const sharedJS = ts.transpileModule(sharedSource, {
-  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
-}).outputText;
-source = source.replace(
-  "'../shared/esv'",
-  `"data:text/javascript;base64,${Buffer.from(sharedJS).toString('base64')}"`,
-);
-const { outputText } = ts.transpileModule(source, {
-  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
-});
+const contentUrl = await moduleUrl(path.join(root, 'src/content.ts'));
 let fetchCount = 0;
 globalThis.fetch = async (url) => {
   fetchCount++;
@@ -53,9 +48,7 @@ globalThis.fetch = async (url) => {
   const relative = String(url).replace('/content/', '');
   return { ok: true, json: () => read(relative) };
 };
-const { lookupReference, fetchEsvText, starters, documents } = await import(
-  `data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`
-);
+const { lookupReference, fetchEsvText, starters, documents } = await import(contentUrl);
 assert.equal(documents[0].items.length, 107);
 assert.equal(documents[1].items.length, 132);
 assert.equal(new Set(documents[1].items.map((q) => q.lordsDay)).size, 52);

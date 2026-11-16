@@ -7,7 +7,10 @@ function security(response: APIResponse, path: string) {
   expect(headers['referrer-policy'], path).toBe('no-referrer');
   expect(headers['permissions-policy'], path).toBe('camera=(), microphone=(), geolocation=()');
   expect(headers['content-security-policy'], path).toBe(
-    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'",
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'sel" +
+      "f' data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src " +
+      "'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self" +
+      "'",
   );
 }
 

@@ -19,8 +19,18 @@ SOURCES = {
  'apostles-schaff.html': 'https://ccel.org/ccel/schaff/creeds2.iv.i.i.i.html',
  'nicene-schaff.html': 'https://ccel.org/ccel/schaff/creeds2.iv.i.ii.ii.html',
 }
-BOOK_NAMES = 'Genesis|Exodus|Leviticus|Numbers|Deuteronomy|Joshua|Judges|Ruth|1 Samuel|2 Samuel|1 Kings|2 Kings|1 Chronicles|2 Chronicles|Ezra|Nehemiah|Esther|Job|Psalms|Proverbs|Ecclesiastes|Song of Solomon|Isaiah|Jeremiah|Lamentations|Ezekiel|Daniel|Hosea|Joel|Amos|Obadiah|Jonah|Micah|Nahum|Habakkuk|Zephaniah|Haggai|Zechariah|Malachi|Matthew|Mark|Luke|John|Acts|Romans|1 Corinthians|2 Corinthians|Galatians|Ephesians|Philippians|Colossians|1 Thessalonians|2 Thessalonians|1 Timothy|2 Timothy|Titus|Philemon|Hebrews|James|1 Peter|2 Peter|1 John|2 John|3 John|Jude|Revelation'.split('|')
-CODES = 'GEN EXO LEV NUM DEU JOS JDG RUT 1SA 2SA 1KI 2KI 1CH 2CH EZR NEH EST JOB PSA PRO ECC SNG ISA JER LAM EZK DAN HOS JOL AMO OBA JON MIC NAM HAB ZEP HAG ZEC MAL MAT MRK LUK JHN ACT ROM 1CO 2CO GAL EPH PHP COL 1TH 2TH 1TI 2TI TIT PHM HEB JAS 1PE 2PE 1JN 2JN 3JN JUD REV'.split()
+BOOK_NAMES = (
+    'Genesis|Exodus|Leviticus|Numbers|Deuteronomy|Joshua|Judges|Ruth|1 Samuel|2 Samuel|1 Kings|2 Kings|1 Chronicles|'
+    '2 Chronicles|Ezra|Nehemiah|Esther|Job|Psalms|Proverbs|Ecclesiastes|Song of Solomon|Isaiah|Jeremiah|Lamentations|Ezekiel|'
+    'Daniel|Hosea|Joel|Amos|Obadiah|Jonah|Micah|Nahum|Habakkuk|Zephaniah|Haggai|Zechariah|Malachi|Matthew|Mark|Luke|John|'
+    'Acts|Romans|1 Corinthians|2 Corinthians|Galatians|Ephesians|Philippians|Colossians|1 Thessalonians|2 Thessalonians|'
+    '1 Timothy|2 Timothy|Titus|Philemon|Hebrews|James|1 Peter|2 Peter|1 John|2 John|3 John|Jude|Revelation'
+).split('|')
+CODES = (
+    'GEN EXO LEV NUM DEU JOS JDG RUT 1SA 2SA 1KI 2KI 1CH 2CH EZR NEH EST JOB PSA PRO ECC SNG ISA JER LAM EZK DAN HOS JOL AMO '
+    'OBA JON MIC NAM HAB ZEP HAG ZEC MAL MAT MRK LUK JHN ACT ROM 1CO 2CO GAL EPH PHP COL 1TH 2TH 1TI 2TI TIT PHM HEB JAS 1PE '
+    '2PE 1JN 2JN 3JN JUD REV'
+).split()
 BOOKS = [dict(id=c.lower(), name=n) for c,n in zip(CODES, BOOK_NAMES)]
 def compact(s):
  return re.sub(r'\s+', ' ', s).strip()
@@ -61,7 +71,12 @@ def usfm_text(s):
  return compact(s.replace('¶',''))
 # BSB's pinned plain-text edition inlines Psalm titles in verse 1. Match only
 # known superscription clauses at the beginning; never strip Scripture prose.
-BSB_HEADING = re.compile(r'^(?:For the choirmaster:|For the choirmaster[^.:]*\.|With stringed instruments[^.]*\.|According to [^.]*\.|For Jeduthun\.|To the tune of “[^”]+”\.?|A (?:Psalm|Maskil|Miktam|Shiggaion|prayer)[^.]*\.|A song[^.]*\.|A love song\.|Of (?:David|Solomon|Asaph|the sons of Korah)[^.]*\.|When Nathan[^.]*\.|After Doeg.*?Ahimelech\.”|When the Ziphites.*?us\?”|When he fought[^.]*\.|To bring remembrance\.|He said:)\s+')
+BSB_HEADING = re.compile((
+    '^(?:For the choirmaster:|For the choirmaster[^.:]*\\.|With stringed instruments[^.]*\\.|According to [^.]*\\.|'
+    'For Jeduthun\\.|To the tune of “[^”]+”\\.?|A (?:Psalm|Maskil|Miktam|Shiggaion|prayer)[^.]*\\.|A song[^.]*\\.|A love song\\.|'
+    'Of (?:David|Solomon|Asaph|the sons of Korah)[^.]*\\.|When Nathan[^.]*\\.|After Doeg.*?Ahimelech\\.”|'
+    'When the Ziphites.*?us\\?”|When he fought[^.]*\\.|To bring remembrance\\.|He said:)\\s+'
+))
 def strip_psalm_heading(text):
  heading=[]
  while (m:=BSB_HEADING.match(text)):
@@ -120,7 +135,14 @@ def documents():
  docs=[]
  wsc=json.loads((RAW/'westminster_shorter_catechism.json').read_text())['Data']
  assert len(wsc)==107 and [q['Number'] for q in wsc]==list(range(1,108))
- docs.append(dict(id='wsc',title='Westminster Shorter Catechism',subtitle='107 questions · historic English',color='sage',items=[item(f'wsc-{q["Number"]}',q['Question'],q['Answer'],'wsc')|{'number':q['Number']} for q in wsc]))
+ docs.append(dict(id='wsc',
+     title='Westminster Shorter Catechism',
+     subtitle='107 questions · historic English',
+     color='sage',
+     items=[item(f'wsc-{q["Number"]}',
+         q['Question'],
+         q['Answer'],
+         'wsc')|{'number':q['Number']} for q in wsc]))
  # Schaff's bilingual edition: the final column in each two-column row is English.
  rows=[]
  for row in tree('heidelberg-schaff.html').all('tr'):
@@ -144,7 +166,19 @@ def documents():
   if n==80: answer=answer.rstrip(')')  # Schaff encloses the entire question in editorial parentheses.
   hitems.append(item(f'heidelberg-{n}',' '.join(q['question']),answer,'heidelberg')|{'number':n,'lordsDay':day})
  docs.append(dict(id='heidelberg',title='Heidelberg Catechism',subtitle="129 questions · 52 Lord’s Days · Schaff historic English",color='clay',items=hitems))
- for id,title,filename,ids in [('apostles',"Apostles’ Creed",'apostles-schaff.html',['iv.i.i.i-p12','iv.i.i.i-p13','iv.i.i.i-p16']),('nicene','Nicene Creed','nicene-schaff.html',['iv.i.ii.ii-p8','iv.i.ii.ii-p10','iv.i.ii.ii-p10.6','iv.i.ii.ii-p10.11'])]:
+ for id,title,filename,ids in [('apostles',
+     "Apostles’ Creed",
+     'apostles-schaff.html',
+     ['iv.i.i.i-p12',
+       'iv.i.i.i-p13',
+       'iv.i.i.i-p16']),
+   ('nicene',
+     'Nicene Creed',
+     'nicene-schaff.html',
+     ['iv.i.ii.ii-p8',
+       'iv.i.ii.ii-p10',
+       'iv.i.ii.ii-p10.6',
+       'iv.i.ii.ii-p10.11'])]:
   root=tree(filename);nodes={n.attrs.get('id'):n for tag in ('p','td') for n in root.all(tag)}
   text=' '.join(compact(nodes[k].text()) for k in ids)
   # Omit Schaff's inline editorial glosses; include bracketed Western additions.
@@ -152,7 +186,18 @@ def documents():
   text=text.replace('(begotten) ','').replace('worlds [God of God]', 'worlds, [God of God]').replace('[','').replace(']','')
   if id=='apostles':
    # The twelve traditional articles (the church and communion form article 9).
-   starts=['I believe in God', 'And in Jesus Christ', 'who was conceived', 'suffered under', 'he descended', 'he ascended', 'from thence', 'I believe in the Holy Ghost', 'the holy catholic Church', 'the forgiveness', 'the resurrection', 'and the life everlasting']
+   starts=['I believe in God',
+      'And in Jesus Christ',
+      'who was conceived',
+      'suffered under',
+      'he descended',
+      'he ascended',
+      'from thence',
+      'I believe in the Holy Ghost',
+      'the holy catholic Church',
+      'the forgiveness',
+      'the resurrection',
+      'and the life everlasting']
    boundaries=[text.index(start) for start in starts]+[len(text)]
    clauses=[text[boundaries[i]:boundaries[i+1]].strip() for i in range(12)]
   else:
@@ -170,11 +215,38 @@ def documents():
    larger.append(item(f'wlc-{n}',question,answer,'wlc')|{'number':n})
  assert [q['number'] for q in larger]==list(range(1,197))
  assert 'tolerating a false religion' not in larger[108]['text']
- docs.append(dict(id='wlc',title='Westminster Larger Catechism',subtitle='196 questions · 1648 · American historic English (OPC/PCA)',color='sage',questionCount=196,description='An extended exposition of Christian belief, the Ten Commandments, and the Lord’s Prayer in the received American edition.',items=larger))
+ docs.append(dict(id='wlc',
+     title='Westminster Larger Catechism',
+     subtitle='196 questions · 1648 · American historic English (OPC/PCA)',
+     color='sage',
+     questionCount=196,
+     description='An extended exposition of Christian belief, the Ten Commandments, and the Lord’s Prayer in the received American edition.',
+     items=larger))
  for id,title,filename,count,subtitle,description,color in [
-  ('baptist','Baptist Catechism (Keach’s)','1695_baptist_catechism.json',114,'114 questions · 1693 tradition · 1695 printed edition','Historic Particular Baptist instruction in Christian faith, duty, prayer, and the ordinances.','clay'),
-  ('spurgeon','Spurgeon’s Puritan Catechism','puritan_catechism.json',82,'82 questions · 1855 historic English','Spurgeon’s concise Baptist adaptation of the Westminster and Baptist catechisms.','ochre'),
-  ('young-children','Catechism for Young Children','catechism_for_young_children.json',145,'145 questions · Joseph P. Engles · 1840 original','Simple questions and answers introducing children to the faith of the Westminster Shorter Catechism.','sage'),
+  ('baptist',
+      'Baptist Catechism (Keach’s)',
+      '1695_baptist_catechism.json',
+      114,
+      '114 questions · 1693 tradition · 1695 printed edition',
+      'Historic Particular Baptist instruction in Christian faith, duty, prayer, and the ordinances.',
+      'clay'),
+
+  ('spurgeon',
+      'Spurgeon’s Puritan Catechism',
+      'puritan_catechism.json',
+      82,
+      '82 questions · 1855 historic English',
+      'Spurgeon’s concise Baptist adaptation of the Westminster and Baptist catechisms.',
+      'ochre'),
+
+  ('young-children',
+      'Catechism for Young Children',
+      'catechism_for_young_children.json',
+      145,
+      '145 questions · Joseph P. Engles · 1840 original',
+      'Simple questions and answers introducing children to the faith of the Westminster Shorter Catechism.',
+      'sage'),
+
  ]:
   questions=json.loads((RAW/filename).read_text())['Data']
   assert [q['Number'] for q in questions]==list(range(1,count+1)),filename
@@ -213,7 +285,32 @@ def main():
   m=re.match(r'(.+) (\d+):(\d+)',ref);name,ch,v=m.groups();b=next(b for b in BOOKS if b['name']==name)
   return item(f'bsb-{b["id"]}-{ch}-{v}',ref.replace('Psalms ', 'Psalm '),translations['BSB'][b['id']][ch][v],'bible','BSB')
  gospel=['John 3:16','Romans 3:23','Romans 6:23','Romans 5:8','Ephesians 2:8','Ephesians 2:9','John 14:6','Romans 10:9','Romans 10:13','1 John 1:9']
- starters=[dict(id='gospel',title='The Gospel in 10 verses',subtitle='Grace, received by faith',color='clay',items=[verse(r) for r in gospel]),dict(id='wsc-start',title='Westminster Shorter Catechism',subtitle='Questions 1–12',color='sage',items=docs[0]['items'][:12]),dict(id='heidelberg-start',title='Heidelberg · Lord’s Day 1',subtitle='Our only comfort',color='ochre',items=docs[1]['items'][:2]),dict(id='apostles-start',title='The Apostles’ Creed',subtitle='The faith we confess',color='ink',items=docs[2]['items']),dict(id='psalm23',title='Psalm 23',subtitle='The Lord is my shepherd',color='sage',items=[verse(f'Psalms 23:{n}') for n in range(1,7)])]
+ starters=[dict(id='gospel',
+     title='The Gospel in 10 verses',
+     subtitle='Grace, received by faith',
+     color='clay',
+     items=[verse(r) for r in gospel]),
+   dict(id='wsc-start',
+     title='Westminster Shorter Catechism',
+     subtitle='Questions 1–12',
+     color='sage',
+     items=docs[0]['items'][:12]),
+   dict(id='heidelberg-start',
+     title='Heidelberg · Lord’s Day 1',
+     subtitle='Our only comfort',
+     color='ochre',
+     items=docs[1]['items'][:2]),
+   dict(id='apostles-start',
+     title='The Apostles’ Creed',
+     subtitle='The faith we confess',
+     color='ink',
+     items=docs[2]['items']),
+   dict(id='psalm23',
+     title='Psalm 23',
+     subtitle='The Lord is my shepherd',
+     color='sage',
+     items=[verse(f'Psalms 23:{n}') for n in range(1,
+         7)])]
  emit(OUT/'starters.json',starters);emit(OUT/'books.json',BOOKS)
  counts={tr:sum(len(vs) for chs in data.values() for vs in chs.values()) for tr,data in translations.items()}
  emit(OUT/'manifest.json',{'version':1,'translations':['BSB','KJV','WEB'],'books':BOOKS,'verseCounts':counts,'documentCounts':{d['id']:len(d['items']) for d in docs}})
