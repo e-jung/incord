@@ -497,11 +497,20 @@ test('push permission, mock subscription, test notification and disable', async 
 }, info) => {
   const subscriptions: unknown[] = [];
   let notificationTests = 0;
-  await page.route('**/api/config', (route) =>
-    route.fulfill({
-      json: { email: true, googleEnabled: false, vapidPublicKey: 'B' + 'A'.repeat(86) },
-    }),
-  );
+  await page.route('**/api/config', async (route) => {
+    // Keep the configured provider origin/client: the neutral client no longer
+    // hard-codes Accounts. Only push capability is mocked by this test.
+    const response = await route.fetch();
+    await route.fulfill({
+      response,
+      json: {
+        ...(await response.json()),
+        email: true,
+        googleEnabled: false,
+        vapidPublicKey: 'B' + 'A'.repeat(86),
+      },
+    });
+  });
   await page.route('**/api/push/subscribe', async (route) => {
     subscriptions.push(route.request().postDataJSON());
     await route.fulfill({ json: { ok: true } });

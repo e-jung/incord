@@ -27,6 +27,7 @@ export function deployment(env: DeploymentEnv) {
     accountsOrigin,
     accountsClient: env.ACCOUNTS_CLIENT || 'incord',
     emailFrom: env.EMAIL_FROM || adapter?.emailFrom,
+    feedbackThanks: adapter?.feedbackThanks || 'Thanks — your feedback has been saved.',
     feedbackTo: env.FEEDBACK_TO || adapter?.feedbackTo,
     vapidSubject: env.VAPID_SUBJECT || adapter?.vapidSubject || '',
     migration: adapter

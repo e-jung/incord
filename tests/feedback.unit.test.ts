@@ -65,7 +65,10 @@ describe('Feedback boundary', () => {
     f.env.RESEND_API_KEY = 'unit-key';
     const fetch = vi.fn();
     vi.stubGlobal('fetch', fetch);
-    await f.send();
+    expect(await f.send()).toEqual({
+      ok: true,
+      message: 'Thanks — your feedback has been saved.',
+    });
     expect(f.rows()).toHaveLength(1);
     expect(fetch).not.toHaveBeenCalled();
     expect(f.rows()[0].emailed).toBe(0);
@@ -119,7 +122,7 @@ describe('Feedback boundary', () => {
         { uid: 'raw-private-account', clientName: 'Desktop' },
         'mcp',
       ),
-    ).toEqual({ ok: true, message: 'Thanks — your feedback has been saved.' });
+    ).toEqual({ ok: true, message: 'Thanks — Eric reads every one.' });
     expect(f.rows()[0]).toMatchObject({
       kind: 'Idea',
       source: 'mcp',

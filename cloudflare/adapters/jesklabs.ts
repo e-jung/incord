@@ -9,6 +9,7 @@ export const jesklabs = {
   appOrigin: 'https://incord.jesklabs.com',
   legacyOrigin: 'https://byheart.jesklabs.com',
   emailFrom: 'Incord <hello@jesklabs.com>',
+  feedbackThanks: 'Thanks — Eric reads every one.',
   feedbackTo: 'incord@jesklabs.com',
   vapidSubject: 'mailto:hello@jesklabs.com',
 };

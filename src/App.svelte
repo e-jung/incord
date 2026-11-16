@@ -1,3 +1,5 @@
+<svelte:options runes={true} />
+
 <script lang="ts">
   import { hapticOverlay } from './haptic-overlay';
   import ActionFeedback from './components/ActionFeedback.svelte';
@@ -198,9 +200,13 @@
             pendingCode={vm.pendingGroupCode}
             onJoined={vm.joinedGroup}
             initialGroupId={vm.initialGroupId}
-            onSelect={(id) => (vm.initialGroupId = id)}
+            onSelect={(id) => {
+              vm.initialGroupId = id;
+            }}
             onAttention={vm.setGroupAttention}
-            onDialogChange={(close) => (vm.groupDialogClose = close)}
+            onDialogChange={(close) => {
+              vm.groupDialogClose = close;
+            }}
           />{/key}
       {:else if vm.tab === ui.library}
         {#if vm.detail}<Cover

@@ -105,13 +105,13 @@ export function createPreferencesController(
     }
     vm.feedbackBusy = true;
     try {
-      await api('/feedback', {
+      const out = await api('/feedback', {
         kind: vm.feedbackKind,
         message,
         ...(contact ? { contact } : {}),
         ...(vm.feedbackIncludeMeta ? { meta: feedbackMeta() } : {}),
       });
-      vm.feedbackStatus = ui.feedbackThanks;
+      vm.feedbackStatus = out.message || ui.feedbackThanks;
       clearTimeout(vm.feedbackTimer);
       vm.feedbackTimer = setTimeout(() => (vm.feedbackStatus = ''), 3000);
       vm.feedbackMessage = '';

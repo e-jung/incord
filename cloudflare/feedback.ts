@@ -237,7 +237,7 @@ ${summary}\
       }
     }
   }
-  return { ok: true, message: 'Thanks — your feedback has been saved.' };
+  return { ok: true, message: settings.feedbackThanks };
 }
 
 /** Additive tables in the existing RegistryDO, never a new binding. */

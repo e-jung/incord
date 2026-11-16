@@ -12,6 +12,7 @@ describe('neutral deployment and optional maintained adapter', () => {
       accountsClient: 'incord',
       emailFrom: undefined,
       feedbackTo: undefined,
+      feedbackThanks: 'Thanks — your feedback has been saved.',
       vapidSubject: '',
       migration: undefined,
     });
@@ -21,6 +22,7 @@ describe('neutral deployment and optional maintained adapter', () => {
     expect(maintained).toMatchObject({
       accountsOrigin: 'https://accounts.jesklabs.com',
       feedbackTo: 'incord@jesklabs.com',
+      feedbackThanks: 'Thanks — Eric reads every one.',
       emailFrom: 'Incord <hello@jesklabs.com>',
       vapidSubject: 'mailto:hello@jesklabs.com',
       migration: {
