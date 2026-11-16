@@ -2,9 +2,15 @@
 
 Last updated: 2026-11-16.
 
-Production remains origin/master at 7cd9055 until review and deployment. This
-branch implements the approved shared-domain, verification/splitting and forkable
-configuration refactors; it must not be represented as deployed.
+Production: master d98aa3f, Worker `byheart` version ff327df6 (deployed
+2026-11-16 with `scripts/deploy.sh`, which generates the Jesklabs production
+config). It ships the approved shared-domain, verify/split and forkable-config
+refactors. Verified at deploy: `npm run verify` (625 unit tests), 457/457
+Playwright, prod smoke 16/16.
+
+The shared settings schema puts zod in the browser bundle, so
+`shared/domain/settings.ts` sets `z.config({ jitless: true })`. Without it,
+zod's `new Function` probe reports a CSP `script-src` violation.
 
 ## Remaining debt
 
