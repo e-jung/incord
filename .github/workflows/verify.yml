@@ -10,4 +10,6 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      # Unit tests (presentation.test.ts) launch Chromium via Playwright.
+      - run: npx playwright install --with-deps chromium
       - run: npm run verify
