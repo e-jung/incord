@@ -1,12 +1,19 @@
 # Incord status
 
-Last updated: 2026-11-16.
+Last updated: 2026-11-17.
 
-Production: master d98aa3f, Worker `byheart` version ff327df6 (deployed
-2026-11-16 with `scripts/deploy.sh`, which generates the Jesklabs production
-config). It ships the approved shared-domain, verify/split and forkable-config
-refactors. Verified at deploy: `npm run verify` (625 unit tests), 457/457
-Playwright, prod smoke 16/16.
+Production: master 47190dd, Worker `byheart` version f65077e8 (deployed
+2026-11-17 with `scripts/deploy.sh`). It adds group-join fixes found in a
+production group test: unnamed users give a name before they join or create a
+group (owners no longer see "Approve Friend"), a signed-out invite link shows one
+"Sign in to join" action, an approval-required join shows "Your join requests",
+and a remembered group's detail is fetched only after the list confirms
+membership. Verified: `npm run verify` (625 unit tests), Playwright 177/177/109
+(iPhone15-light/dark, WebKit), CI green, and a two-account production group test
+16/16 on Chromium and WebKit.
+
+Previous: master d98aa3f, version ff327df6 (2026-11-16): the approved
+shared-domain, verify/split and forkable-config refactors.
 
 The shared settings schema puts zod in the browser bundle, so
 `shared/domain/settings.ts` sets `z.config({ jitless: true })`. Without it,
