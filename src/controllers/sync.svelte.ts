@@ -21,6 +21,7 @@ export function createSyncController(
     | 'error'
   >,
 ) {
+  const syncWaiters: (() => void)[] = [];
   function theme() {
     document.documentElement.dataset.theme = vm.data.settings.theme;
     document.documentElement.dataset.textSize = vm.data.settings.textSize || 'default';
@@ -40,7 +41,7 @@ export function createSyncController(
     if (!userAtStart || vm.mergePrompt || vm.awaitingCodeSave) return;
     if (vm.syncing) {
       vm.syncAgain = true;
-      return;
+      return new Promise<void>((resolve) => syncWaiters.push(resolve));
     }
     vm.syncing = true;
     const refreshAttention = vm.attentionDirty;
@@ -79,9 +80,18 @@ export function createSyncController(
       vm.syncing = false;
       if (vm.syncAgain) {
         vm.syncAgain = false;
-        if (vm.account && !vm.mergePrompt) void sync();
+        if (vm.account && !vm.mergePrompt) await sync();
       }
+      if (!vm.syncing) for (const resolve of syncWaiters.splice(0)) resolve();
     }
   }
-  return { theme, save, sync };
+  async function saveGroupName(name: string) {
+    if (!vm.account || vm.mergePrompt || vm.awaitingCodeSave)
+      throw new Error(ui.groups.nameSaveFailed);
+    vm.data.settings.name = name;
+    await save();
+    await sync();
+    if (!vm.online) throw new Error(ui.groups.nameSaveFailed);
+  }
+  return { theme, save, sync, saveGroupName };
 }

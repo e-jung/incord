@@ -454,6 +454,10 @@ test('code sign-in resumes a Groups invite and a real MCP OAuth consent flow', a
     await signinForm(other).getByLabel('Your sign-in code', { exact: true }).fill(code);
     await tap(signinForm(other).getByRole('button', { name: 'Sign in with a code', exact: true }));
     const groups = other.getByRole('region', { name: 'Groups', exact: true });
+    const introduction = groups.getByRole('form', { name: 'Introduce yourself', exact: true });
+    await expect(introduction).toBeVisible();
+    await introduction.getByLabel('Your name in groups', { exact: true }).fill('Code Member');
+    await tap(introduction.getByRole('button', { name: 'Save name and continue', exact: true }));
     await expect(groups.getByRole('article', { name, exact: true })).toBeVisible();
     expect((await me(other)).id).toBe(user.id);
     expect(

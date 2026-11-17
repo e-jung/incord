@@ -3,6 +3,8 @@
   import { api, type Settings } from '../store';
   import { copy as ui } from '../config/copy';
   import Sheet from './Sheet.svelte';
+  import Button from './Button.svelte';
+  import GroupEntry from './GroupEntry.svelte';
   import GroupMembers, { type Member } from './GroupMembers.svelte';
 
   type Role = 'owner' | 'admin' | 'member';
@@ -44,7 +46,7 @@
     pendingCode = '',
     onJoined,
     initialGroupId = '',
-    onSave,
+    onSaveName,
     onDialogChange = () => {},
     onSelect = () => {},
     onAttention = () => {},
@@ -57,7 +59,7 @@
     pendingCode?: string;
     onJoined: () => void;
     initialGroupId?: string;
-    onSave?: () => Promise<void>;
+    onSaveName: (name: string) => Promise<void>;
     onDialogChange?: (close: (() => void) | null) => void;
     onSelect?: (id: string) => void;
     onAttention?: (attention?: {
@@ -78,17 +80,12 @@
   let busy = $state(''),
     notes = $state<Record<string, Note>>({}),
     invite = $state<Invite | null>(null);
-  let name = $state(''),
-    code = $state(''),
-    approval = $state(false),
-    expiresDays = $state(14),
+  let expiresDays = $state(14),
     maxUses = $state(20);
   let confirmation = $state<Confirmation | null>(null);
+  let entry = $state<GroupEntry>();
   let inviteInput = $state<HTMLInputElement>(),
-    nameInput = $state<HTMLInputElement>(),
-    codeInput = $state<HTMLInputElement>(),
     panel = $state<HTMLElement>();
-  let formsOpen = $state(false);
   let pendingReceipts = $state<
     Record<string, { member: { id: string; name: string }; index: number }>
   >({});
@@ -105,8 +102,7 @@
   let epoch = 0,
     listRequest = 0,
     detailRequest = 0,
-    alive = true,
-    attemptedInvite = '';
+    alive = true;
   const manager = $derived(group?.role === 'owner' || group?.role === 'admin');
   const owner = $derived(group?.role === 'owner');
   const visible = $derived(!!account && String(account.id) === activeIdentity);
@@ -197,14 +193,9 @@
     busy = '';
     loading = false;
     listed = false;
-    name = '';
-    code = '';
-    formsOpen = !!pendingCode;
-    approval = false;
     expiresDays = 14;
     maxUses = 20;
     activeIdentity = identity;
-    attemptedInvite = '';
   }
   $effect(() => {
     const identity = account ? String(account.id) : '';
@@ -216,29 +207,16 @@
     });
   });
   $effect(() => {
-    const identity = account ? String(account.id) : '',
-      pending = pendingCode,
-      running = busy;
-    untrack(() => {
-      if (
-        !running &&
-        identity &&
-        identity === activeIdentity &&
-        pending &&
-        attemptedInvite !== `${identity}:${pending}`
-      ) {
-        attemptedInvite = `${identity}:${pending}`;
-        formsOpen = true;
-        code = pending;
-        void join(pending);
-      }
-    });
-  });
-  $effect(() => {
     const id = initialGroupId,
       identity = account ? String(account.id) : '';
     untrack(() => {
-      if (id && identity && identity === activeIdentity && selected !== id) {
+      if (
+        id &&
+        identity &&
+        identity === activeIdentity &&
+        selected !== id &&
+        groups.some((item) => item.id === id)
+      ) {
         clearDetail();
         clearNotes();
         selected = id;
@@ -250,15 +228,6 @@
     const id = selected;
     if (id) onSelect(id);
   });
-  async function openForms(mode: 'create' | 'join') {
-    if (!account) {
-      onSignIn();
-      return;
-    }
-    formsOpen = true;
-    await tick();
-    (mode === 'create' ? nameInput : codeInput)?.focus();
-  }
   $effect(() => {
     const open = confirmation;
     onDialogChange(
@@ -406,8 +375,8 @@
       if (current(version)) busy = '';
     }
   }
-  async function create() {
-    if (busy || !name.trim()) return;
+  async function create(name: string, approval: boolean) {
+    if (busy || !name.trim()) return false;
     cancelReads();
     const version = epoch;
     busy = 'create';
@@ -419,17 +388,20 @@
       group = out.group;
       selected = out.group.id;
       invite = out.invite || null;
-      name = '';
       await refresh();
-      if (current(version)) message('create', ui.groups.created);
+      if (current(version)) {
+        message('create', ui.groups.created);
+        return true;
+      }
     } catch (error) {
       if (current(version)) message('create', errorText(error), true);
     } finally {
       if (current(version)) busy = '';
     }
+    return false;
   }
-  async function join(value = code) {
-    if (!account || busy || !value.trim()) return;
+  async function join(value: string) {
+    if (!account || busy || !value.trim()) return false;
     cancelReads();
     const version = epoch;
     busy = 'join';
@@ -438,25 +410,27 @@
       const out = await api('/groups/join', { code: value.trim() });
       if (!current(version)) return;
       if (out.pending) {
-        message('join', ui.groups.awaitingApproval(out.ownerName), false, true);
-        code = '';
+        clearNote('join');
         onJoined();
         await refresh();
-        return;
+        return 'pending' as const;
       }
       if (!out.group) throw new Error(ui.groups.inviteInvalid);
       clearDetail();
       group = out.group;
       selected = out.group.id;
-      code = '';
       onJoined();
       await refresh();
-      if (current(version)) message('join', ui.groups.joined);
+      if (current(version)) {
+        message('join', ui.groups.joined);
+        return true;
+      }
     } catch (error) {
       if (current(version)) message('join', errorText(error), true);
     } finally {
       if (current(version)) busy = '';
     }
+    return false;
   }
   async function mutate(
     key: string,
@@ -616,9 +590,14 @@
 
 <section class="groups-panel" aria-label={ui.groups.heading} bind:this={panel}>
   {#if visible}{@render feedback('list')}{/if}
-  {#if !account || (visible && listed && !groups.length && !notes.list)}<div
-      class="groups-empty stack"
-    >
+  {#if !account && pendingCode}
+    <div class="groups-empty stack">
+      <h2>{ui.groups.invitedHeading}</h2>
+      <p>{ui.groups.signInInvite}</p>
+      <Button onclick={onSignIn}>{ui.groups.signInToJoin}</Button>
+    </div>
+  {:else if !account || (visible && listed && !groups.length && !pendingMemberships.length && !pendingCode && !notes.list)}
+    <div class="groups-empty stack">
       <svg viewBox="0 0 48 48" aria-hidden="true"
         ><circle cx="24" cy="24" r="21" /><circle cx="24" cy="17" r="6" /><path
           d="M12 38v-3a12 12 0 0 1 24 0v3"
@@ -626,16 +605,17 @@
       >
       <h2>{ui.groups.empty}</h2>
       <div class="stack">
-        <button onclick={() => void openForms('create')}>{ui.groups.createHeading}</button><button
-          class="secondary"
-          onclick={() => void openForms('join')}>{ui.groups.joinWithCode}</button
+        <Button onclick={() => (account ? entry?.open('create') : onSignIn())}
+          >{ui.groups.createHeading}</Button
+        >
+        <Button secondary onclick={() => (account ? entry?.open('join') : onSignIn())}
+          >{ui.groups.joinWithCode}</Button
         >
       </div>
-    </div>{:else}<p class="intro">{ui.groups.intro}</p>{/if}
+    </div>
+  {:else}<p class="intro">{ui.groups.intro}</p>{/if}
   {#if !account}
-    <p>{pendingCode ? ui.groups.signInInvite : ui.groups.signInHelp}</p>
-    {#if pendingCode}<button class="secondary" onclick={() => onSignIn()}>{ui.groups.signIn}</button
-      >{/if}
+    {#if !pendingCode}<p>{ui.groups.signInHelp}</p>{/if}
   {:else if visible}
     {#if loading && !listed}<p class="group-loading" role="status">{ui.groups.loadingList}</p>{/if}
     {#if groups.length}
@@ -669,64 +649,18 @@
     {#each Object.keys(notes).filter((key) => key.startsWith('withdraw:') && !pendingMemberships.some((item) => key === 'withdraw:' + item.id)) as key (key)}{@render feedback(
         key,
       )}{/each}
-    {#if formsOpen || groups.length || pendingMemberships.length}<details
-        class="panel"
-        bind:open={formsOpen}
-      >
-        <summary>{ui.groups.createOrJoin}</summary>
-        <div class="forms">
-          <form
-            class="stack"
-            onsubmit={(event) => {
-              event.preventDefault();
-              void create();
-            }}
-          >
-            <h3>{ui.groups.createHeading}</h3>
-            <label
-              >{ui.groups.name}<input
-                bind:this={nameInput}
-                bind:value={name}
-                maxlength="80"
-                required
-                autocomplete="off"
-              /></label
-            >
-            <label class="check"
-              ><input type="checkbox" bind:checked={approval} />{ui.groups.approveNew}</label
-            >
-            <button type="submit" disabled={!!busy || !name.trim()}
-              >{busy === 'create' ? ui.groups.creating : ui.groups.create}</button
-            >
-            {@render feedback('create')}
-          </form>
-          <form
-            class="stack"
-            onsubmit={(event) => {
-              event.preventDefault();
-              void join();
-            }}
-          >
-            <h3>{ui.groups.joinHeading}</h3>
-            <label
-              >{ui.groups.inviteCode}<input
-                bind:this={codeInput}
-                bind:value={code}
-                required
-                maxlength="64"
-                autocomplete="off"
-                autocapitalize="none"
-                spellcheck="false"
-                placeholder={ui.groups.invitePlaceholder}
-              /></label
-            >
-            <button type="submit" disabled={!!busy || !code.trim()}
-              >{busy === 'join' ? ui.groups.joining : ui.groups.join}</button
-            >
-            {@render feedback('join')}
-          </form>
-        </div>
-      </details>{/if}
+    <GroupEntry
+      bind:this={entry}
+      {account}
+      {settings}
+      {pendingCode}
+      {busy}
+      {onSaveName}
+      {feedback}
+      hasMemberships={!!(groups.length || pendingMemberships.length)}
+      onCreate={create}
+      onJoin={join}
+    />
     {#if group}
       <article class="panel stack" aria-label={group.name} aria-busy={loading || detailLoading}>
         <header>

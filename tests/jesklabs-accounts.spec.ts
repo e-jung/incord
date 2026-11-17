@@ -192,6 +192,10 @@ test('email SSO attach preserves a Groups invite deep link', async ({ page, base
     await settings(page);
     await emailSignin(page, `invite-${crypto.randomUUID()}@example.com`);
     await signedIn(page);
+    const introduction = page.getByRole('form', { name: 'Introduce yourself', exact: true });
+    await expect(introduction).toBeVisible();
+    await introduction.getByLabel('Your name in groups', { exact: true }).fill('Email Member');
+    await introduction.getByRole('button', { name: 'Save name and continue', exact: true }).click();
     await expect(
       page
         .getByRole('region', { name: 'Groups', exact: true })

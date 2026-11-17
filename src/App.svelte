@@ -195,6 +195,7 @@
             account={vm.identityVerified ? vm.account : null}
             settings={vm.data.settings}
             onSync={vm.sync}
+            onSaveName={vm.saveGroupName}
             onChooseGoal={vm.chooseGroupGoal}
             onSignIn={vm.signInForGroups}
             pendingCode={vm.pendingGroupCode}

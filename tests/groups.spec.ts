@@ -1,4 +1,6 @@
 import { testIp } from './network';
+import { mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
 import {
   test,
   expect,
@@ -138,7 +140,7 @@ async function verifyEmail(page: Page, code: string) {
   );
   if (invited)
     await expect(
-      groups(page).getByText(/You have joined the group\.|Waiting for .* to approve\./),
+      groups(page).getByRole('form', { name: 'Introduce yourself', exact: true }),
     ).toBeVisible();
   await settings(page);
   await expect(page.getByText('Signed in.', { exact: true })).toBeVisible();
@@ -157,8 +159,10 @@ async function login(page: Page, name: string) {
     await (await page.request.get('/api/test/last-code?email=' + encodeURIComponent(email))).json()
   ).code;
   await verifyEmail(page, code);
-  await page.getByLabel('Display name', { exact: true }).fill(name);
-  await page.getByLabel('Display name', { exact: true }).press('Tab');
+  if (name) {
+    await page.getByLabel('Display name', { exact: true }).fill(name);
+    await page.getByLabel('Display name', { exact: true }).press('Tab');
+  }
   await expect
     .poll(async () => (await (await page.request.get('/api/export')).json()).settings.name)
     .toBe(name);
@@ -721,6 +725,221 @@ test('initial sign-in sync preserves a display-name edit made before blur', asyn
     await page.reload();
     await settings(page);
     await expect(page.getByLabel('Display name', { exact: true })).toHaveValue('Friend');
+  } finally {
+    release();
+  }
+});
+
+async function captureJoinState(page: Page, state: string, project: string) {
+  const directory = process.env.GROUP_JOIN_SCREENSHOTS;
+  if (!directory) return;
+  await mkdir(directory, { recursive: true });
+  await page.setViewportSize({ width: 393, height: 852 });
+  await page.screenshot({ path: join(directory, `${state}-${project}.png`), scale: 'css' });
+}
+
+test('invites and code joins ask unnamed members first, sync their name, and foreground pending requests', async ({
+  page,
+  browser,
+  baseURL,
+}, info) => {
+  test.setTimeout(180000);
+  await page.goto('/');
+  await login(page, 'Test Owner');
+  const name = 'Sunday circle ' + crypto.randomUUID().slice(0, 8);
+  const created = await create(page, name, true);
+  const contexts: BrowserContext[] = [];
+  let release = () => {};
+  const member = async () => {
+    const context = await browser.newContext({
+      baseURL,
+      viewport: { width: 393, height: 852 },
+      serviceWorkers: 'block',
+      colorScheme: info.project.use.colorScheme as 'light' | 'dark',
+      extraHTTPHeaders: { 'CF-Connecting-IP': testIp() },
+    });
+    contexts.push(context);
+    return context.newPage();
+  };
+  try {
+    const anna = await member();
+    let joins = 0;
+    anna.on('request', (request) => {
+      if (new URL(request.url()).pathname === '/api/groups/join') joins++;
+    });
+    await anna.goto(new URL(created.invite.url, baseURL).href);
+    await expect(
+      groups(anna).getByRole('heading', { name: 'You’re invited to join a group', exact: true }),
+    ).toBeVisible();
+    const signIn = groups(anna).getByRole('button', { name: 'Sign in to join', exact: true });
+    await expect(signIn).toBeVisible();
+    await expect(signIn).not.toHaveClass(/secondary/);
+    await expect(groups(anna).getByRole('button')).toHaveCount(1);
+    await expect(
+      groups(anna).getByRole('button', { name: 'Create a group', exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      groups(anna).getByRole('button', { name: 'Join with a code', exact: true }),
+    ).toHaveCount(0);
+    await captureJoinState(anna, 'signed-out-invite', info.project.name);
+    await signIn.click();
+    await expect(anna.getByLabel('Email address', { exact: true })).toBeVisible();
+    await login(anna, '');
+    await openGroups(anna);
+    const prompt = groups(anna).getByRole('form', { name: 'Introduce yourself', exact: true });
+    await expect(prompt).toBeVisible();
+    await expect(prompt.getByLabel('Your name in groups', { exact: true })).toHaveValue('');
+    expect(joins).toBe(0);
+    await captureJoinState(anna, 'inline-name', info.project.name);
+    const before = (await checked(await anna.request.get('/api/export'))).settings;
+    let held!: () => void;
+    const heldSync = new Promise<void>((resolve) => {
+      held = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await anna.route('**/api/sync', async (route) => {
+      if (route.request().postDataJSON()?.settings?.name !== 'Anna') return route.continue();
+      const response = await route.fetch();
+      held();
+      await gate;
+      await route.fulfill({ response });
+    });
+    await prompt.getByLabel('Your name in groups', { exact: true }).fill(' Anna ');
+    await prompt.getByRole('button', { name: 'Save name and continue', exact: true }).click();
+    await heldSync;
+    expect(joins).toBe(0); // Even a held in-flight sync must finish before joining.
+    release();
+    const requests = groups(anna).getByRole('region', { name: 'Your join requests', exact: true });
+    await expect(requests).toContainText(name);
+    await expect(requests).toContainText('Waiting for Test Owner to approve.');
+    await expect(
+      requests.getByRole('button', { name: 'Withdraw request', exact: true }),
+    ).toBeVisible();
+    await expect(groups(anna).getByLabel('Group name', { exact: true })).not.toBeVisible();
+    await expect(groups(anna).getByLabel('Invite code', { exact: true })).not.toBeVisible();
+    await expect(
+      groups(anna).getByRole('button', { name: 'Create a group', exact: true }),
+    ).toHaveCount(0);
+    await captureJoinState(anna, 'pending-approval', info.project.name);
+    expect(joins).toBe(1);
+    const saved = (await checked(await anna.request.get('/api/export'))).settings;
+    expect(saved.name).toBe('Anna');
+    expect(saved.fieldUpdatedAt.name).toBeGreaterThan(before.fieldUpdatedAt?.name || 0);
+    for (const [field, clock] of Object.entries(before.fieldUpdatedAt || {}))
+      if (!['name', 'displayName'].includes(field))
+        expect(saved.fieldUpdatedAt[field], field).toBe(clock);
+    await refresh(page);
+    await groupArticle(page, name).getByText('Manage group', { exact: true }).click();
+    await expect(
+      groupArticle(page, name).getByRole('button', { name: 'Approve Anna', exact: true }),
+    ).toBeVisible();
+    await groupArticle(page, name)
+      .getByRole('button', { name: 'Approve Anna', exact: true })
+      .click();
+    await expect(
+      groupArticle(page, name).getByText('Member approved.', { exact: true }),
+    ).toBeVisible();
+    await refresh(anna);
+    await expect(groupArticle(anna, name).getByText('Anna (you)', { exact: true })).toBeVisible();
+    await settings(anna);
+    await expect(anna.getByLabel('Display name', { exact: true })).toHaveValue('Anna');
+
+    const ben = await member();
+    await ben.goto('/');
+    await login(ben, '');
+    await openGroups(ben);
+    await form(ben, 'join');
+    await groups(ben).getByLabel('Invite code', { exact: true }).fill(created.invite.code);
+    await groups(ben).getByRole('button', { name: 'Join group', exact: true }).click();
+    const codePrompt = groups(ben).getByRole('form', { name: 'Introduce yourself', exact: true });
+    await expect(codePrompt).toBeVisible();
+    expect(
+      (await checked(await page.request.get('/api/groups/' + created.group.id))).group.pending,
+    ).toHaveLength(0);
+    await codePrompt.getByLabel('Your name in groups', { exact: true }).fill('Ben');
+    await codePrompt.getByRole('button', { name: 'Save name and continue', exact: true }).click();
+    await expect(
+      groups(ben).getByRole('region', { name: 'Your join requests', exact: true }),
+    ).toContainText(name);
+    await refresh(page);
+    await groupArticle(page, name).getByText('Manage group', { exact: true }).click();
+    await expect(
+      groupArticle(page, name).getByRole('button', { name: 'Approve Ben', exact: true }),
+    ).toBeVisible();
+  } finally {
+    release();
+    await page.request.delete('/api/groups/' + created.group.id, { headers: headers(baseURL!) });
+    for (const context of contexts) await context.close();
+  }
+});
+
+test('creation asks for a name and a deleted remembered group waits for the list before detail', async ({
+  page,
+  baseURL,
+}) => {
+  await page.goto('/');
+  await login(page, '');
+  await openGroups(page);
+  await form(page, 'create');
+  const name = 'New circle ' + crypto.randomUUID().slice(0, 8);
+  await groups(page).getByLabel('Group name', { exact: true }).fill(name);
+  await groups(page).getByRole('button', { name: 'Create group', exact: true }).click();
+  const prompt = groups(page).getByRole('form', { name: 'Introduce yourself', exact: true });
+  await expect(prompt).toBeVisible();
+  expect((await checked(await page.request.get('/api/groups'))).groups).toHaveLength(0);
+  await prompt.getByLabel('Your name in groups', { exact: true }).fill('New Owner');
+  // Failed settings sync must leave the introduction retryable, without creating a group.
+  let failSync = true;
+  await page.route('**/api/sync', (route) =>
+    failSync
+      ? route.fulfill({ status: 503, json: { error: 'Temporarily unavailable' } })
+      : route.continue(),
+  );
+  await prompt.getByRole('button', { name: 'Save name and continue', exact: true }).click();
+  await expect(prompt.getByRole('alert')).toHaveText(
+    'Your name could not sync. Please try again when you are online.',
+  );
+  expect((await checked(await page.request.get('/api/groups'))).groups).toHaveLength(0);
+  failSync = false;
+  await prompt.getByRole('button', { name: 'Save name and continue', exact: true }).click();
+  await expect(groupArticle(page, name)).toBeVisible();
+  await expect(
+    groupArticle(page, name).getByText('New Owner (you)', { exact: true }),
+  ).toBeVisible();
+  const id = (await checked(await page.request.get('/api/groups'))).groups[0].id;
+  await tab(page, 'Today');
+  await checked(await page.request.delete('/api/groups/' + id, { headers: headers(baseURL!) }));
+  let details = 0,
+    release!: () => void,
+    held!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const heldList = new Promise<void>((resolve) => {
+    held = resolve;
+  });
+  await page.route('**/api/groups', async (route) => {
+    const response = await route.fetch();
+    held();
+    await gate;
+    await route.fulfill({ response });
+  });
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname === '/api/groups/' + id) details++;
+  });
+  try {
+    await tab(page, 'Groups');
+    await heldList;
+    await expect(groups(page).getByText('Loading your groups…', { exact: true })).toBeVisible();
+    expect(details).toBe(0);
+    release();
+    await expect(
+      groups(page).getByRole('button', { name: 'Create a group', exact: true }),
+    ).toBeVisible();
+    expect(details).toBe(0);
+    await expect(groups(page).getByRole('alert')).toHaveCount(0);
   } finally {
     release();
   }

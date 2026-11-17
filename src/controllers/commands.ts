@@ -47,6 +47,7 @@ export interface AppCommands {
   changeTranslation: (event: Event) => void;
   theme: () => void;
   save: () => Promise<void>;
+  saveGroupName: (name: string) => Promise<void>;
   sync: () => Promise<void>;
   attempt: (fn: () => Promise<void>) => Promise<void>;
   pushView: () => void;
